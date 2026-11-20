@@ -1,15 +1,15 @@
 import { useEffectEvent, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ArrowDown,
-  Bot,
-  FileText,
-  GitBranch,
-  MessageSquare,
-  NotebookPen,
-  Pencil,
-  SquareTerminal,
-} from 'lucide-react';
+  ArrowDownIcon as ArrowDown,
+  ChatBubbleLeftIcon as MessageSquare,
+  CommandLineIcon as SquareTerminal,
+  CpuChipIcon as Bot,
+  DocumentTextIcon as FileText,
+  PencilIcon as Pencil,
+  PencilSquareIcon as NotebookPen,
+  ShareIcon as GitBranch,
+} from '@heroicons/react/24/outline';
 import {
   AssistantMessage as AssistantMessageFrame,
   CompactionDivider,
@@ -64,7 +64,7 @@ function MessageImage({ id, name }: { id: string; name: string }) {
     </button>
   ) : (
     <span
-      className="grid size-20 place-items-center rounded-card border border-line border-line/60 bg-inset text-xs text-ink-3"
+      className="grid size-20 place-items-center rounded-card border border-line border-line/60 bg-inset text-ui-subhead text-ink-2"
       title={name || undefined}
     >
       图片
@@ -135,7 +135,7 @@ function UserMessage({
         <MessageChips>
           {message.attachments.map((attachment, index) => (
             <MessageChip
-              icon={<FileText className="size-3.5 shrink-0 text-ink-3" />}
+              icon={<FileText className="size-4 shrink-0 text-ink-2" />}
               key={`${attachment.name}:${index}`}
               title={attachment.name}
             >
@@ -160,7 +160,7 @@ function UserMessage({
         <MessageChips>
           {message.sessions.map((session) => (
             <MessageChip
-              icon={<MessageSquare className="size-3.5 shrink-0 text-ink-3" />}
+              icon={<MessageSquare className="size-4 shrink-0 text-ink-2" />}
               key={session.id}
               onClick={onOpenSession && (() => onOpenSession(session.id))}
               title={session.title}
@@ -240,7 +240,7 @@ function AssistantMessage({
   return (
     <AssistantMessageFrame data-reply-live={live || undefined}>
       {live && empty && (
-        <p className="h-7 text-sm leading-7" role="status">
+        <p className="h-7 text-ui-body" role="status">
           <Shimmer>正在思考</Shimmer>
         </p>
       )}
@@ -261,7 +261,7 @@ function AssistantMessage({
         )}
       />
       {reason && <ErrorCard onRetry={onRetry} reason={reason} />}
-      {message.stopped && !live && <p className="my-2 text-sm text-ink-3">已停止</p>}
+      {message.stopped && !live && <p className="my-2 text-ui-body text-ink-2">已停止</p>}
       {!live && turnEnd && sessionId && message.turnId && (
         <TurnChangesCard
           sessionId={sessionId}
@@ -317,7 +317,7 @@ function TaskNoticeMessage({ content, task }: { content: string; task: TaskNotic
         task.exitCode !== undefined && task.status === 'failed' ? `（退出码 ${task.exitCode}）` : ''
       }`}
     >
-      <ChatMarkdown className="pt-1.5 text-sm" mode="static">
+      <ChatMarkdown className="pt-1.5 text-ui-body" mode="static">
         {content}
       </ChatMarkdown>
     </TaskNotice>
@@ -454,7 +454,7 @@ export function ChatThread({
             followBottom.current = false;
         }}
       >
-        <div ref={contentRef} className="relative mx-auto w-full max-w-3xl px-4 py-4">
+        <div ref={contentRef} className="relative mx-auto w-full max-w-reading px-app py-app-gap">
           {/* 消息无稳定 id，key 用 sessionId:index：依赖列表 append-only（editLast 截断重发按同索引整表替换），勿在中间插入/删除。 */}
           {messages.map((message, index) =>
             message.compacted ? (
@@ -470,7 +470,7 @@ export function ChatThread({
                 customType={message.extension.customType}
                 key={`${chat.sessionId}:${index}`}
               >
-                <ChatMarkdown className="text-sm" mode="static">
+                <ChatMarkdown className="text-ui-body" mode="static">
                   {message.content}
                 </ChatMarkdown>
               </ExtensionMessage>
@@ -514,7 +514,7 @@ export function ChatThread({
           }}
           type="button"
         >
-          <ArrowDown className="size-4" strokeWidth={1.8} />
+          <ArrowDown className="size-4" />
         </button>
       )}
       {replyDraftKey && (

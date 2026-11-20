@@ -1,5 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import {
+  ArrowLeftIcon as ArrowLeft,
+  ArrowRightIcon as ArrowRight,
+} from '@heroicons/react/24/outline';
 import { cn } from '../../../ui/cn';
 import { OnboardingWindowBar } from './onboarding-window-bar';
 import { Button } from '../../../ui/button';
@@ -29,7 +32,7 @@ export function WizardShell({
   const { direction } = motionStep;
 
   return (
-    <div className="grid h-dvh grid-rows-[auto_1fr_auto] bui-light bg-surface text-ink">
+    <div className="grid h-dvh grid-rows-[auto_1fr_auto] bg-page text-ink" data-density="product">
       <OnboardingWindowBar>
         {stepCount > 0 && (
           <div
@@ -41,7 +44,7 @@ export function WizardShell({
               <span
                 aria-current={index === step ? 'step' : undefined}
                 className={cn(
-                  'h-1.5 rounded-full transition-all duration-slower',
+                  'h-1.5 rounded-full ',
                   index === step ? 'w-5 bg-accent' : 'w-1.5 bg-line-strong',
                 )}
                 key={index}
@@ -53,7 +56,7 @@ export function WizardShell({
       <div className="grid min-h-0 content-start justify-items-center overflow-y-auto p-6 [@media(max-height:560px)]:p-4">
         <div
           className={cn(
-            'w-full max-w-105 pt-16 motion-reduce:animate-none [@media(max-height:560px)]:pt-6',
+            'w-full max-w-reading rounded-card bg-surface p-card-ui shadow-card motion-reduce:animate-none',
             direction > 0 && 'animate-step-in-next',
             direction < 0 && 'animate-step-in-prev',
           )}
@@ -62,18 +65,20 @@ export function WizardShell({
           {children}
         </div>
       </div>
-      <div className="grid grid-cols-[minmax(5rem,1fr)_minmax(0,26.25rem)_minmax(5rem,1fr)] items-center gap-4 px-6 pb-4 [@media(max-height:560px)]:pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-app-gap px-app pb-app">
         <div className="justify-self-start">
           {onBack && (
-            <Button className="text-ink-3" onClick={onBack} variant="ghost">
+            <Button className="text-ink-2" onClick={onBack} variant="ghost">
               <ArrowLeft aria-hidden="true" />
               上一步
             </Button>
           )}
         </div>
-        {footer ?? <p className="text-center text-xs text-ink-3">所有数据本地存储，不上传服务器</p>}
+        {footer ?? (
+          <p className="text-center text-ui-subhead text-ink-2">所有数据本地存储，不上传服务器</p>
+        )}
         {onSkip ? (
-          <Button className="justify-self-end text-ink-3" onClick={onSkip} variant="ghost">
+          <Button className="justify-self-end text-ink-2" onClick={onSkip} variant="ghost">
             跳过
             <ArrowRight aria-hidden="true" />
           </Button>

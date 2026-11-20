@@ -223,6 +223,8 @@ app
     ]);
     const win = new BrowserWindow({
       show: false,
+      width: 1280,
+      height: 800,
       webPreferences: {
         preload: join(process.cwd(), 'out/preload/index.cjs'),
         sandbox: true,
@@ -288,7 +290,7 @@ app
     await invoke(
       `await window.delionBot.bridge.invoke('workspace:remove', ${JSON.stringify(moveTo)});`,
     );
-    await invoke(`const link = document.querySelector('#main-nav button[aria-label="连接器"]');
+    await invoke(`const link = document.querySelector('#main-nav button[title="连接器"]');
       const settings = link?.parentElement.querySelector('button[aria-label="设置"]');
       if (!settings || settings.offsetTop !== link.offsetTop || settings.offsetLeft >= link.offsetLeft) throw new Error('设置和连接器应在侧栏底部并排');
       if (link.querySelector('img')) throw new Error('未连接时侧栏不应显示应用图标');
@@ -328,33 +330,31 @@ app
       row.querySelector('button').click();
       for(let i=0;i<80 && !row.textContent.includes('已连接');i++) await new Promise(r=>setTimeout(r,100));
       if(!row.textContent.includes('已连接')) throw new Error('Gmail 授权后未显示账户');
-      const sidebar = document.querySelector('#main-nav button[aria-label="连接器"]');
+      const sidebar = document.querySelector('#main-nav button[title="连接器"]');
       if (sidebar.querySelectorAll('img').length !== 1) throw new Error('侧栏应只显示已连接的 Gmail');`);
     connectedApps.add('googledrive').add('github');
-    const threeIconWidth = await invoke(`
-      const sidebar = document.querySelector('#main-nav button[aria-label="连接器"]');
+    await invoke(`
+      const sidebar = document.querySelector('#main-nav button[title="连接器"]');
       [...document.querySelectorAll('#app-main button')].find(button=>button.textContent==='刷新账户').click();
       for(let i=0;i<50 && sidebar.querySelectorAll('img').length!==3;i++) await new Promise(r=>setTimeout(r,100));
-      const images = [...sidebar.querySelectorAll('img')];
-      if (images.length !== 3) throw new Error('侧栏未更新已连接应用');
-      return images[2].parentElement.getBoundingClientRect().right - images[0].parentElement.getBoundingClientRect().left;`);
+      if (sidebar.querySelectorAll('img').length !== 3) throw new Error('侧栏未更新已连接应用');`);
     connectedApps.add('googlecalendar').add('slack').add('notion');
     await invoke(`
-      const sidebar = document.querySelector('#main-nav button[aria-label="连接器"]');
+      const sidebar = document.querySelector('#main-nav button[title="连接器"]');
       [...document.querySelectorAll('#app-main button')].find(button=>button.textContent==='刷新账户').click();
-      for(let i=0;i<50 && sidebar.querySelectorAll('img').length!==6;i++) await new Promise(r=>setTimeout(r,100));
-      const badges = [...sidebar.querySelectorAll('img')].map(img=>img.parentElement.getBoundingClientRect());
-      if (badges.length !== 6) throw new Error('侧栏应显示所有已连接应用');
-      if (Math.abs(badges.at(-1).right - badges[0].left - ${threeIconWidth}) >= 1) throw new Error('重叠图标应占据三个图标的宽度');
-      const step = badges[1].left - badges[0].left;
-      if (badges.slice(1).some((badge, index)=>Math.abs(badge.left-badges[index].left-step)>=1)) throw new Error('应用图标应均匀重叠');
+      const appNames = () => sidebar.querySelector('span[title]')?.title.split('、') ?? [];
+      for(let i=0;i<50 && appNames().length!==6;i++) await new Promise(r=>setTimeout(r,100));
+      if (appNames().length !== 6 || sidebar.querySelectorAll('img').length !== 3) throw new Error('侧栏最多显示三个图标，悬停时列出所有已连接应用');
       const row=document.querySelector('[data-setting-id="gmail"]');
-      const disconnect=row.querySelector('button');
-      disconnect.click();
-      await new Promise(requestAnimationFrame);
-      row.querySelector('button').click();
+      row.querySelector('button').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+      const disconnect = () => [...document.querySelectorAll('[role="menuitem"]')].find(item=>item.textContent.trim().startsWith('断开'));
+      for(let i=0;i<50 && !disconnect();i++) await new Promise(r=>setTimeout(r,100));
+      disconnect().click();
+      const confirm = () => [...document.querySelectorAll('[role="dialog"] button')].find(button=>button.textContent.trim()==='断开账户');
+      for(let i=0;i<50 && !confirm();i++) await new Promise(r=>setTimeout(r,100));
+      confirm().click();
       for(let i=0;i<50 && row.textContent.includes('已连接');i++) await new Promise(r=>setTimeout(r,100));
-      if(row.textContent.includes('已连接') || sidebar.querySelectorAll('img').length !== 5) throw new Error('断开后仍显示账户');`);
+      if(row.textContent.includes('已连接') || appNames().includes('Gmail') || sidebar.querySelectorAll('img').length !== 3) throw new Error('断开后应更新侧栏的已连接应用');`);
     assert.equal(connectedApps.has('gmail'), false);
     assert(existsSync(path));
     closeDatabase();

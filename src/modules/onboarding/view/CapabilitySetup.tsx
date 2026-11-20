@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, FileText } from 'lucide-react';
+import { CheckIcon as Check, DocumentTextIcon as FileText } from '@heroicons/react/24/outline';
 import type { SkillView } from '../../../core/protocol/capabilities';
 import { ToastCard } from '../../../ui/toast';
 import { Button } from '../../../ui/button';
@@ -68,10 +68,10 @@ export function CapabilitySetup({
 
   const content = (
     <div className="grid gap-7">
-      <h2 className="text-2xl font-semibold tracking-tight">能力拓展</h2>
+      <h2 className="text-ui-large-title">能力拓展</h2>
       <div className="grid gap-3">
         {skills === null && !error && (
-          <p role="status" className="text-sm text-ink-3">
+          <p role="status" className="text-ui-body text-ink-2">
             正在检查组件…
           </p>
         )}
@@ -101,7 +101,7 @@ export function CapabilitySetup({
                 className="w-full flex-wrap items-center gap-4 p-4"
                 action={
                   ready ? (
-                    <span className="flex items-center gap-1.5 text-xs text-ink-3">
+                    <span className="flex items-center gap-1.5 text-ui-subhead text-ink-2">
                       <Check className="size-4 text-success" />
                       已启用
                     </span>
@@ -127,7 +127,7 @@ export function CapabilitySetup({
               >
                 {downloading && (
                   <div className="mt-3 grid gap-1.5" role="status">
-                    <span className="text-xs text-ink-3">
+                    <span className="text-ui-subhead text-ink-2">
                       {dependency.phase ?? '正在准备组件…'}
                     </span>
                     {total ? (
@@ -150,7 +150,7 @@ export function CapabilitySetup({
           })}
       </div>
       {error && (
-        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-danger">
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-ui-body text-danger">
           <span>{error}</span>
           {skills === null && (
             <Button

@@ -1,15 +1,15 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AtSign,
-  Bot,
-  ChevronDown,
-  FileText,
-  Globe,
-  MessageSquare,
-  Paperclip,
-  Sparkles,
-} from 'lucide-react';
+  AtSymbolIcon as AtSign,
+  ChatBubbleLeftIcon as MessageSquare,
+  ChevronDownIcon as ChevronDown,
+  CpuChipIcon as Bot,
+  DocumentTextIcon as FileText,
+  GlobeAltIcon as Globe,
+  InformationCircleIcon as Info,
+  PaperClipIcon as Paperclip,
+} from '@heroicons/react/24/outline';
 import { cn } from '../../../ui/cn';
 import type { ComposerContext } from './composer-context';
 import { ComposerContextBar } from './composer-context-bar';
@@ -517,7 +517,7 @@ export function ChatComposer({
               </PopoverTrigger>
               <PopoverContent align="start" className="w-64" side="bottom">
                 {searchEntries === null ? (
-                  <p className="px-2 py-3 text-xs text-ink-3">
+                  <p className="px-2 py-3 text-ui-subhead text-ink-2">
                     {searchFailed ? '搜索配置加载失败' : '正在加载搜索配置…'}
                   </p>
                 ) : searchEntries.length === 0 ? (
@@ -554,7 +554,7 @@ export function ChatComposer({
                         >
                           <span className="truncate">{entry.name}</span>
                           {entry.provider === 'deepseek' && (
-                            <span className="shrink-0 text-xs text-ink-3">按次计费</span>
+                            <span className="shrink-0 text-ui-subhead text-ink-2">按次计费</span>
                           )}
                           {entry.id === searchSelectedId && <PromptInputOptionCheck />}
                         </PromptInputOption>
@@ -591,16 +591,16 @@ export function ChatComposer({
                   <span className="truncate @max-[220px]:hidden">
                     {modelUnavailable ? `${model} · 已停用` : model}
                   </span>
-                  <Bot className="hidden size-3.5 @max-[220px]:block" />
-                  <ChevronDown className="size-3 @max-[220px]:hidden" />
+                  <Bot className="hidden size-4 @max-[220px]:block" />
+                  <ChevronDown className="size-4 @max-[220px]:hidden" />
                 </PromptInputTrigger>
               </PopoverTrigger>
               <PopoverContent align="end" className="w-80" side="bottom">
                 {providers === null ? (
                   providersFailed ? (
-                    <p className="px-2 py-3 text-xs text-ink-3">模型列表加载失败</p>
+                    <p className="px-2 py-3 text-ui-subhead text-ink-2">模型列表加载失败</p>
                   ) : (
-                    <p className="px-2 py-3 text-xs text-ink-3">正在加载模型列表…</p>
+                    <p className="px-2 py-3 text-ui-subhead text-ink-2">正在加载模型列表…</p>
                   )
                 ) : providers.length === 0 ? (
                   <PromptInputSetup
@@ -667,8 +667,8 @@ export function ChatComposer({
                   title="思考强度"
                 >
                   <span className="truncate @max-[260px]:hidden">{effort ?? 'default'}</span>
-                  <Sparkles className="hidden size-3.5 @max-[260px]:block" />
-                  <ChevronDown className="size-3 @max-[260px]:hidden" />
+                  <Info className="hidden size-4 @max-[260px]:block" />
+                  <ChevronDown className="size-4 @max-[260px]:hidden" />
                 </PromptInputTrigger>
               </PopoverTrigger>
               <PopoverContent
@@ -720,11 +720,11 @@ export function ChatComposer({
               <PromptInputMenuItem
                 icon={
                   menu?.kind === 'mention' ? (
-                    <FileText className="size-3.5 shrink-0 text-ink-3" />
+                    <FileText className="size-4 shrink-0 text-ink-2" />
                   ) : menu?.kind === 'session' ? (
-                    <MessageSquare className="size-3.5 shrink-0 text-ink-3" />
+                    <MessageSquare className="size-4 shrink-0 text-ink-2" />
                   ) : (
-                    <span className="shrink-0 font-mono text-sm text-ink-3">/</span>
+                    <span className="shrink-0 font-mono text-ui-body text-ink-2">/</span>
                   )
                 }
                 id={menuOptionId(position)}
@@ -735,12 +735,14 @@ export function ChatComposer({
               >
                 {'name' in item ? (
                   <>
-                    <span className="shrink-0 text-sm font-medium text-ink">/{item.name}</span>
-                    <span className="min-w-0 flex-1 truncate text-xs text-ink-3">{item.hint}</span>
+                    <span className="shrink-0 text-ui-headline text-ink">/{item.name}</span>
+                    <span className="min-w-0 flex-1 truncate text-ui-subhead text-ink-2">
+                      {item.hint}
+                    </span>
                   </>
                 ) : item.session ? (
                   <span
-                    className="min-w-0 flex-1 truncate text-sm font-semibold"
+                    className="min-w-0 flex-1 truncate text-ui-headline"
                     style={{ color: 'var(--accent-ink)' }}
                   >
                     {item.title}
@@ -762,11 +764,11 @@ function MentionTitle({ title }: { title: string }) {
   const dir = at < 0 ? '' : title.slice(0, at + 1);
   const name = at < 0 ? title : title.slice(at + 1);
   return (
-    <span className="flex min-w-0 flex-1 items-baseline gap-1.5 text-sm">
+    <span className="flex min-w-0 flex-1 items-baseline gap-1.5 text-ui-body">
       <span className="shrink-0 font-semibold" style={{ color: 'var(--accent-ink)' }}>
         {name}
       </span>
-      {dir && <span className="min-w-0 truncate text-xs text-ink-3">{dir}</span>}
+      {dir && <span className="min-w-0 truncate text-ui-subhead text-ink-2">{dir}</span>}
     </span>
   );
 }

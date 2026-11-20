@@ -1,7 +1,7 @@
 // 扁平标签栏：组内拖拽排序、跨组拖放、中键关闭、上下文菜单、激活滚动可见。
 import { useEffect, useRef, type DragEvent, type KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { XMarkIcon as X } from '@heroicons/react/24/outline';
 import type { GroupNode, TabId } from '../../../modules/workspace/contract';
 import {
   ContextMenu,
@@ -110,13 +110,13 @@ export function TabBar({
   if (!group.tabs.length) return null;
 
   return (
-    <div className="@container flex h-10 min-w-0 shrink-0 bg-surface px-2 pt-1">
-      {showReveal && <ExplorerRevealButton className="mb-1 self-end" />}
+    <div className="@container flex min-h-toolbar min-w-0 shrink-0 items-center gap-2 bg-surface px-app">
+      {showReveal && <ExplorerRevealButton className="self-center" />}
       <div
         ref={listRef}
         role="tablist"
         aria-label={activeTab ? `标签页：${titleOf(activeTab, queryClient)}` : '工作组标签页'}
-        className="flex min-w-0 flex-1 items-end gap-0.5 overflow-x-auto [scrollbar-width:none]"
+        className="glass flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-full p-1 [scrollbar-width:none]"
         onDragOver={onDragOver}
         onDrop={onDrop}
       >
@@ -142,13 +142,9 @@ export function TabBar({
                   role="tab"
                   tabIndex={active ? 0 : -1}
                   className={cn(
-                    'group/tab relative flex h-8 min-w-32 max-w-56 shrink-0 select-none items-center gap-1.5 px-1.5 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent',
-                    active
-                      ? 'rounded-t-card bg-surface text-ink'
-                      : 'rounded-control bg-hover text-ink-3 hover:bg-hover-strong hover:text-ink',
-                    active &&
-                      'before:absolute before:inset-x-1.5 before:top-0 before:h-0.5 before:rounded-full',
-                    active && (unfocused ? 'before:bg-ink/25' : 'before:bg-ink'),
+                    'group/tab relative flex min-h-control-sm touch:min-h-control-lg min-w-32 max-w-56 shrink-0 select-none items-center gap-1.5 px-1.5 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent-ink',
+                    'rounded-full',
+                    active ? 'bg-surface text-ink shadow-hairline' : 'text-ink-2 hover:bg-hover',
                   )}
                   onClick={() => openTab(tab, group.id)}
                   onDoubleClick={() => keepTab(tab, group.id)}
@@ -169,12 +165,12 @@ export function TabBar({
                     if (!isPinned) closeTab(tab, group.id);
                   }}
                 >
-                  <Icon className="size-3.5 shrink-0 opacity-70" />
+                  <Icon className="size-4 shrink-0" />
                   <span
                     className={cn(
-                      'min-w-0 flex-1 truncate px-0.5 text-left text-xs',
+                      'min-w-0 flex-1 truncate px-0.5 text-left text-ui-subhead',
                       isPreview && 'italic',
-                      unfocused && 'opacity-55',
+                      unfocused && 'text-ink-2',
                     )}
                     title={isPreview ? `${title}（预览，双击保留）` : title}
                   >

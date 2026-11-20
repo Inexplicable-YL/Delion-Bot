@@ -1,6 +1,13 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { CircleCheck, CircleX, Eye, EyeOff, ListPlus, PlugZap } from 'lucide-react';
+import {
+  BoltIcon as PlugZap,
+  CheckCircleIcon as CircleCheck,
+  EyeIcon as Eye,
+  EyeSlashIcon as EyeOff,
+  QueueListIcon as ListPlus,
+  XCircleIcon as CircleX,
+} from '@heroicons/react/24/outline';
 import { DesktopOnlyNotice } from '../../../../ui/desktop-only-notice';
 import { SelectItem } from '../../../../ui/select';
 import { StepButton, StepSelect, type StepButtonState } from '../step-controls';
@@ -142,8 +149,8 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
       }}
     >
       <header className="grid gap-2">
-        <h2 className="text-2xl font-semibold tracking-tight">配置模型服务</h2>
-        <p className="text-sm leading-relaxed text-ink-3">
+        <h2 className="text-ui-large-title">配置模型服务</h2>
+        <p className="text-ui-body text-ink-2">
           选择 Pi 内置的厂商，或自定义 OpenAI 兼容端点，密钥加密保存于本机。
         </p>
       </header>
@@ -172,7 +179,7 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
                 <Collapse open={custom}>
                   <div className="grid gap-4 pt-4">
                     <label className="grid gap-2">
-                      <span className="text-sm font-medium text-ink-2">名称</span>
+                      <span className="text-ui-headline text-ink-2">名称</span>
                       <Input
                         size="lg"
                         autoComplete="off"
@@ -183,7 +190,7 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
                       />
                     </label>
                     <label className="grid gap-2">
-                      <span className="text-sm font-medium text-ink-2">API 地址</span>
+                      <span className="text-ui-headline text-ink-2">API 地址</span>
                       <Input
                         size="lg"
                         autoComplete="off"
@@ -238,15 +245,15 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                     {verifyResult && (
                       <p
-                        className={`flex min-w-0 flex-1 items-start gap-1.5 text-xs leading-5 ${
+                        className={`flex min-w-0 flex-1 items-start gap-1.5 text-ui-subhead ${
                           verifyResult.ok ? 'text-success' : 'text-danger'
                         }`}
                         role="status"
                       >
                         {verifyResult.ok ? (
-                          <CircleCheck className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                          <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                         ) : (
-                          <CircleX className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                          <CircleX className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
                         )}
                         <span className="min-w-0 break-words">{verifyResult.message}</span>
                       </p>
@@ -260,7 +267,7 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
                   </div>
                 )}
                 {importNotice && (
-                  <p className="text-xs text-ink-3" role="status">
+                  <p className="text-ui-subhead text-ink-2" role="status">
                     {importNotice}
                   </p>
                 )}
@@ -296,7 +303,7 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
                       ))}
                 </StepSelect>
                 {custom && models.length === 0 && (
-                  <span className="text-xs text-ink-3">
+                  <span className="text-ui-subhead text-ink-2">
                     自定义服务没有预设模型，检测后从列表导入。
                   </span>
                 )}

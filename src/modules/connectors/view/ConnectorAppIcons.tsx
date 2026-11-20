@@ -30,8 +30,10 @@ export function ConnectorAppIcon({
     <span
       aria-hidden="true"
       className={cn(
-        'grid shrink-0 place-items-center rounded-full border border-line bg-on-media',
-        size === 'sm' ? 'size-5' : 'size-8',
+        'grid shrink-0 place-items-center bg-on-media',
+        size === 'sm'
+          ? 'size-badge rounded-full border border-line'
+          : 'size-8 rounded-control shadow-hairline',
       )}
     >
       <img
@@ -43,7 +45,7 @@ export function ConnectorAppIcon({
   );
 }
 
-export function ConnectorAppIcons() {
+export function ConnectedAppIcons() {
   const { accounts } = useConnectorAccounts();
   const active = new Set(
     accounts.data
@@ -53,20 +55,12 @@ export function ConnectorAppIcons() {
   const connected = toolkit.options.filter((slug) => active.has(slug));
   if (connected.length === 0) return null;
 
-  const stacked = connected.length > 3;
+  const names = connected.map((slug) => apps[slug]).join('、');
   return (
-    <span
-      aria-hidden="true"
-      className={cn('shrink-0 items-center', stacked ? 'grid w-16' : 'flex gap-0.5')}
-      style={
-        stacked
-          ? { gridTemplateColumns: `repeat(${connected.length - 1}, minmax(0, 1fr)) auto` }
-          : undefined
-      }
-      title={connected.map((slug) => apps[slug]).join('、')}
-    >
-      {connected.map((slug) => (
-        <ConnectorAppIcon key={slug} slug={slug} size="sm" />
+    <span className="flex shrink-0 items-center -space-x-1.5" title={names}>
+      <span className="sr-only">已连接应用 {names}</span>
+      {connected.slice(0, 3).map((slug) => (
+        <ConnectorAppIcon key={slug} size="sm" slug={slug} />
       ))}
     </span>
   );

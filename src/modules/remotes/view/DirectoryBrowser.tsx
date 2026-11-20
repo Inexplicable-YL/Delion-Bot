@@ -2,7 +2,13 @@
 // 读取中不禁用任何东西；已读过的目录先显示缓存再静默刷新。新建文件夹失败走 toast，输入框保留原名。
 import { useState, type KeyboardEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronRight, Clock, Folder, FolderPlus, House } from 'lucide-react';
+import {
+  ChevronRightIcon as ChevronRight,
+  ClockIcon as Clock,
+  FolderIcon as Folder,
+  FolderPlusIcon as FolderPlus,
+  HomeIcon as House,
+} from '@heroicons/react/24/outline';
 import { Card } from '../../../ui/card';
 import { Checkbox } from '../../../ui/checkbox';
 import { Input } from '../../../ui/input';
@@ -156,7 +162,7 @@ export function DirectoryBrowser({
           <Input
             aria-label="远端路径"
             autoFocus
-            className="h-7 font-mono text-xs"
+            className="h-7 font-mono text-ui-subhead"
             onBlur={() => setEditing(false)}
             onChange={(event) => edit({ typed: event.target.value })}
             onKeyDown={(event) => {
@@ -176,7 +182,7 @@ export function DirectoryBrowser({
         ) : (
           <button
             aria-label="编辑路径"
-            className="flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-chip px-1 text-left font-mono text-xs hover:bg-hover"
+            className="flex h-7 min-w-0 flex-1 items-center overflow-hidden rounded-chip px-1 text-left font-mono text-ui-subhead hover:bg-hover"
             onClick={() => setEditing(true)}
             title={`${path}（点击输入路径）`}
             type="button"
@@ -185,11 +191,11 @@ export function DirectoryBrowser({
               <span className="flex items-center [direction:ltr]">
                 {crumbs(path).map((crumb, index, all) => (
                   <span className="flex items-center" key={crumb.path}>
-                    {index > 1 && <ChevronRight className="size-3 shrink-0 text-ink-3/70" />}
+                    {index > 1 && <ChevronRight className="size-4 shrink-0 text-ink-2" />}
                     <span
                       className={cn(
                         'rounded-chip px-0.5',
-                        index === all.length - 1 ? 'text-ink' : 'text-ink-3 hover:text-ink',
+                        index === all.length - 1 ? 'text-ink' : 'text-ink-2 hover:text-ink',
                       )}
                       onClick={(event) => {
                         if (index === all.length - 1) return;
@@ -215,9 +221,9 @@ export function DirectoryBrowser({
       </div>
 
       {recent.length > 0 ? (
-        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto border-b border-line px-2.5 py-1.5 text-xs">
-          <Clock className="size-3 shrink-0 text-ink-3" aria-hidden="true" />
-          <span className="shrink-0 text-ink-3">最近</span>
+        <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto border-b border-line px-2.5 py-1.5 text-ui-subhead">
+          <Clock className="size-4 shrink-0 text-ink-2" aria-hidden="true" />
+          <span className="shrink-0 text-ink-2">最近</span>
           {recent.map((item) => (
             <button
               className="shrink-0 rounded-chip bg-hover px-1.5 py-0.5 font-mono text-ink-2 transition-colors duration-base hover:bg-hover-strong hover:text-ink"
@@ -245,11 +251,11 @@ export function DirectoryBrowser({
         {creating !== null && (
           <li className="px-2 py-1">
             <div className="flex items-center gap-2 px-1">
-              <FolderPlus className="size-4 shrink-0 text-ink-3" strokeWidth={1.8} />
+              <FolderPlus className="size-4 shrink-0 text-ink-2" />
               <Input
                 aria-label="新文件夹名称"
                 autoFocus
-                className="h-7 text-xs"
+                className="h-7 text-ui-subhead"
                 onChange={(event) => edit({ creating: event.target.value })}
                 onKeyDown={(event) => {
                   event.stopPropagation();
@@ -270,12 +276,12 @@ export function DirectoryBrowser({
         {parent && (
           <li>
             <button
-              className="flex h-7 w-full items-center gap-2 px-3 text-left text-sm text-ink-3 hover:bg-hover hover:text-ink"
+              className="flex h-7 w-full items-center gap-2 px-3 text-left text-ui-body text-ink-2 hover:bg-hover hover:text-ink"
               onClick={() => onNavigate(parent)}
               tabIndex={-1}
               type="button"
             >
-              <Folder className="size-4 shrink-0" strokeWidth={1.8} />
+              <Folder className="size-4 shrink-0" />
               ..
             </button>
           </li>
@@ -289,7 +295,7 @@ export function DirectoryBrowser({
           >
             <button
               className={cn(
-                'flex h-7 w-full min-w-0 items-center gap-2 px-3 text-left text-sm transition-colors duration-fast',
+                'flex h-7 w-full min-w-0 items-center gap-2 px-3 text-left text-ui-body transition-colors duration-fast',
                 entry.path === selected
                   ? 'bg-selected text-ink'
                   : 'text-ink-2 hover:bg-hover hover:text-ink',
@@ -303,13 +309,12 @@ export function DirectoryBrowser({
               <Folder
                 className={cn(
                   'size-4 shrink-0',
-                  entry.name.startsWith('.') ? 'text-ink-3/60' : 'text-ink-3',
+                  entry.name.startsWith('.') ? 'text-ink-2' : 'text-ink-2',
                 )}
-                strokeWidth={1.8}
               />
               <span className="min-w-0 flex-1 truncate">{entry.name}</span>
               <ChevronRight
-                className="size-3.5 shrink-0 text-ink-3/70 hover:text-ink"
+                className="size-4 shrink-0 text-ink-2 hover:text-ink"
                 onClick={(event) => {
                   event.stopPropagation();
                   onNavigate(entry.path);
@@ -327,25 +332,25 @@ export function DirectoryBrowser({
             </li>
           ))}
         {cached && directories.length === 0 && (
-          <li className="px-3 py-2 text-xs text-ink-3">
+          <li className="px-3 py-2 text-ui-subhead text-ink-2">
             {filter ? '没有匹配的目录。' : '此目录下没有子目录。'}
           </li>
         )}
         {error && (
-          <li className="px-3 py-2 text-xs [overflow-wrap:anywhere] text-danger" role="alert">
+          <li className="px-3 py-2 text-ui-subhead wrap-anywhere text-danger" role="alert">
             {error}
           </li>
         )}
       </ul>
 
-      <div className="flex items-center justify-between border-t border-line px-2.5 py-1.5 text-xs text-ink-3">
+      <div className="flex items-center justify-between border-t border-line px-2.5 py-1.5 text-ui-subhead text-ink-2">
         <span className="flex-1" />
         <button
           className="mr-3 flex items-center gap-1 rounded-chip px-1 py-0.5 hover:bg-hover hover:text-ink"
           onClick={() => edit({ creating: '' })}
           type="button"
         >
-          <FolderPlus className="size-3" />
+          <FolderPlus className="size-4" />
           新建文件夹
         </button>
         <label className="flex items-center gap-1.5">

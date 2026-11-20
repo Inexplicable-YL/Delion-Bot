@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Folder, Trash2 } from 'lucide-react';
+import {
+  EyeIcon as Eye,
+  FolderIcon as Folder,
+  TrashIcon as Trash2,
+} from '@heroicons/react/24/outline';
 import type { ChatSessionSummary } from '../../../core/protocol/agent';
 import { chatClient } from './client';
 import { Button } from '../../../ui/button';
@@ -116,7 +120,7 @@ export function ArchivedSection({ navigate }: { navigate: Navigate }) {
     <div className="grid gap-10">
       <SectionHeader title="已归档对话" />
       {!window.delionBot ? (
-        <p className="text-sm text-ink-3">已归档对话管理仅在桌面端可用。</p>
+        <p className="text-ui-body text-ink-2">已归档对话管理仅在桌面端可用。</p>
       ) : (
         <>
           <div className="grid gap-3">
@@ -151,7 +155,7 @@ export function ArchivedSection({ navigate }: { navigate: Navigate }) {
                 全部删除
               </Button>
             </div>
-            <p className="text-xs text-ink-3">
+            <p className="text-ui-subhead text-ink-2">
               恢复后重新出现在历史列表；永久删除无法撤销。共 {sessions?.length ?? 0} 条。
             </p>
             {confirm?.kind === 'all' && (
@@ -178,12 +182,12 @@ export function ArchivedSection({ navigate }: { navigate: Navigate }) {
             {archived.error && <ErrorText>{errorMessage(archived.error)}</ErrorText>}
             {sessions && sessions.length === 0 && (
               <SettingsGroup>
-                <p className="py-3.5 text-sm text-ink-3">没有已归档对话</p>
+                <p className="py-3.5 text-ui-body text-ink-2">没有已归档对话</p>
               </SettingsGroup>
             )}
             {sessions && sessions.length > 0 && groups.length === 0 && (
               <SettingsGroup>
-                <p className="py-3.5 text-sm text-ink-3">没有匹配的已归档对话</p>
+                <p className="py-3.5 text-ui-body text-ink-2">没有匹配的已归档对话</p>
               </SettingsGroup>
             )}
           </div>
@@ -193,9 +197,9 @@ export function ArchivedSection({ navigate }: { navigate: Navigate }) {
                 key={group.id ?? 'general'}
                 title={
                   <span className="flex items-center gap-2">
-                    <Folder aria-hidden="true" className="size-4 shrink-0 text-ink-3" />
+                    <Folder aria-hidden="true" className="size-4 shrink-0 text-ink-2" />
                     <span className="truncate">{group.name}</span>
-                    <span className="shrink-0 text-xs font-normal text-ink-3">
+                    <span className="shrink-0 text-ui-subhead text-ink-2">
                       {group.sessions.length} 条
                     </span>
                   </span>
@@ -208,10 +212,10 @@ export function ArchivedSection({ navigate }: { navigate: Navigate }) {
                       key={session.id}
                     >
                       <div className="grid min-w-0 gap-0.5">
-                        <span className="truncate text-sm" title={session.title}>
+                        <span className="truncate text-ui-body" title={session.title}>
                           {session.title || '新对话'}
                         </span>
-                        <span className="text-xs text-ink-3">
+                        <span className="text-ui-subhead text-ink-2">
                           {new Date(session.updatedAt).toLocaleString('zh-CN')}
                         </span>
                       </div>

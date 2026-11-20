@@ -2,7 +2,10 @@
 // （按请求时点重算，手动刷新）共用一个标签类型，载荷由 tab-id 区分。
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FileCode2, TriangleAlert } from 'lucide-react';
+import {
+  DocumentIcon as FileCode2,
+  ExclamationTriangleIcon as TriangleAlert,
+} from '@heroicons/react/24/outline';
 import type { TabId } from '../../../../app/module';
 import { diffStatOf } from '../../../../core/protocol/diff';
 import { PanelHeader } from '../../../../ui/panel-header';
@@ -48,7 +51,7 @@ function TurnFileReview({
     return (
       <Shell>
         <Centered>
-          <TriangleAlert aria-hidden className="size-4 text-ink-3" />
+          <TriangleAlert aria-hidden className="size-4 text-ink-2" />
           {errorMessage(error)}
         </Centered>
       </Shell>
@@ -64,20 +67,20 @@ function TurnFileReview({
   return (
     <Shell>
       <PanelHeader>
-        <FileCode2 aria-hidden className="size-4 shrink-0 text-ink-3" />
-        <span className="shrink-0 text-sm font-medium">{basenameOf(detail.path)}</span>
-        <span className="min-w-0 truncate text-xs text-ink-3" title={detail.path}>
+        <FileCode2 aria-hidden className="size-4 shrink-0 text-ink-2" />
+        <span className="shrink-0 text-ui-headline">{basenameOf(detail.path)}</span>
+        <span className="min-w-0 truncate text-ui-subhead text-ink-2" title={detail.path}>
           {dirnameOf(detail.path)}
         </span>
-        <span className="shrink-0 text-xs text-ink-3">· {STATUS_TEXT[detail.status]}</span>
-        <span className="ml-auto flex shrink-0 gap-1.5 font-mono text-xs">
+        <span className="shrink-0 text-ui-subhead text-ink-2">· {STATUS_TEXT[detail.status]}</span>
+        <span className="ml-auto flex shrink-0 gap-1.5 font-mono text-ui-subhead">
           {stat && stat.added > 0 && <span className="text-success">+{stat.added}</span>}
           {stat && stat.deleted > 0 && <span className="text-danger">-{stat.deleted}</span>}
         </span>
       </PanelHeader>
       {detail.note && (
-        <p className="flex shrink-0 items-start gap-1.5 border-b border-line px-3 py-1.5 text-xs leading-5 text-ink-3">
-          <TriangleAlert aria-hidden className="mt-0.5 size-3 shrink-0" />
+        <p className="flex shrink-0 items-start gap-1.5 border-b border-line px-3 py-1.5 text-ui-subhead text-ink-2">
+          <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
           {detail.note}
         </p>
       )}

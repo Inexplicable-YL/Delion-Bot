@@ -1,4 +1,4 @@
-import type { LucideIcon } from 'lucide-react';
+import type { OutlineIcon } from './outline-icon';
 import type * as React from 'react';
 import { cn } from './cn';
 
@@ -9,7 +9,7 @@ function ConnectCard({
   children,
   className,
 }: {
-  icon?: LucideIcon;
+  icon?: OutlineIcon;
   title: React.ReactNode;
   description: React.ReactNode;
   children?: React.ReactNode;
@@ -29,8 +29,8 @@ function ConnectCard({
         </div>
       )}
       <div className="grid gap-1">
-        <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-        <p className="text-sm leading-relaxed text-ink-3">{description}</p>
+        <h2 className="text-ui-title-2">{title}</h2>
+        <p className="text-ui-body text-ink-2">{description}</p>
       </div>
       {children}
     </section>

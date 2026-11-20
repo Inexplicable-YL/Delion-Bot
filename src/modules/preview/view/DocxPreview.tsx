@@ -1,5 +1,5 @@
 import { renderAsync } from 'docx-preview';
-import { Minus, Plus } from 'lucide-react';
+import { MinusIcon as Minus, PlusIcon as Plus } from '@heroicons/react/24/outline';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../../ui/button';
 import { pinchZoomRef } from './use-pinch-zoom';
@@ -57,7 +57,7 @@ export function DocxPreview({ url }: { url: string }) {
     setZoom((value) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value + direction * ZOOM_STEP)));
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center justify-center-safe gap-2 overflow-x-auto border-b px-3 py-1 text-xs">
+      <div className="flex shrink-0 items-center justify-center-safe gap-2 overflow-x-auto border-b px-3 py-1 text-ui-subhead">
         <Button size="icon-sm" variant="ghost" aria-label="缩小文档" onClick={() => step(-1)}>
           <Minus />
         </Button>
@@ -89,7 +89,7 @@ export function DocxPreview({ url }: { url: string }) {
           </ErrorText>
         )}
         {loading && !error && (
-          <p role="status" className="absolute inset-x-0 top-0 p-3 text-sm text-ink-3">
+          <p role="status" className="absolute inset-x-0 top-0 p-3 text-ui-body text-ink-2">
             正在加载文档…
           </p>
         )}

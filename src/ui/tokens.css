@@ -1,56 +1,48 @@
-/* 整个 app 唯一的样式来源：浅色写在 :root 与 .bui-light（固定浅色作用域），深色写在 .dark。
+/* 整个 app 唯一的样式来源：浅色写在 :root 与 .theme-light（固定浅色作用域），深色写在 .dark。
    基于 beautiful-ui（MIT，见 LICENSES/beautiful-ui.txt）。 */
+@custom-variant touch (@media (pointer: coarse));
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root,
-.bui-light {
-  /* surfaces — cool, blue-tinted neutrals */
-  --page: oklch(0.985 0.001 286.376);
-  --surface: oklch(1 0 0);
-  --inset: oklch(0.979 0.002 247.839);
-  --hover: oklch(0.97 0.002 247.839);
-  --hover-strong: oklch(0.933 0.003 247.86);
-
-  /* ink ramp */
-  --ink: oklch(0.247 0.006 258.361);
-  --ink-2: oklch(0.506 0.01 264.477);
-  --ink-3: oklch(0.695 0.009 264.505);
-
-  /* borders — solid and crisp, not alpha */
-  --line: oklch(0.946 0.003 264.542);
-  --line-strong: oklch(0.912 0.005 258.326);
-  --field: oklch(0.961 0.001 286.375);
-
-  /* accent */
-  --accent: oklch(0.626 0.205 254.947);
-  --accent-ink: oklch(0.556 0.187 255.617);
-  --accent-tint: oklch(0.96 0.019 252.878);
-
-  /* semantic */
-  --success: oklch(0.603 0.155 150.883);
-  --success-tint: oklch(0.958 0.017 159.118);
-  --warning: oklch(0.689 0.179 49.902);
-  --warning-tint: oklch(0.964 0.021 67.581);
-  --danger: oklch(0.621 0.192 23.042);
-  --danger-tint: oklch(0.956 0.017 17.462);
-
-  --tooltip-bg: oklch(0.272 0.008 264.435);
-  --tooltip-fg: oklch(0.976 0.002 247.839);
-  --tooltip-border: oklch(0.356 0.007 264.474);
-
-  --shadow-btn: 0 0 0 1px var(--line-strong), 0 0 4px 0 rgba(0, 0, 0, 0.04);
-  --shadow-card:
-    0 0 0 1px var(--line), 0 18px 47px 0 rgba(0, 0, 0, 0.03), 0 7.5px 19px 0 rgba(0, 0, 0, 0.02),
-    0 4px 10.5px 0 rgba(0, 0, 0, 0.02), 0 2.3px 5.8px 0 rgba(0, 0, 0, 0.01),
-    0 1.2px 3.1px 0 rgba(0, 0, 0, 0.01), 0 0.5px 1.3px 0 rgba(0, 0, 0, 0.01);
-  --shadow-raised:
-    0 0 0 1px var(--line), 0 17.54px 23.39px 0 rgba(0, 0, 0, 0.04),
-    0 9.4px 12.5px 0 rgba(0, 0, 0, 0.03), 0 5.25px 7px 0 rgba(0, 0, 0, 0.02),
-    0 2.79px 3.72px -2px rgba(0, 0, 0, 0.01), 0 1.16px 1.5px 0 rgba(0, 0, 0, 0.01);
-  --shadow-overlay:
-    0 0 0 1px var(--line), 0 25px 50px 0 rgba(0, 0, 0, 0.05), 0 12px 24px 0 rgba(0, 0, 0, 0.04),
-    0 6px 12px 0 rgba(0, 0, 0, 0.03), 0 3px 6px 0 rgba(0, 0, 0, 0.02),
-    0 1.5px 3px 0 rgba(0, 0, 0, 0.02);
+.theme-light {
+  --page: #f5f5f7;
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --inset: #f5f5f7;
+  --hover-strong: #e8e8ed;
+  --ink: #1d1d1f;
+  --ink-2: #6e6e73;
+  --ink-3: #8e8e93;
+  --ink-4: #c7c7cc;
+  --accent: #0088ff;
+  --accent-ink: #1e6ef4;
+  --accent-fill: #1e6ef4;
+  --success: #008932;
+  --success-fill: #34c759;
+  --warning: #c55300;
+  --warning-fill: #ff8d28;
+  --danger: #e9152d;
+  --danger-fill: #ff383c;
+  --on-danger: #ffffff;
+  --line: rgb(0 0 0 / 8%);
+  --line-strong: rgb(0 0 0 / 14%);
+  --scrim: rgb(0 0 0 / 32%);
+  --glass: rgb(255 255 255 / 72%);
+  --glass-thick: rgb(255 255 255 / 86%);
+  --glass-rim: rgb(255 255 255 / 65%);
+  --field: color-mix(in srgb, var(--ink) 5%, transparent);
+  --hover: var(--field);
+  --accent-tint: color-mix(in srgb, var(--accent) 12%, transparent);
+  --success-tint: color-mix(in srgb, var(--success-fill) 12%, transparent);
+  --warning-tint: color-mix(in srgb, var(--warning-fill) 12%, transparent);
+  --danger-tint: color-mix(in srgb, var(--danger-fill) 12%, transparent);
+  --tooltip-bg: var(--ink);
+  --tooltip-fg: var(--canvas);
+  --tooltip-border: var(--line-strong);
+  --shadow-btn: inset 0 0 0 1px var(--line-strong);
+  --shadow-card: 0 0 0 1px var(--line), var(--shadow-elev-1);
+  --shadow-raised: 0 0 0 1px var(--line), var(--shadow-elev-2);
+  --shadow-overlay: 0 0 0 1px var(--line), var(--shadow-elev-3);
 
   /* 日历候选色：低饱和灰调，浅底深字，供待办手动选择。
      名字与数据库里的事件颜色 key 一一对应，只经 var() 取用，不生成工具类。 */
@@ -96,7 +88,7 @@
   color-scheme: light;
 }
 
-.bui-light {
+.theme-light {
   color-scheme: light;
   color: var(--ink);
 }
@@ -104,41 +96,44 @@
 /* theme.ts 把手动选择与跟随系统统一解析成根元素的 .dark；外观设置的预览卡片也用它。 */
 .dark {
   color-scheme: dark;
-  --page: oklch(0.209 0.004 264.477);
-  --surface: oklch(0.26 0.006 271.191);
-  --inset: oklch(0.243 0.004 264.492);
-  --hover: oklch(0.289 0.006 271.22);
-  --hover-strong: oklch(0.318 0.007 274.747);
-
-  --ink: oklch(0.964 0.002 247.839);
-  --ink-2: oklch(0.731 0.008 260.731);
-  --ink-3: oklch(0.541 0.01 264.484);
-
-  --line: oklch(0.308 0.006 258.354);
-  --line-strong: oklch(0.356 0.007 264.474);
-  --field: oklch(0.293 0.006 271.223);
-
-  --accent: oklch(0.68 0.173 253.301);
-  --accent-ink: oklch(0.788 0.113 248.33);
-  --accent-tint: oklch(0.68 0.173 253.301 / 0.16);
-
-  --success: oklch(0.705 0.154 153.814);
-  --success-tint: oklch(0.705 0.154 153.814 / 0.14);
-  --warning: oklch(0.746 0.156 55.642);
-  --warning-tint: oklch(0.746 0.156 55.642 / 0.14);
-  --danger: oklch(0.666 0.18 21.433);
-  --danger-tint: oklch(0.666 0.18 21.433 / 0.14);
-
-  --tooltip-bg: oklch(0.182 0.004 264.459);
-  --tooltip-fg: oklch(0.964 0.002 247.839);
-  --tooltip-border: oklch(0.308 0.006 258.354);
-
-  /* 深色下浮起层级的描边改为低透明度的白线，与阴影连成一体，浮得越高越亮。 */
-  --shadow-btn: 0 0 0 1px oklch(1 0 0 / 0.1), 0 1px 2px oklch(0 0 0 / 0.3);
-  --shadow-card:
-    0 0 0 1px oklch(1 0 0 / 0.11), 0 1px 2px oklch(0 0 0 / 0.2), 0 2px 6px oklch(0 0 0 / 0.2);
-  --shadow-raised: 0 0 0 1px oklch(1 0 0 / 0.13), 0 2px 10px oklch(0 0 0 / 0.22);
-  --shadow-overlay: 0 0 0 1px oklch(1 0 0 / 0.15), 0 8px 28px oklch(0 0 0 / 0.34);
+  --page: #121214;
+  --canvas: #000000;
+  --surface: #1c1c1e;
+  --inset: #1c1c1e;
+  --hover-strong: #2c2c2e;
+  --ink: #f5f5f7;
+  --ink-2: #a1a1a6;
+  --ink-3: #6e6e73;
+  --ink-4: #48484a;
+  --accent: #0091ff;
+  --accent-ink: #5cb8ff;
+  --accent-fill: #0a64e6;
+  --success: #4ad968;
+  --success-fill: #30d158;
+  --warning: #ffa056;
+  --warning-fill: #ff9230;
+  --danger: #ff6165;
+  --danger-fill: #ff4245;
+  --on-danger: var(--canvas);
+  --line: rgb(255 255 255 / 10%);
+  --line-strong: rgb(255 255 255 / 17%);
+  --scrim: rgb(0 0 0 / 55%);
+  --glass: rgb(40 40 44 / 55%);
+  --glass-thick: rgb(30 30 33 / 86%);
+  --glass-rim: rgb(255 255 255 / 14%);
+  --field: color-mix(in srgb, var(--ink) 5%, transparent);
+  --hover: var(--field);
+  --accent-tint: color-mix(in srgb, var(--accent) 12%, transparent);
+  --success-tint: color-mix(in srgb, var(--success-fill) 12%, transparent);
+  --warning-tint: color-mix(in srgb, var(--warning-fill) 12%, transparent);
+  --danger-tint: color-mix(in srgb, var(--danger-fill) 12%, transparent);
+  --tooltip-bg: var(--ink);
+  --tooltip-fg: var(--canvas);
+  --tooltip-border: var(--line-strong);
+  --shadow-btn: inset 0 0 0 1px var(--line-strong);
+  --shadow-card: 0 0 0 1px var(--line), var(--shadow-elev-1);
+  --shadow-raised: 0 0 0 1px var(--line), var(--shadow-elev-2);
+  --shadow-overlay: 0 0 0 1px var(--line), var(--shadow-elev-3);
 
   --cal-rose-bg: oklch(0.304 0.032 18);
   --cal-rose-text: oklch(0.871 0.048 18);
@@ -178,6 +173,10 @@
 }
 
 @theme inline {
+  --color-canvas: var(--canvas);
+  --color-ink-4: var(--ink-4);
+  --color-on-danger: var(--on-danger);
+  --color-accent-fill: var(--accent-fill);
   --color-page: var(--page);
   --color-surface: var(--surface);
   --color-inset: var(--inset);
@@ -203,8 +202,7 @@
   --color-danger-tint: var(--danger-tint);
   --color-code: var(--syntax-bg);
 
-  /* 不随主题变化：遮罩、视频与外部文档（邮件正文、网页预览）的底色，以及压在它们上面的前景。 */
-  --color-scrim: oklch(0 0 0 / 0.3);
+  --color-scrim: var(--scrim);
   --color-media: oklch(0 0 0);
   --color-on-media: oklch(1 0 0);
   --color-on-accent: oklch(1 0 0);
@@ -215,7 +213,7 @@
 
   --shadow-hairline: 0 0 0 1px var(--line);
   --shadow-hairline-strong: 0 0 0 1px var(--line-strong);
-  --shadow-focus: 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-tint);
+  --shadow-focus: 0 0 0 2px var(--accent-ink);
   --shadow-invalid: 0 0 0 1px var(--danger);
   --shadow-tooltip: 0 0 0 1px var(--tooltip-border);
   --shadow-thumb: 0 1px 2px rgba(0, 0, 0, 0.2);
@@ -225,68 +223,146 @@
   --shadow-raised: var(--shadow-raised);
   --shadow-overlay: var(--shadow-overlay);
 
-  /* 圆角用 rem，随设置 › 外观 › 字号的根字号一起缩放。 */
-  --radius-chip: 0.375rem;
-  --radius-control: 0.5rem;
-  --radius-card: 0.625rem;
-  --radius-window: 0.875rem;
-
-  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --radius-chip: 0.5rem;
+  --radius-control: 0.625rem;
+  --radius-card: 1rem;
+  --radius-panel: 1.25rem;
+  --radius-window: 1.75rem;
+  --radius-pill: 9999px;
 
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, 'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-    'Segoe UI Symbol', 'Noto Color Emoji';
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Inter Variable', Inter,
+    'Segoe UI', Roboto, 'Microsoft YaHei UI', 'PingFang SC', sans-serif;
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
     monospace;
-  --font-script: Italianno, cursive;
 
-  /* 字号只用 Tailwind 内置档位，随根字号（设置 › 外观 › 字号）缩放。
-     xs、sm 的行高继承父级：密集界面由容器决定行距，base 以上沿用 Tailwind 行高比。 */
-  --text-xs: 0.75rem;
-  --text-xs--line-height: inherit;
-  --text-sm: 0.875rem;
-  --text-sm--line-height: inherit;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem;
+  --text-ui-button: 0.875rem;
+  --text-ui-button--line-height: 1.25rem;
+  --text-ui-button--font-weight: 500;
+  --text-ui-button--letter-spacing: -0.006em;
+  --text-ui-input-touch: 1rem;
+  --text-ui-input-touch--line-height: 1.5rem;
+  --text-ui-large-title: 1.625rem;
+  --text-ui-large-title--line-height: 2rem;
+  --text-ui-large-title--font-weight: 600;
+  --text-ui-large-title--letter-spacing: -0.022em;
+  --text-ui-title-1: 1.375rem;
+  --text-ui-title-1--line-height: 1.75rem;
+  --text-ui-title-1--font-weight: 600;
+  --text-ui-title-1--letter-spacing: -0.02em;
+  --text-ui-title-2: 1.0625rem;
+  --text-ui-title-2--line-height: 1.5rem;
+  --text-ui-title-2--font-weight: 600;
+  --text-ui-title-2--letter-spacing: -0.015em;
+  --text-ui-title-3: 0.9375rem;
+  --text-ui-title-3--line-height: 1.25rem;
+  --text-ui-title-3--font-weight: 600;
+  --text-ui-title-3--letter-spacing: -0.01em;
+  --text-ui-headline: 0.875rem;
+  --text-ui-headline--line-height: 1.25rem;
+  --text-ui-headline--font-weight: 600;
+  --text-ui-headline--letter-spacing: -0.006em;
+  --text-ui-body: 0.875rem;
+  --text-ui-body--line-height: 1.25rem;
+  --text-ui-body--font-weight: 400;
+  --text-ui-body--letter-spacing: -0.006em;
+  --text-ui-callout: 0.8125rem;
+  --text-ui-callout--line-height: 1.125rem;
+  --text-ui-callout--font-weight: 400;
+  --text-ui-callout--letter-spacing: -0.003em;
+  --text-ui-subhead: 0.75rem;
+  --text-ui-subhead--line-height: 1rem;
+  --text-ui-subhead--font-weight: 500;
+  --text-ui-subhead--letter-spacing: 0em;
+  --text-ui-caption: 0.6875rem;
+  --text-ui-caption--line-height: 0.875rem;
+  --text-ui-caption--font-weight: 500;
+  --text-ui-caption--letter-spacing: 0.006em;
+  --text-ui-metric: 1.75rem;
+  --text-ui-metric--line-height: 2rem;
+  --text-ui-metric--font-weight: 500;
+  --text-ui-metric--letter-spacing: -0.025em;
+  --text-ui-metric-lg: 2.5rem;
+  --text-ui-metric-lg--line-height: 2.75rem;
+  --text-ui-metric-lg--font-weight: 500;
+  --text-ui-metric-lg--letter-spacing: -0.03em;
 }
 
 @theme {
-  /* 全局层级：非模态侧栏用 drawer；模态的遮罩用 scrim、内容用 overlay。
-     组件内部的局部叠放用 z-10/z-20，并在父元素加 isolate。 */
-  --z-index-drawer: 30;
-  --z-index-scrim: 40;
-  --z-index-overlay: 50;
-  --z-index-takeover: 60;
-  --z-index-toast: 70;
+  --spacing-app: 1.5rem;
+  --spacing-app-gap: 1rem;
+  --spacing-card-ui: 1.25rem;
+  --spacing-app-inset: 0.5rem;
+  --spacing-control-xs: 1.75rem;
+  --spacing-control-sm: 2rem;
+  --spacing-control-md: 2.25rem;
+  --spacing-control-lg: 2.75rem;
+  --spacing-row-compact: 2.25rem;
+  --spacing-row-regular: 2.75rem;
+  --spacing-row-comfy: 3.25rem;
+  --spacing-sidebar: 15.5rem;
+  --spacing-sidebar-collapsed: 4rem;
+  --spacing-icon-sm: 1rem;
+  --spacing-calendar-day: 6rem;
+  --spacing-calendar-day-compact: 3.25rem;
+  --spacing-badge: 1.25rem;
+  --spacing-badge-dot: 0.375rem;
+  --spacing-error-indicator: 0.1875rem;
+  --spacing-search-dialog: calc(100dvh - var(--spacing-app) * 2);
+  --spacing-dialog-width: calc(100% - var(--spacing-app) * 2);
+  --spacing-sheet-width: calc(100% - var(--spacing-app-inset) * 2);
+  --spacing-dialog: 85dvh;
+  --spacing-release-notes: 60dvh;
+  --spacing-toast-mobile: calc(var(--spacing-toolbar) + var(--spacing-app-inset) * 3);
+  --spacing-toolbar: 3.25rem;
+  --spacing-sidechat-height: 36rem;
+  --spacing-sidechat-width: 26rem;
+  --spacing-inspector: 20rem;
+  --spacing-viewport-min: 20rem;
 
-  --transition-duration-fast: 100ms;
-  --transition-duration-base: 150ms;
-  --transition-duration-slow: 200ms;
-  --transition-duration-slower: 300ms;
+  --container-sheet: calc(100% - var(--spacing-app-inset) * 2);
+  --container-message: 85%;
+  --container-reading: 45rem;
+  --container-todo: 60rem;
+  --container-measure: 60ch;
+
+  --z-index-raised: 10;
+  --z-index-sticky: 20;
+  --z-index-drawer: 40;
+  --z-index-nav: 40;
+  --z-index-scrim: 50;
+  --z-index-overlay: 60;
+  --z-index-takeover: 70;
+  --z-index-popover: 70;
+  --z-index-toast: 80;
+  --z-index-tooltip: 90;
+
+  --transition-duration-press: 120ms;
+  --transition-duration-fast: 200ms;
+  --transition-duration-base: 320ms;
+  --transition-duration-slow: 600ms;
+  --transition-duration-slower: 900ms;
+  --ease-out-strong: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: linear(0, 0.55 18%, 0.9 36%, 1.03 57%, 1.015 76%, 1);
 
   --animate-fade-in: fade-in 150ms ease-out both;
-  --animate-overlay-in: fade-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  --animate-pop-in: pop-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  --animate-dialog-in: dialog-in 150ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  --animate-drawer-left: drawer-left 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  --animate-drawer-right: drawer-right 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  --animate-sheet-up: sheet-up 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  --animate-pill-in: pill-in 200ms cubic-bezier(0.23, 1, 0.32, 1) 40ms both;
+  --animate-overlay-in: fade-in 150ms var(--ease-out-strong) both;
+  --animate-pop-in: pop-in 150ms var(--ease-out-strong) both;
+  --animate-dialog-in: dialog-in 150ms var(--ease-out-strong) both;
+  --animate-drawer-left: drawer-left 200ms var(--ease-out-strong) both;
+  --animate-drawer-right: drawer-right 200ms var(--ease-out-strong) both;
+  --animate-sheet-up: sheet-up 200ms var(--ease-out-strong) both;
+  --animate-pill-in: pill-in 200ms var(--ease-out-strong) 40ms both;
   --animate-pill-out: pill-out 120ms ease-in both;
-  --animate-toast-in: toast-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
-  --animate-toast-out: toast-out 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+  --animate-toast-in: toast-in 200ms var(--ease-out-strong) both;
+  --animate-toast-out: toast-out 200ms var(--ease-out-strong) both;
   --animate-fade-out: fade-out 150ms ease-out both;
   --animate-rise-in: rise-in 600ms ease-out backwards;
   --animate-view-in: view-in 160ms ease-out backwards;
   --animate-step-in-next: step-in-next 220ms ease-out backwards;
   --animate-step-in-prev: step-in-prev 220ms ease-out backwards;
-  --animate-stroke-draw: stroke-draw 500ms ease-out backwards;
-  --animate-blur-deepen: blur-deepen 1400ms ease-in-out 3200ms backwards;
 }
 
 @keyframes shimmer-text {
@@ -414,23 +490,113 @@
   }
 }
 
-/* 描线长度取 --dash（用户单位）：描边按书写进度显现，随后填充淡入。 */
-@keyframes stroke-draw {
-  from {
-    fill-opacity: 0;
-    stroke-dashoffset: var(--dash);
-  }
-  to {
-    fill-opacity: 1;
-    stroke-dashoffset: 0;
+@utility glass {
+  background: var(--glass);
+  backdrop-filter: var(--glass-filter);
+  box-shadow:
+    inset 0 1px var(--glass-rim),
+    var(--shadow-hairline),
+    var(--shadow-elev-2);
+}
+
+@utility glass-thick {
+  background: var(--glass-thick);
+  backdrop-filter: var(--glass-filter);
+  box-shadow:
+    inset 0 1px var(--glass-rim),
+    var(--shadow-hairline),
+    var(--shadow-elev-2);
+}
+
+@utility glass-clear {
+  background: linear-gradient(var(--glass-clear), var(--glass-clear)), var(--glass-clear-dim);
+  backdrop-filter: var(--glass-filter);
+  box-shadow:
+    inset 0 1px var(--glass-rim),
+    var(--shadow-hairline);
+}
+
+:root {
+  --shadow-elev-1: 0 1px 2px rgb(0 0 0 / 4%);
+  --shadow-elev-2: 0 2px 4px rgb(0 0 0 / 3%), 0 12px 32px -8px rgb(0 0 0 / 10%);
+  --shadow-elev-3: 0 4px 8px rgb(0 0 0 / 4%), 0 32px 64px -16px rgb(0 0 0 / 20%);
+  --glass-blur: 24px;
+  --glass-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  --glass-saturation: 180%;
+  --glass-clear: rgb(255 255 255 / 16%);
+  --glass-clear-dim: rgb(0 0 0 / 35%);
+  --toolbar-scroll-blur: 20px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+  --press-scale: 0.97;
+}
+
+@media (width < 48rem) {
+  :root {
+    --spacing-app: 1rem;
+    --spacing-app-gap: 0.75rem;
+    --spacing-card-ui: 1rem;
+    --glass-blur: 18px;
   }
 }
 
-@keyframes blur-deepen {
-  from {
-    backdrop-filter: blur(6px);
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  :root,
+  .theme-light,
+  .dark {
+    --glass: var(--surface);
+    --glass-thick: var(--surface);
+    --glass-clear: var(--color-media);
+    --glass-filter: none;
+    --toolbar-scroll-blur: 0px;
   }
-  to {
-    backdrop-filter: blur(12px);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  :root,
+  .theme-light,
+  .dark {
+    --glass: var(--surface);
+    --glass-thick: var(--surface);
+    --glass-clear: var(--color-media);
   }
+}
+
+@media (prefers-contrast: more) {
+  :root,
+  .theme-light {
+    --ink-2: #48484a;
+    --ink-3: #59595d;
+    --accent-ink: #0049b8;
+    --accent-fill: #0049b8;
+    --success: #006327;
+    --warning: #873b00;
+    --danger: #b90c23;
+    --line: rgb(0 0 0 / 16%);
+    --line-strong: rgb(0 0 0 / 28%);
+    --glass-rim: var(--line-strong);
+  }
+
+  .dark {
+    --ink-2: #d1d1d6;
+    --ink-3: #aeaeb2;
+    --accent-ink: #91d1ff;
+    --accent-fill: #084bab;
+    --success: #7ced91;
+    --warning: #ffbd83;
+    --danger: #ff9294;
+    --line: rgb(255 255 255 / 20%);
+    --line-strong: rgb(255 255 255 / 34%);
+  }
+}
+
+@utility sidechat-height {
+  height: min(
+    var(--spacing-sidechat-height),
+    calc(100% - var(--spacing-toolbar) - var(--spacing-app-inset))
+  );
+}
+
+@utility sidechat-width {
+  width: min(var(--spacing-sidechat-width), calc(100% - var(--spacing-app) * 2));
 }

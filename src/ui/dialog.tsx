@@ -1,47 +1,51 @@
 'use client';
 
 import { cva, type VariantProps } from 'class-variance-authority';
-import { X } from 'lucide-react';
+import { XMarkIcon as X } from '@heroicons/react/24/outline';
 import { AlertDialog as AlertDialogPrimitive, Dialog as DialogPrimitive } from 'radix-ui';
-import type * as React from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { Button } from './button';
 import { cn } from './cn';
+import { useDialogFocus } from './use-dialog-focus';
 import { IconButton } from './icon-button';
 import { dialogOverlay, dialogPanel } from './motion';
 
 const contentVariants = cva(dialogPanel, {
   variants: {
     size: { sm: 'max-w-sm', md: 'max-w-md', lg: 'max-w-lg', xl: 'max-w-2xl' },
-    scroll: { true: 'max-h-[85vh] overflow-y-auto', false: '' },
   },
-  defaultVariants: { size: 'md', scroll: false },
+  defaultVariants: { size: 'md' },
 });
 
 const Dialog = DialogPrimitive.Root;
 
-function DialogTrigger(props: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
+function DialogTrigger(props: ComponentProps<typeof DialogPrimitive.Trigger>) {
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
 }
 
 function DialogContent({
   className,
   size,
-  scroll,
+  onOpenAutoFocus,
+  onCloseAutoFocus,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Content> & VariantProps<typeof contentVariants>) {
+}: ComponentProps<typeof DialogPrimitive.Content> & VariantProps<typeof contentVariants>) {
+  const focus = useDialogFocus({ onOpenAutoFocus, onCloseAutoFocus });
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className={dialogOverlay} data-slot="dialog-overlay" />
       <DialogPrimitive.Content
-        className={cn(contentVariants({ size, scroll }), className)}
+        className={cn(contentVariants({ size }), className)}
         data-slot="dialog-content"
+        aria-modal="true"
+        {...focus}
         {...props}
       />
     </DialogPrimitive.Portal>
   );
 }
 
-function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
+function DialogHeader({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       className={cn('flex items-center justify-between gap-2', className)}
@@ -51,10 +55,10 @@ function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-function DialogTitle({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Title>) {
+function DialogTitle({ className, ...props }: ComponentProps<typeof DialogPrimitive.Title>) {
   return (
     <DialogPrimitive.Title
-      className={cn('text-base font-semibold', className)}
+      className={cn('text-ui-title-2', className)}
       data-slot="dialog-title"
       {...props}
     />
@@ -64,20 +68,20 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
 function DialogDescription({
   className,
   ...props
-}: React.ComponentProps<typeof DialogPrimitive.Description>) {
+}: ComponentProps<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
-      className={cn('mt-2 text-xs leading-relaxed text-ink-3', className)}
+      className={cn('mt-2 text-ui-callout text-ink-2', className)}
       data-slot="dialog-description"
       {...props}
     />
   );
 }
 
-function DialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
+function DialogFooter({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
-      className={cn('mt-4 flex justify-end gap-2', className)}
+      className={cn('mt-4 flex flex-wrap justify-end gap-2', className)}
       data-slot="dialog-footer"
       {...props}
     />
@@ -88,7 +92,7 @@ function DialogClose({
   'aria-label': label = '关闭',
   className,
   ...props
-}: React.ComponentProps<typeof IconButton>) {
+}: ComponentProps<typeof IconButton>) {
   return (
     <DialogPrimitive.Close asChild>
       <IconButton
@@ -107,9 +111,9 @@ function DialogClose({
 type ConfirmDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  title: React.ReactNode;
-  description: React.ReactNode;
-  confirmLabel: React.ReactNode;
+  title: ReactNode;
+  description: ReactNode;
+  confirmLabel: ReactNode;
   onConfirm: () => void;
   destructive?: boolean;
   busy?: boolean;
@@ -126,6 +130,7 @@ function ConfirmDialog({
   destructive,
   busy,
 }: ConfirmDialogProps) {
+  const focus = useDialogFocus();
   return (
     <AlertDialogPrimitive.Root onOpenChange={onOpenChange} open={open}>
       <AlertDialogPrimitive.Portal>
@@ -133,24 +138,28 @@ function ConfirmDialog({
         <AlertDialogPrimitive.Content
           className={contentVariants({ size: 'sm' })}
           data-slot="dialog-content"
+          aria-modal="true"
+          {...focus}
         >
-          <AlertDialogPrimitive.Title className="text-base font-semibold" data-slot="dialog-title">
+          <AlertDialogPrimitive.Title className="text-ui-title-2" data-slot="dialog-title">
             {title}
           </AlertDialogPrimitive.Title>
           <AlertDialogPrimitive.Description
-            className="mt-2 text-xs leading-relaxed text-ink-3"
+            className="mt-2 text-ui-callout text-ink-2"
             data-slot="dialog-description"
           >
             {description}
           </AlertDialogPrimitive.Description>
           <DialogFooter>
-            <Button disabled={busy} onClick={() => onOpenChange(false)} variant="ghost">
-              取消
-            </Button>
+            <AlertDialogPrimitive.Cancel asChild>
+              <Button disabled={busy} variant="secondary">
+                取消
+              </Button>
+            </AlertDialogPrimitive.Cancel>
             <Button
               disabled={busy}
               onClick={onConfirm}
-              variant={destructive ? 'destructive' : 'default'}
+              variant={destructive ? 'destructive' : 'accent'}
             >
               {confirmLabel}
             </Button>

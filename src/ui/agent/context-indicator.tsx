@@ -50,8 +50,8 @@ export function ContextIndicator({
         side="top"
       >
         <div className="flex items-baseline justify-between gap-3">
-          <span className="text-sm font-medium text-ink">上下文</span>
-          <span className="text-xs tabular-nums text-ink-3">
+          <span className="text-ui-headline text-ink">上下文</span>
+          <span className="text-ui-subhead tabular-nums text-ink-2">
             {usage.tokens === null
               ? '—'
               : `${usage.estimated ? '约 ' : ''}${formatTokens(usage.tokens)}`}{' '}
@@ -70,8 +70,8 @@ export function ContextIndicator({
           />
         </div>
         <div className="mt-2 flex items-baseline justify-between gap-3">
-          <span className="text-sm text-ink-2">缓存命中率</span>
-          <span className="text-xs tabular-nums text-ink-3">{cacheHitRate}</span>
+          <span className="text-ui-body text-ink-2">缓存命中率</span>
+          <span className="text-ui-subhead tabular-nums text-ink-2">{cacheHitRate}</span>
         </div>
       </PopoverContent>
     </Popover>

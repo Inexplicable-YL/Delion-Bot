@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  ChevronLeftIcon as ChevronLeft,
+  ChevronRightIcon as ChevronRight,
+} from '@heroicons/react/24/outline';
 
 type HoldPhase = 'idle' | 'waiting' | 'repeating';
 
@@ -51,7 +54,7 @@ function StepperInput({
     if (next !== value) onChange(next);
   };
   return (
-    <span className="flex h-8 min-w-16 items-center justify-end gap-0.5 rounded-control bg-field pl-2 pr-1.5 text-sm font-medium tabular-nums text-ink shadow-hairline">
+    <span className="flex h-8 min-w-16 items-center justify-end gap-0.5 rounded-control bg-field pl-2 pr-1.5 text-ui-headline tabular-nums text-ink shadow-hairline">
       <input
         aria-label={label}
         className="w-6 bg-transparent text-right outline-none"
@@ -63,7 +66,7 @@ function StepperInput({
         }}
         value={draft ?? String(value)}
       />
-      <span className="text-ink-3">{unit}</span>
+      <span className="text-ink-2">{unit}</span>
     </span>
   );
 }
@@ -92,7 +95,7 @@ export function StepperControl({
   const increase = useHoldRepeat(() => onStep(1), canIncrease);
   const decrease = useHoldRepeat(() => onStep(-1), canDecrease);
   const buttonClass =
-    'grid size-7 place-items-center rounded-control text-ink-3 transition-colors duration-base hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent select-none disabled:pointer-events-none disabled:opacity-40';
+    'grid size-7 place-items-center rounded-control text-ink-2 transition-colors duration-base hover:bg-hover hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent select-none disabled:pointer-events-none disabled:opacity-40';
   return (
     <div aria-label={label} className="flex items-center gap-0.5" role="group">
       <button
@@ -102,7 +105,7 @@ export function StepperControl({
         type="button"
         {...decrease}
       >
-        <ChevronLeft className="size-3.5" strokeWidth={1.8} />
+        <ChevronLeft className="size-4" />
       </button>
       {input ? (
         <StepperInput
@@ -114,7 +117,7 @@ export function StepperControl({
           value={input.value}
         />
       ) : (
-        <span className="grid h-8 min-w-16 place-items-center rounded-control bg-field px-2 text-sm font-medium tabular-nums text-ink shadow-hairline">
+        <span className="grid h-8 min-w-16 place-items-center rounded-control bg-field px-2 text-ui-headline tabular-nums text-ink shadow-hairline">
           {display}
         </span>
       )}
@@ -125,7 +128,7 @@ export function StepperControl({
         type="button"
         {...increase}
       >
-        <ChevronRight className="size-3.5" strokeWidth={1.8} />
+        <ChevronRight className="size-4" />
       </button>
     </div>
   );

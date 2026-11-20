@@ -1,4 +1,9 @@
-import { CalendarClock, CircleCheckBig, Pencil, Trash2 } from 'lucide-react';
+import {
+  CalendarDateRangeIcon as CalendarClock,
+  CheckCircleIcon as CircleCheckBig,
+  PencilIcon as Pencil,
+  TrashIcon as Trash2,
+} from '@heroicons/react/24/outline';
 import { todoCompleted, todoStatusLabels, type TodoItem } from '../contract';
 import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
@@ -20,19 +25,19 @@ export function TodoDetail({
 }) {
   const overdue = !todoCompleted(item.status) && item.dueAt && Date.parse(item.dueAt) < now;
   return (
-    <TodoSheet fixedHeight label="待办详情" title={item.title} onClose={onClose}>
-      <div className="mt-3 shrink-0 space-y-1.5 text-sm text-ink-3">
+    <TodoSheet title={item.title} onClose={onClose}>
+      <div className="mt-3 shrink-0 space-y-1.5 text-ui-body text-ink-2">
         <p className="flex items-center gap-1.5">
-          <CircleCheckBig className="size-3.5 shrink-0" />
+          <CircleCheckBig className="size-4 shrink-0" />
           {todoStatusLabels[item.status]}
         </p>
         <p className={cn('flex items-center gap-1.5', overdue && 'text-danger')}>
-          <CalendarClock className="size-3.5 shrink-0" />
-          截止：{dateLabel(item.dueAt)}
+          <CalendarClock className="size-4 shrink-0" />
+          {overdue ? `已逾期 · ${dateLabel(item.dueAt)}` : dateLabel(item.dueAt)}
         </p>
       </div>
       {item.notes && (
-        <div className="mt-3 min-h-0 flex-1 overflow-y-auto whitespace-pre-wrap break-words border-t pt-3 text-sm [scrollbar-width:none]">
+        <div className="mt-3 whitespace-pre-wrap wrap-anywhere border-t pt-3 text-ui-body [scrollbar-width:none]">
           {item.notes}
         </div>
       )}
@@ -41,7 +46,7 @@ export function TodoDetail({
           <Trash2 className="size-4" />
           删除
         </Button>
-        <Button onClick={onEdit}>
+        <Button onClick={onEdit} variant="accent">
           <Pencil className="size-4" />
           编辑
         </Button>

@@ -1,4 +1,4 @@
-import { Feather, Globe } from 'lucide-react';
+import { GlobeAltIcon as Globe, PencilIcon as Feather } from '@heroicons/react/24/outline';
 import type { ReactNode } from 'react';
 import { Button } from '../../../ui/button';
 import { DelionBotBrand } from './delion-brand';
@@ -85,7 +85,7 @@ function PersonIdentity({ person }: { person: CreditPerson }) {
           src={person.avatar}
         />
       )}
-      <span className="text-sm font-medium text-ink">{person.name}</span>
+      <span className="text-ui-headline text-ink">{person.name}</span>
     </div>
   );
 }
@@ -93,7 +93,7 @@ function PersonIdentity({ person }: { person: CreditPerson }) {
 function CreditSectionBlock({ section }: { section: CreditSection }) {
   return (
     <section className="grid gap-2">
-      <h2 className="text-base font-semibold">{section.title}</h2>
+      <h2 className="text-ui-title-3">{section.title}</h2>
       {section.people.map((person) => (
         <div className="flex items-center justify-between gap-3 py-1" key={person.name}>
           <PersonIdentity person={person} />
@@ -114,9 +114,13 @@ export function AboutSection() {
       <SectionHeader title="关于" />
       <section className="grid justify-items-center gap-1.5 px-6 pb-10 pt-6 text-center">
         <DelionBotBrand className="h-48 w-48" />
-        <h2 className="text-4xl font-script tracking-tight">Delion Bot</h2>
-        <p className="text-sm text-ink-3">The world keeps changing. Delion Bot stays with you.</p>
-        <p className="mt-5 text-xs text-ink-3">版本 {window.delionBot?.version ?? '浏览器预览'}</p>
+        <h2 className="text-ui-large-title">Delion Bot</h2>
+        <p className="text-ui-body text-ink-2">
+          The world keeps changing. Delion Bot stays with you.
+        </p>
+        <p className="mt-5 text-ui-subhead text-ink-2">
+          版本 {window.delionBot?.version ?? '浏览器预览'}
+        </p>
         <Button asChild size="sm" variant="ghost">
           <a href="https://github.com/Inexplicable-YL/delion-bot" rel="noreferrer" target="_blank">
             <GithubMark />

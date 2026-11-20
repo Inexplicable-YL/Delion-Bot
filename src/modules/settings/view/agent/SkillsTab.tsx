@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Cloud, CloudUpload, FileText, FolderOpen, RefreshCw } from 'lucide-react';
+import {
+  ArrowPathIcon as RefreshCw,
+  CloudArrowUpIcon as CloudUpload,
+  CloudIcon as Cloud,
+  DocumentTextIcon as FileText,
+  FolderOpenIcon as FolderOpen,
+} from '@heroicons/react/24/outline';
 import type {
   RemoteSkillUpload,
   SkillOrigin,
@@ -157,7 +163,7 @@ export function SkillsTab() {
     return (
       <div className="grid gap-10">
         <SectionHeader title="Skills" />
-        <p className="text-sm text-ink-3">Skills 仅在桌面端可用。</p>
+        <p className="text-ui-body text-ink-2">Skills 仅在桌面端可用。</p>
       </div>
     );
   }
@@ -184,14 +190,14 @@ export function SkillsTab() {
             options={['all', ...origins]}
             value={filter}
           />
-          <span className="text-xs tabular-nums text-ink-3">{visible.length} 项</span>
+          <span className="text-ui-subhead tabular-nums text-ink-2">{visible.length} 项</span>
         </div>
       )}
       {skills?.length === 0 && (
         <SettingsGroup>
           <div className="grid gap-1 py-3.5">
-            <span className="text-sm font-medium text-ink">还没有发现 Skill</span>
-            <span className="text-xs leading-relaxed text-ink-3">
+            <span className="text-ui-headline text-ink">还没有发现 Skill</span>
+            <span className="text-ui-subhead text-ink-2">
               在用户主目录的 .delion-bot/skills 或 .agents/skills，或项目里的 .agents/skills
               放入包含 SKILL.md 的子文件夹（frontmatter 带 name 与 description），回到此页刷新。
             </span>
@@ -200,7 +206,7 @@ export function SkillsTab() {
       )}
       {skills && skills.length > 0 && visible.length === 0 && (
         <SettingsGroup>
-          <p className="py-3.5 text-sm text-ink-3">该范围下没有 Skill。</p>
+          <p className="py-3.5 text-ui-body text-ink-2">该范围下没有 Skill。</p>
         </SettingsGroup>
       )}
       {groups.map((group) => (
@@ -218,30 +224,33 @@ export function SkillsTab() {
                 <div className="flex min-w-0 items-center gap-3">
                   <span
                     aria-hidden="true"
-                    className="grid size-8 shrink-0 place-items-center rounded-card bg-fill text-sm font-medium uppercase text-ink-2"
+                    className="grid size-8 shrink-0 place-items-center rounded-card bg-fill text-ui-headline uppercase text-ink-2"
                   >
                     {skill.name.charAt(0)}
                   </span>
                   <div className="grid min-w-0 gap-0.5">
-                    <strong className="truncate text-sm">{skill.name}</strong>
-                    <span className="truncate text-xs text-ink-3" title={skill.description}>
+                    <strong className="truncate text-ui-body">{skill.name}</strong>
+                    <span className="truncate text-ui-subhead text-ink-2" title={skill.description}>
                       {skill.description || '（无描述）'}
                     </span>
-                    <span className="truncate font-mono text-xs text-ink-3" title={skill.path}>
+                    <span
+                      className="truncate font-mono text-ui-subhead text-ink-2"
+                      title={skill.path}
+                    >
                       {skill.path}
                     </span>
                     {skill.dependency &&
                       skill.dependency.status !== 'ready' &&
                       (skill.dependency.status === 'error' ? (
                         <span
-                          className="truncate text-xs text-danger"
+                          className="truncate text-ui-subhead text-danger"
                           role="status"
                           title={skill.dependency.error}
                         >
                           {skill.dependency.error ?? '组件安装失败'}
                         </span>
                       ) : (
-                        <span className="text-xs text-ink-3" role="status">
+                        <span className="text-ui-subhead text-ink-2" role="status">
                           {skill.dependency.phase ?? '需要安装文档解析组件'}
                         </span>
                       ))}
@@ -346,19 +355,19 @@ function SkillContentView({
       }}
       open
     >
-      <DialogContent size="xl" scroll className="grid grid-rows-[auto_auto_minmax(0,1fr)_auto]">
+      <DialogContent size="xl" className="grid grid-rows-[auto_auto_minmax(0,1fr)_auto]">
         <DialogTitle>{skill.name}</DialogTitle>
         <DialogDescription className="truncate font-mono" title={skill.path}>
           {skill.path}
         </DialogDescription>
         <Card className="mt-3 min-h-32 overflow-y-auto" variant="inset">
           {content === undefined && !error ? (
-            <p className="flex items-center gap-2 text-xs text-ink-3" role="status">
+            <p className="flex items-center gap-2 text-ui-subhead text-ink-2" role="status">
               <Spinner />
               正在读取…
             </p>
           ) : (
-            <pre className="font-mono text-xs leading-relaxed [overflow-wrap:anywhere] whitespace-pre-wrap text-ink-2">
+            <pre className="font-mono text-ui-subhead wrap-anywhere whitespace-pre-wrap text-ink-2">
               {content}
             </pre>
           )}
@@ -410,18 +419,18 @@ function SkillUploadDialog({ onClose, skill }: { onClose: () => void; skill: Ski
 
   return (
     <Dialog onOpenChange={(open) => !open && !busy && onClose()} open>
-      <DialogContent scroll>
+      <DialogContent>
         <DialogTitle>上传到远端项目</DialogTitle>
         <DialogDescription>
           把技能 {skill.name} 的目录（含附属文件）上传到远端项目的 .agents/skills/{skill.name}
           /，远端会话即可使用。
         </DialogDescription>
         {uploaded ? (
-          <p className="mt-4 text-xs [overflow-wrap:anywhere] text-ink-2" role="status">
+          <p className="mt-4 text-ui-subhead wrap-anywhere text-ink-2" role="status">
             已上传 {uploaded.files} 个文件到 {uploaded.path}
           </p>
         ) : projects.length === 0 ? (
-          <p className="mt-4 text-xs text-ink-3">还没有远端项目。</p>
+          <p className="mt-4 text-ui-subhead text-ink-2">还没有远端项目。</p>
         ) : (
           <ul className="mt-4 grid gap-1">
             {projects.map((entry) => (
@@ -441,10 +450,13 @@ function SkillUploadDialog({ onClose, skill }: { onClose: () => void; skill: Ski
                   }}
                   type="button"
                 >
-                  <Cloud className="size-4 shrink-0 text-ink-3" strokeWidth={1.8} />
+                  <Cloud className="size-4 shrink-0 text-ink-2" />
                   <span className="grid min-w-0">
-                    <span className="truncate text-sm text-ink">{entry.name}</span>
-                    <span className="truncate font-mono text-xs text-ink-3" title={entry.path}>
+                    <span className="truncate text-ui-body text-ink">{entry.name}</span>
+                    <span
+                      className="truncate font-mono text-ui-subhead text-ink-2"
+                      title={entry.path}
+                    >
                       {entry.path}
                     </span>
                   </span>
@@ -455,7 +467,7 @@ function SkillUploadDialog({ onClose, skill }: { onClose: () => void; skill: Ski
         )}
         <DialogFooter>
           {conflict && !uploaded && (
-            <span className="mr-auto text-xs text-ink-2">远端已有同名技能，覆盖吗？</span>
+            <span className="mr-auto text-ui-subhead text-ink-2">远端已有同名技能，覆盖吗？</span>
           )}
           {!uploaded &&
             (conflict ? (

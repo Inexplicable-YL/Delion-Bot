@@ -15,11 +15,11 @@ export function SettingsGroup({
   title?: ReactNode;
 }) {
   return (
-    <section className="grid gap-2" data-setting-id={settingId}>
+    <section className="grid gap-3" data-setting-id={settingId}>
       {(title || action) && (
         <SettingsGroupLabel action={action} description={description} title={title} />
       )}
-      <Card className="overflow-hidden py-0" variant="inset">
+      <Card className="overflow-hidden py-0" variant="surface">
         {children}
       </Card>
     </section>
@@ -38,8 +38,8 @@ export function SettingsGroupLabel({
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
       <div className="grid gap-1">
-        <h2 className="text-sm font-semibold text-ink-2">{title ?? ''}</h2>
-        {description && <p className="text-sm leading-relaxed text-ink-3">{description}</p>}
+        <h2 className="text-ui-title-3 text-ink">{title ?? ''}</h2>
+        {description && <p className="text-ui-callout text-ink-2">{description}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>

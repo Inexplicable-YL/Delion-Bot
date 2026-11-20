@@ -2,7 +2,7 @@
 // 弹窗只负责表单与 workspace:* 通道调用，「成功之后」的动作由接线方经回调接手。
 import { useState, type FormEvent } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { Cloud, FolderOpen } from 'lucide-react';
+import { CloudIcon as Cloud, FolderOpenIcon as FolderOpen } from '@heroicons/react/24/outline';
 import { sourceTitle } from '../../views';
 import { Button } from '../../../ui/button';
 import { Input } from '../../../ui/input';
@@ -214,7 +214,7 @@ export function EntryDialogs({
         </DialogDescription>
         <form onSubmit={(event) => void submit(event)} className="mt-4 grid gap-4">
           {(request?.action === 'link' || request?.action === 'move') && (
-            <div className="grid gap-2 text-sm">
+            <div className="grid gap-2 text-ui-body">
               {request.action === 'link' ? '项目' : '位置'}
               <Select
                 onValueChange={(value) => setTarget(value === ROOT_SELECT_VALUE ? '' : value)}
@@ -262,9 +262,9 @@ export function EntryDialogs({
             )}
           {request?.action === 'project' && (
             <div className="grid gap-2">
-              <div aria-hidden="true" className="flex items-center gap-3 text-xs">
+              <div aria-hidden="true" className="flex items-center gap-3 text-ui-subhead">
                 <span className="h-px flex-1 bg-line" />
-                <span className="text-ink-3">或</span>
+                <span className="text-ink-2">或</span>
                 <span className="h-px flex-1 bg-line" />
               </div>
               <Button

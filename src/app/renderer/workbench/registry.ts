@@ -1,7 +1,13 @@
 // 内容类型注册表：TabKind → { 组件, 图标, 标题解析 }；workbench 引用内容标签的唯一入口。
 import type { ComponentType } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
-import { Eye, FileText, GitCompare, MessageSquare, SquareTerminal } from 'lucide-react';
+import {
+  ArrowsRightLeftIcon as GitCompare,
+  ChatBubbleLeftIcon as MessageSquare,
+  CommandLineIcon as SquareTerminal,
+  DocumentTextIcon as FileText,
+  EyeIcon as Eye,
+} from '@heroicons/react/24/outline';
 import type { TabId, TabKind } from '../../../modules/workspace/contract';
 import { ChatTab, ReviewTab, reviewTabTitle, useSessions } from '../../../modules/chat/view';
 import { titleOf as entryTitleOf } from '../workspace/entry-dialogs';

@@ -9,7 +9,7 @@ import { FileIcon } from '../../../../ui/file-icon';
 const tokenStyle = {
   '--diffs-font-family': 'var(--font-mono)',
   '--diffs-header-font-family': 'var(--font-sans)',
-  '--diffs-font-size': 'var(--text-xs)',
+  '--diffs-font-size': 'var(--text-ui-callout)',
   '--diffs-line-height': 'calc(var(--spacing) * 5)',
   '--diffs-addition-color-override': 'var(--success)',
   '--diffs-deletion-color-override': 'var(--danger)',
@@ -22,7 +22,7 @@ const tokenStyle = {
 
 const reviewTokenStyle = {
   ...tokenStyle,
-  '--diffs-font-size': 'var(--text-sm)',
+  '--diffs-font-size': 'var(--text-ui-body)',
   '--diffs-line-height': 'calc(var(--spacing) * 6)',
 } as CSSProperties;
 

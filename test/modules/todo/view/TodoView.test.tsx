@@ -39,6 +39,11 @@ let root: Root;
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
   localStorage.clear();
   useTodoPreferences.setState({ showCompleted: true });
   host = document.createElement('div');
@@ -62,6 +67,7 @@ afterEach(() => {
   act(() => root.unmount());
   host.remove();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('TODO 视图', () => {
@@ -75,14 +81,15 @@ describe('TODO 视图', () => {
         .click();
     });
 
-    const titleInput = host.querySelector<HTMLInputElement>('input[aria-label="标题"]')!;
+    const composer = document.body.querySelector('[role="dialog"][aria-labelledby]')!;
+    const titleInput = composer.querySelector<HTMLInputElement>('input[aria-label="标题"]')!;
     const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
     await act(async () => {
       setValue.call(titleInput, '测试待办');
       titleInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await act(async () => {
-      [...host.querySelectorAll('button')]
+      [...composer.querySelectorAll('button')]
         .find((button) => button.textContent?.trim() === '保存')!
         .click();
     });

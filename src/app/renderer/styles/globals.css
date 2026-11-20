@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '@fontsource-variable/inter';
 @import 'streamdown/styles.css';
 @import '../../../ui/tokens.css';
 @source '../../../../node_modules/streamdown/dist/*.js';
@@ -13,14 +14,6 @@
 }
 :root.dark .delion-brand-dark {
   display: block;
-}
-
-@font-face {
-  font-family: 'Italianno';
-  font-style: normal;
-  font-weight: 400;
-  font-display: block;
-  src: url('../../../../assets/fonts/Italianno.woff2') format('woff2');
 }
 
 /* 只为 streamdown 保留，Delion Bot 代码不使用，换掉 Markdown 渲染器时删除。 */
@@ -41,13 +34,13 @@
 @layer base {
   * {
     border-color: var(--line);
-    outline-color: color-mix(in oklch, var(--accent) 50%, transparent);
+    outline-color: var(--accent-ink);
   }
 
   html,
   body,
   #root {
-    min-width: 320px;
+    min-width: var(--spacing-viewport-min);
     min-height: 100%;
     margin: 0;
   }
@@ -58,12 +51,19 @@
   }
 
   body {
-    min-height: 100vh;
+    min-height: 100dvh;
     overflow: hidden;
-    background: var(--surface);
+    background: var(--page);
     color: var(--ink);
-    font-size: 0.875rem;
-    line-height: 1.5;
+    font-size: var(--text-ui-body);
+    line-height: var(--text-ui-body--line-height);
+    letter-spacing: var(--text-ui-body--letter-spacing);
+  }
+
+  svg[data-slot='icon'] {
+    width: var(--spacing-icon-sm);
+    height: var(--spacing-icon-sm);
+    flex-shrink: 0;
   }
 
   button {
@@ -74,11 +74,9 @@
     cursor: default;
   }
 
-  button:focus-visible,
-  textarea:focus-visible,
-  input:focus-visible {
-    outline: 2px solid color-mix(in oklch, var(--accent) 60%, transparent);
-    outline-offset: 2px;
+  :where(button, a, textarea, input, select, [tabindex]):focus-visible {
+    outline: var(--focus-width) solid var(--accent-ink);
+    outline-offset: var(--focus-offset);
   }
 
   /* 仅用 ::-webkit-scrollbar 定制：同时声明 scrollbar-width/color 会让 Chromium
@@ -104,37 +102,187 @@
   }
 }
 
+svg[viewBox='0 0 24 24'][data-slot='icon'] {
+  stroke-width: 1.5;
+}
+
+svg[viewBox='0 0 24 24'][data-slot='icon']:is(.size-5, .size-6),
+[data-slot='icon-button'][data-size='lg'] > svg[data-slot='icon'] {
+  stroke-width: 1.35;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--spacing-sidebar) minmax(0, 1fr);
+  grid-template-rows: env(titlebar-area-height, var(--spacing-toolbar)) minmax(0, 1fr);
+  gap: var(--spacing-app-inset);
+  height: 100dvh;
+  padding-inline: var(--spacing-app-inset);
+  padding-bottom: var(--spacing-app-inset);
+  background: var(--page);
+  color: var(--ink);
+}
+
+.app-shell[data-sidebar='collapsed'] {
+  grid-template-columns: var(--spacing-sidebar-collapsed) minmax(0, 1fr);
+}
+
+.app-toolbar {
+  -webkit-app-region: drag;
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  padding-inline-start: env(titlebar-area-x, 0px);
+  padding-inline-end: max(
+    0px,
+    calc(100% - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100%))
+  );
+  box-shadow: 0 1px var(--line);
+  user-select: none;
+}
+
+.desktop-no-drag,
+.app-toolbar button {
+  -webkit-app-region: no-drag;
+}
+
+.app-toolbar button > svg {
+  width: var(--spacing-icon-sm);
+  height: var(--spacing-icon-sm);
+}
+
+.app-toolbar[data-scrolled='true'] {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--page) 92%, transparent),
+    color-mix(in srgb, var(--page) 60%, transparent)
+  );
+  backdrop-filter: blur(var(--toolbar-scroll-blur));
+}
+
+.app-toolbar[data-scrolled='true'] .glass {
+  background: var(--field);
+  backdrop-filter: none;
+  box-shadow: var(--shadow-hairline);
+}
+
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border-radius: var(--radius-panel);
+  padding: var(--spacing-app-inset);
+}
+
+.app-rail {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.app-rail-primary,
+.app-rail-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-app-inset);
+  padding-block: var(--spacing-app-inset);
+}
+
+.app-rail-primary {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.app-rail-footer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+}
+
+.app-nav-footer {
+  /* 按钮沿用侧栏的模糊层，只叠加玻璃表面。 */
+  --glass-filter: none;
+}
+
+.nav-unread-dot {
+  position: absolute;
+  top: var(--spacing);
+  right: var(--spacing);
+  width: var(--spacing-badge-dot);
+  height: var(--spacing-badge-dot);
+  border-radius: var(--radius-pill);
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.app-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.app-tab-bar {
+  display: none;
+}
+
+@media (width < 64rem) {
+  .app-shell[data-sidebar] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (width < 48rem) {
+  .app-shell {
+    grid-template-rows: env(titlebar-area-height, var(--spacing-toolbar)) minmax(0, 1fr) auto;
+  }
+
+  .app-tab-bar {
+    z-index: var(--z-index-nav);
+    grid-row: 3;
+    grid-column: 1;
+    display: flex;
+    justify-self: center;
+    padding: var(--spacing);
+    border-radius: var(--radius-pill);
+  }
+
+  .app-tab-bar .app-tab-button {
+    width: var(--spacing-sidebar-collapsed);
+    min-height: var(--spacing-toolbar);
+    flex-direction: column;
+    gap: var(--spacing);
+    border-radius: var(--radius-pill);
+  }
+}
+
+@media (width < 24rem) {
+  .app-tab-bar .app-tab-sources {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .app-toolbar[data-scrolled='true'] {
+    background: var(--page);
+  }
+}
+
 /* 滚动容器常驻竖向滚动条槽位：轨道透明，内容增长只淡入滑块，不挤占内容宽度。
    例外：Radix 浮层内容容器（data-slot 以 -content 结尾）尺寸紧贴内容，排除之。 */
 .overflow-y-auto:not([data-slot$='-content']),
 .overflow-auto:not([data-slot$='-content']) {
   overflow-y: scroll;
-}
-
-.sidebar-title {
-  overflow: hidden;
-  white-space: nowrap;
-  mask-image: linear-gradient(to right, black calc(100% - var(--spacing) * 6), transparent);
-}
-
-.group\/nav:hover .sidebar-title,
-.group\/nav:focus-within .sidebar-title,
-.group\/nav:has([data-state='open']) .sidebar-title {
-  mask-image: linear-gradient(
-    to right,
-    black calc(100% - var(--spacing) * 14),
-    transparent calc(100% - var(--spacing) * 12)
-  );
-}
-
-@media (width < 48rem) {
-  .group\/nav .sidebar-title {
-    mask-image: linear-gradient(
-      to right,
-      black calc(100% - var(--spacing) * 14),
-      transparent calc(100% - var(--spacing) * 12)
-    );
-  }
 }
 
 /* docx-preview 运行时注入 .docx-wrapper 的默认灰底与页面主题冲突；
@@ -199,5 +347,20 @@
   from {
     opacity: 0;
     scale: 0.4;
+  }
+}
+
+@media (pointer: coarse) {
+  .touch-switch {
+    position: relative;
+  }
+
+  .touch-switch::before {
+    position: absolute;
+    inset: 50% auto auto 50%;
+    width: var(--spacing-control-lg);
+    height: var(--spacing-control-lg);
+    content: '';
+    transform: translate(-50%, -50%);
   }
 }

@@ -1,7 +1,7 @@
 // 工作台目录侧栏的运行时可见性：窄屏媒体查询镜像；抽屉开合在 mobile-drawer，宽屏折叠是偏好，见 preferences。
 // 展开入口在最左上组标签栏左侧（空组由 TabGroup 锚定同一坐标），与目录本体共享此 store。
 import { create } from 'zustand';
-import { PanelLeft } from 'lucide-react';
+import { Bars3BottomLeftIcon as PanelLeft } from '@heroicons/react/24/outline';
 import { usePreferences } from '../shell/preferences';
 import { useMobileDrawer } from '../shell/mobile-drawer';
 import { IconButton } from '../../../ui/icon-button';
@@ -42,7 +42,7 @@ export function ExplorerRevealButton({ className }: { className?: string }) {
       }}
       title="展开目录"
     >
-      <PanelLeft strokeWidth={1.8} />
+      <PanelLeft />
     </IconButton>
   );
 }

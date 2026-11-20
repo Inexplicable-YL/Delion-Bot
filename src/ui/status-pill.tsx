@@ -2,12 +2,12 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from './cn';
 
 const statusPillVariants = cva(
-  'inline-flex items-center gap-1.5 rounded-full font-medium leading-none',
+  'inline-flex h-badge items-center gap-1.5 rounded-full text-ui-caption',
   {
     variants: {
       size: {
-        default: 'h-6 px-2.5 text-sm',
-        sm: 'h-5 px-2 text-xs',
+        default: 'px-2.5',
+        sm: 'px-2',
       },
       tone: {
         green: 'bg-success-tint text-success',

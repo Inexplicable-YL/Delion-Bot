@@ -16,15 +16,15 @@ export function ReleaseNotesDialog() {
       <DialogContent>
         <DialogTitle>已更新到 {notes[0]!.version}</DialogTitle>
         <DialogDescription className="sr-only">本次更新的主要变化</DialogDescription>
-        <div className="mt-4 grid max-h-[60vh] gap-4 overflow-y-auto">
+        <div className="mt-4 grid max-h-release-notes gap-4 overflow-y-auto">
           {notes.map((note) => (
             <section className="grid gap-1.5" key={note.version}>
               {notes.length > 1 && (
-                <h3 className="text-xs font-medium text-ink-3">
+                <h3 className="text-ui-subhead text-ink-2">
                   {note.version} · {note.date}
                 </h3>
               )}
-              <ul className="grid list-disc gap-1.5 pl-4 text-sm leading-relaxed text-ink-2">
+              <ul className="grid list-disc gap-1.5 pl-4 text-ui-body text-ink-2">
                 {note.items.map((item) => (
                   <li key={item}>{item}</li>
                 ))}

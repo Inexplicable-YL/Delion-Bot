@@ -8,7 +8,13 @@ import {
 } from 'pdfjs-dist';
 import { EventBus, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { ChevronLeft, ChevronRight, Minus, MoveHorizontal, Plus } from 'lucide-react';
+import {
+  ArrowsRightLeftIcon as MoveHorizontal,
+  ChevronLeftIcon as ChevronLeft,
+  ChevronRightIcon as ChevronRight,
+  MinusIcon as Minus,
+  PlusIcon as Plus,
+} from '@heroicons/react/24/outline';
 import { Button } from '../../../ui/button';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import { ErrorText } from '../../../ui/alert';
@@ -187,7 +193,7 @@ export function PdfReader({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {/* safe 居中：放不下时对齐起点并横向滚动，否则居中溢出会把两侧按钮裁掉。 */}
-      <div className="flex shrink-0 items-center justify-center-safe gap-2 overflow-x-auto border-b px-3 py-1 text-xs">
+      <div className="flex shrink-0 items-center justify-center-safe gap-2 overflow-x-auto border-b px-3 py-1 text-ui-subhead">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -209,7 +215,7 @@ export function PdfReader({
             value={pageInput}
             onChange={(e) => setPageInput(e.target.value)}
           />
-          <span className="ml-2 text-ink-3">/ {pageCount || '…'}</span>
+          <span className="ml-2 text-ink-2">/ {pageCount || '…'}</span>
         </form>
         <Button
           size="icon-sm"
@@ -285,7 +291,7 @@ export function PdfReader({
           </ErrorText>
         )}
         {!pageCount && !error && (
-          <p role="status" className="absolute inset-x-0 top-0 p-3 text-sm text-ink-3">
+          <p role="status" className="absolute inset-x-0 top-0 p-3 text-ui-body text-ink-2">
             正在加载 PDF…
           </p>
         )}

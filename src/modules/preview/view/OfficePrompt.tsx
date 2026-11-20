@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { ExternalLink, FileDown, Presentation, RefreshCw } from 'lucide-react';
+import {
+  ArrowPathIcon as RefreshCw,
+  ArrowTopRightOnSquareIcon as ExternalLink,
+  DocumentArrowDownIcon as FileDown,
+  PresentationChartBarIcon as Presentation,
+} from '@heroicons/react/24/outline';
 import { Button } from '../../../ui/button';
 import { useNow } from '../../../ui/use-now';
 import { EmptyState } from '../../../ui/empty-state';
@@ -156,10 +161,13 @@ export function OfficePromptCard({ title, officeRef, onExported }: OfficePromptP
       action={
         <div className="grid justify-items-center gap-3">
           {exporting ? (
-            <div role="status" className="flex flex-col items-center gap-1 text-xs text-ink-3">
+            <div
+              role="status"
+              className="flex flex-col items-center gap-1 text-ui-subhead text-ink-2"
+            >
               <Spinner size="lg" />
               <span>{progressText(progress, opening)}</span>
-              {!opening && <span className="text-xs">已进行 {elapsed} 秒</span>}
+              {!opening && <span className="text-ui-subhead">已进行 {elapsed} 秒</span>}
             </div>
           ) : (
             <div className="flex items-center gap-2">
@@ -194,7 +202,7 @@ export function OfficeExportBanner({
   if (!exported.stale) {
     if (!supported) return null;
     return (
-      <div className="flex shrink-0 items-center justify-end gap-2 px-2 pt-1 text-xs">
+      <div className="flex shrink-0 items-center justify-end gap-2 px-2 pt-1 text-ui-subhead">
         {error && <ErrorText>{error}</ErrorText>}
         <Button size="sm" variant="ghost" onClick={run} disabled={exporting}>
           {exporting ? <Spinner /> : <RefreshCw aria-hidden />}
@@ -206,7 +214,7 @@ export function OfficeExportBanner({
   return (
     <div
       role="status"
-      className="flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-1 text-xs text-ink-3"
+      className="flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-1 text-ui-subhead text-ink-2"
     >
       <span>已打开导出的 {exported.title}</span>
       <span className="text-ink">源文件在导出后更新过，内容可能过期</span>

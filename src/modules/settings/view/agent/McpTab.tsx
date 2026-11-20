@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import {
+  ArrowPathIcon as RefreshCw,
+  PencilIcon as Pencil,
+  PlusIcon as Plus,
+  TrashIcon as Trash2,
+} from '@heroicons/react/24/outline';
 import type { McpServerView } from '../../../../core/protocol/capabilities';
 import { Button } from '../../../../ui/button';
 import { Switch } from '../../../../ui/switch';
@@ -81,7 +86,7 @@ export function McpTab() {
     return (
       <div className="grid gap-10">
         <SectionHeader title="自定义 MCP" />
-        <p className="text-sm text-ink-3">MCP 管理仅在桌面端可用。</p>
+        <p className="text-ui-body text-ink-2">MCP 管理仅在桌面端可用。</p>
       </div>
     );
   }
@@ -100,8 +105,8 @@ export function McpTab() {
       {servers?.length === 0 && (
         <SettingsGroup>
           <div className="grid gap-1 py-3.5">
-            <span className="text-sm font-medium text-ink">还没有 MCP 服务器</span>
-            <span className="text-xs leading-relaxed text-ink-3">
+            <span className="text-ui-headline text-ink">还没有 MCP 服务器</span>
+            <span className="text-ui-subhead text-ink-2">
               支持本地命令（如 npx）启动的 stdio 服务器与 Streamable HTTP
               远程服务器，添加后自动连接并检测工具。
             </span>
@@ -120,9 +125,9 @@ export function McpTab() {
                 >
                   <div className="grid min-w-0 gap-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <strong className="truncate text-sm">{server.name}</strong>
+                      <strong className="truncate text-ui-body">{server.name}</strong>
                       <span
-                        className="inline-flex items-center gap-1.5 text-xs text-ink-3"
+                        className="inline-flex items-center gap-1.5 text-ui-subhead text-ink-2"
                         title={server.error ?? undefined}
                       >
                         {badge.spin ? (
@@ -134,7 +139,7 @@ export function McpTab() {
                       </span>
                     </div>
                     {server.status === 'error' && server.error ? (
-                      <p className="truncate text-xs text-danger" title={server.error}>
+                      <p className="truncate text-ui-subhead text-danger" title={server.error}>
                         {server.error}
                       </p>
                     ) : null}

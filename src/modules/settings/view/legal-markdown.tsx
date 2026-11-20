@@ -7,9 +7,7 @@ import { Card } from '../../../ui/card';
  */
 const components: Components = {
   h1: () => null,
-  h2: ({ children }) => (
-    <h2 className="mt-10 text-base font-semibold text-ink first:mt-0">{children}</h2>
-  ),
+  h2: ({ children }) => <h2 className="mt-10 text-ui-title-3 text-ink first:mt-0">{children}</h2>,
   p: ({ children }) => <p className="mt-3">{children}</p>,
   strong: ({ children }) => <strong className="font-semibold text-ink">{children}</strong>,
   ul: ({ children }) => <ul className="mt-3 grid list-disc gap-1.5 pl-4">{children}</ul>,
@@ -31,7 +29,7 @@ const components: Components = {
   ),
   table: ({ children }) => (
     <div className="mt-3 w-full overflow-x-auto">
-      <table className="w-full border-collapse text-xs">{children}</table>
+      <table className="w-full border-collapse text-ui-subhead">{children}</table>
     </div>
   ),
   th: ({ children }) => (

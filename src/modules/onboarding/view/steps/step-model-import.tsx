@@ -22,7 +22,7 @@ export function StepModelImportDialog({
 }) {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="bui-light max-h-[85vh]">
+      <DialogContent className="max-h-dialog">
         <DialogTitle>导入模型</DialogTitle>
         <DialogDescription>勾选要加入配置的模型，最多保留 {LLM_MODEL_LIMIT} 个。</DialogDescription>
         <Picker
@@ -74,7 +74,7 @@ function Picker({
       />
       <Card className="max-h-64 overflow-y-auto">
         {visible.length === 0 ? (
-          <p className="px-3 py-4 text-xs text-ink-3">没有匹配的模型</p>
+          <p className="px-3 py-4 text-ui-subhead text-ink-2">没有匹配的模型</p>
         ) : (
           visible.map((id) => (
             <label
@@ -82,14 +82,14 @@ function Picker({
               key={id}
             >
               <Checkbox checked={checked.has(id)} onChange={() => toggle(id)} />
-              <span className="min-w-0 flex-1 truncate font-mono text-xs" title={id}>
+              <span className="min-w-0 flex-1 truncate font-mono text-ui-subhead" title={id}>
                 {id}
               </span>
             </label>
           ))
         )}
       </Card>
-      <p className="text-xs text-ink-3" role="status">
+      <p className="text-ui-subhead text-ink-2" role="status">
         已选 {picked.length} 个{dropped > 0 ? `，超出的 ${dropped} 个不会被导入` : ''}
       </p>
       <div className="flex items-center justify-end gap-2">

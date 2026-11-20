@@ -8,7 +8,7 @@ const panelHeaderVariants = cva('flex shrink-0 items-center', {
       bordered: 'gap-2 border-b border-line px-3',
       plain: 'gap-1 px-2',
     },
-    size: { default: 'h-10', lg: 'h-11' },
+    size: { default: 'min-h-toolbar', lg: 'min-h-toolbar' },
   },
   defaultVariants: { variant: 'bordered', size: 'default' },
 });

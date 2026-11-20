@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from 'use-debounce';
-import { Archive, MessageSquare, X } from 'lucide-react';
+import {
+  ArchiveBoxIcon as Archive,
+  ChatBubbleLeftIcon as MessageSquare,
+  XMarkIcon as X,
+} from '@heroicons/react/24/outline';
 import type { ChatSessionSummary } from '../../../core/protocol/agent';
 import { Button } from '../../../ui/button';
 import { useDismissOnOutsidePointer } from '../../../ui/use-dismiss-on-outside-pointer';
@@ -11,7 +14,7 @@ import { IconButton } from '../../../ui/icon-button';
 import { SearchInput } from '../../../ui/search-input';
 import { cn } from '../../../ui/cn';
 import { poolKey, querySessions } from './sessions';
-import { drawerFromRight } from '../../../ui/motion';
+import { Sheet, SheetContent } from '../../../ui/sheet';
 import { errorMessage } from '../../../core/protocol/contract';
 
 function SessionList({
@@ -49,12 +52,12 @@ function SessionList({
             <MessageSquare
               className={cn(
                 'size-4 shrink-0',
-                session.id === currentSessionId ? 'text-ink' : 'text-ink-3',
+                session.id === currentSessionId ? 'text-ink' : 'text-ink-2',
               )}
             />
             <span
               className={cn(
-                'min-w-0 flex-1 truncate text-sm text-ink',
+                'min-w-0 flex-1 truncate text-ui-body text-ink',
                 session.id === currentSessionId && 'font-medium',
               )}
             >
@@ -123,15 +126,6 @@ export function ChatSessions({
   const loadError = sessionLists.isError;
   const lists = loadError ? undefined : sessionLists.data;
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onOpenChange(false);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onOpenChange, open]);
-
   const deleteSession = (sessionId: string) => {
     onDeleteSession(sessionId);
     // 面板保持打开时列表仍可见：先乐观移除，再重取列表覆盖在途旧请求，
@@ -144,10 +138,6 @@ export function ChatSessions({
     void queryClient.invalidateQueries({ queryKey: ['chat', 'archived'] });
   };
 
-  if (!open) return null;
-  // 锚定内容区而非视口：侧栏展开时不遮挡导航；找不到锚点时退回 body。
-  const container = document.getElementById('app-main') ?? document.body;
-
   const sections = pools.map((pool, index) => ({
     pool,
     key: poolKey(pool),
@@ -157,23 +147,12 @@ export function ChatSessions({
   const allLoaded = sections.every((section) => section.list !== null);
   const totalCount = sections.reduce((count, section) => count + (section.list?.length ?? 0), 0);
 
-  return createPortal(
-    <>
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 z-scrim"
-        onMouseDown={() => onOpenChange(false)}
-      />
-      <aside
-        aria-label="历史对话"
-        className={cn(
-          drawerFromRight,
-          'absolute inset-y-0 right-0 z-overlay flex w-72 max-w-[85vw] flex-col border-l border-line bg-surface shadow-raised',
-        )}
-        role="dialog"
-      >
-        <h2 className="sr-only">历史对话</h2>
-        <p className="sr-only">搜索并打开当前项目的会话，或进入通用对话</p>
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" title="历史对话">
+        <h2 className="px-2 pt-2 text-ui-title-2" aria-hidden>
+          历史对话
+        </h2>
         <div className="flex shrink-0 items-center gap-1 p-2">
           <SearchInput
             aria-label="搜索历史对话"
@@ -184,12 +163,12 @@ export function ChatSessions({
             value={query}
           />
           <IconButton aria-label="关闭" onClick={() => onOpenChange(false)}>
-            <X strokeWidth={1.8} />
+            <X />
           </IconButton>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto border-t border-line p-2">
           {loadError && (
-            <div className="flex items-center justify-center gap-2 px-3 py-6 text-sm text-ink-3">
+            <div className="flex items-center justify-center gap-2 px-3 py-6 text-ui-body text-ink-2">
               <span role="alert">历史对话加载失败</span>
               <Button onClick={() => void sessionLists.refetch()} size="sm" variant="outline">
                 重试
@@ -203,7 +182,7 @@ export function ChatSessions({
             section.list && section.list.length > 0 ? (
               <section key={section.key} aria-label={section.label ?? '项目会话'}>
                 {section.label && (
-                  <h3 className="px-2 pb-1 pt-2 text-xs font-medium text-ink-3">{section.label}</h3>
+                  <h3 className="px-2 pb-1 pt-2 text-ui-subhead text-ink-2">{section.label}</h3>
                 )}
                 <SessionList
                   currentSessionId={currentSessionId}
@@ -216,8 +195,7 @@ export function ChatSessions({
             ) : null,
           )}
         </div>
-      </aside>
-    </>,
-    container,
+      </SheetContent>
+    </Sheet>
   );
 }

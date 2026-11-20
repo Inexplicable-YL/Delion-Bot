@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { Check } from 'lucide-react';
+import { CheckIcon as Check } from '@heroicons/react/24/outline';
 import { Button } from '../../../ui/button';
 import { Select, SelectContent, SelectTrigger, SelectValue } from '../../../ui/select';
 import { Spinner } from '../../../ui/spinner';
@@ -56,8 +56,7 @@ export function StepSelect({
       <SelectTrigger aria-label={label} className="w-full" size="lg">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      {/* 弹层 portal 到 body，脱离向导的 .bui-light 作用域，需单独带上。 */}
-      <SelectContent className="bui-light">{children}</SelectContent>
+      <SelectContent>{children}</SelectContent>
     </Select>
   );
 }

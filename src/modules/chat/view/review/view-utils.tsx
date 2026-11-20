@@ -11,7 +11,7 @@ export const dirnameOf = (path: string) => path.slice(0, Math.max(0, lastSeparat
 export function Centered({ children, ...rest }: { children: ReactNode; role?: string }) {
   return (
     <div
-      className="flex min-h-0 flex-1 items-center justify-center gap-1.5 p-6 text-center text-sm text-ink-3"
+      className="flex min-h-0 flex-1 items-center justify-center gap-1.5 p-6 text-center text-ui-body text-ink-2"
       {...rest}
     >
       {children}

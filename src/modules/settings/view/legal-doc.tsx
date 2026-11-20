@@ -2,7 +2,7 @@ import { LegalMarkdown } from './legal-markdown';
 import { SectionHeader } from './SectionHeader';
 
 /** 设置 › 条款页骨架：正文是 docs 下的 Markdown（?raw 内联），元素级版式见 legal-markdown.tsx。 */
-const articleClass = 'max-w-168 text-sm leading-relaxed text-ink-2';
+const articleClass = 'max-w-168 text-ui-body text-ink-2';
 
 export function LegalDocument({
   markdown,

@@ -5,20 +5,20 @@ import { useDismissOnOutsidePointer } from '../../../ui/use-dismiss-on-outside-p
 import { CollapseChevron } from '../../../ui/collapse';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ui/tooltip';
 import {
-  Cloud,
-  Folder,
-  FolderOpen,
-  House,
-  MoreHorizontal,
-  Plus,
-  SquarePen,
-  Pencil,
-  Pin,
-  PinOff,
-  Archive,
-  Trash2,
-  List,
-} from 'lucide-react';
+  ArchiveBoxIcon as Archive,
+  BookmarkIcon as Pin,
+  BookmarkSlashIcon as PinOff,
+  CloudIcon as Cloud,
+  EllipsisHorizontalIcon as MoreHorizontal,
+  FolderIcon as Folder,
+  FolderOpenIcon as FolderOpen,
+  HomeIcon as House,
+  ListBulletIcon as List,
+  PencilIcon as Pencil,
+  PencilSquareIcon as SquarePen,
+  PlusIcon as Plus,
+  TrashIcon as Trash2,
+} from '@heroicons/react/24/outline';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -66,8 +66,6 @@ export type BusinessNavId = Exclude<NavEntryId, 'sources'>;
 
 const RECENT_SESSIONS = 3;
 
-const labelFade = 'transition-opacity duration-slow ease-out';
-
 export function ProjectSessionNav({
   sessionsByProject,
   runBadge,
@@ -84,7 +82,6 @@ export function ProjectSessionNav({
   activeProjectId = null,
   onNavigateBusiness,
   activeBusinessId = null,
-  collapsed = false,
 }: {
   sessionsByProject: Record<string, NavSessionSummary[]>;
   runBadge: (sessionId: string) => SessionRunBadge;
@@ -101,7 +98,6 @@ export function ProjectSessionNav({
   activeProjectId?: string | null;
   onNavigateBusiness?: (id: BusinessNavId) => void;
   activeBusinessId?: NavEntryId | null;
-  collapsed?: boolean;
 }) {
   const entries = useWorkspaceStore((s) => s.workspace.entries);
   const visibleEntries = useVisibleNavEntries().filter((entry) => entry.id !== 'connectors');
@@ -142,7 +138,6 @@ export function ProjectSessionNav({
       showToast({ variant: 'error', title, description: errorMessage(cause) });
     }
   };
-  const hidden = cn('truncate', labelFade, collapsed && 'opacity-0');
 
   const sessionGroup = (
     project: WorkspaceEntry,
@@ -169,24 +164,22 @@ export function ProjectSessionNav({
       <button
         aria-current={rowActive ? 'page' : undefined}
         aria-expanded={expanded}
-        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-chip text-left"
         onClick={() => toggleProject(key)}
         title={project.remoteId ? undefined : label}
         type="button"
       >
-        <Icon className={navIcon(rowActive)} strokeWidth={1.8} style={accent} />
-        <span className={cn('sidebar-title min-w-0 flex-1', labelFade, collapsed && 'opacity-0')}>
-          {label}
-        </span>
+        <Icon className={navIcon(rowActive)} style={accent} />
+        <span className="min-w-0 flex-1 truncate">{label}</span>
       </button>
     );
     return (
       <div key={key} className="min-w-0">
-        <div className={cn(navRow(rowActive), 'group group/nav relative pl-1.5')}>
+        <div className={cn(navRow(rowActive), 'group pr-1 pl-1.5')}>
           <button
             aria-expanded={expanded}
             aria-label={`${expanded ? '收起' : '展开'} ${label} 的会话`}
-            className="grid size-4 shrink-0 place-items-center text-ink-3"
+            className="grid size-4 shrink-0 place-items-center rounded-chip text-ink-2"
             onClick={() => toggleProject(key)}
             type="button"
           >
@@ -206,99 +199,95 @@ export function ProjectSessionNav({
           ) : (
             labelButton
           )}
-          {!collapsed && (
-            <div className={cn(rowActions, rowActive ? 'bg-selected' : 'bg-hover')}>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <IconButton size="sm" aria-label={`${label} 的项目菜单`} title="项目菜单">
-                    <MoreHorizontal />
-                  </IconButton>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="right" className="w-56">
-                  <DropdownMenuLabel className="break-words text-sm text-ink">
-                    {label}
-                  </DropdownMenuLabel>
-                  <DropdownMenuLabel>{sessions.length} 个对话</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => onOpenProject(key)}>
-                    <FolderOpen />
-                    打开项目
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      setProjectPreference(key, { pinned: !preferences[key]?.pinned })
-                    }
-                  >
-                    {preferences[key]?.pinned ? <PinOff /> : <Pin />}
-                    {preferences[key]?.pinned ? '取消置顶' : '置顶'}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setEntryRequest({ action: 'rename', id: key })}>
-                    <Pencil />
-                    编辑项目
-                  </DropdownMenuItem>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <List />
-                      分组
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="min-w-40">
-                      <DropdownMenuItem onSelect={() => setProjectPreference(key, { section: '' })}>
-                        默认分组
-                      </DropdownMenuItem>
-                      {sectionNames.map((name) => (
-                        <DropdownMenuItem
-                          key={name}
-                          onSelect={() => setProjectPreference(key, { section: name })}
-                        >
-                          {name}
-                        </DropdownMenuItem>
-                      ))}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setSectionProjectId(key);
-                          setSectionName('');
-                        }}
-                      >
-                        <Plus />
-                        新建分组
-                      </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuItem
-                    onSelect={() =>
-                      void runAction('打开目录失败', async () => workspaceClient.openLocal(key))
-                    }
-                  >
-                    <FolderOpen />在 {fileManagerName} 中显示
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem disabled={archiving} onSelect={() => setConfirmArchive(key)}>
-                    <Archive />
-                    归档项目对话
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onSelect={() => setEntryRequest({ action: 'remove', id: key })}
-                  >
-                    <Trash2 />
-                    移除项目
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {onNewChat && (
-                <IconButton
-                  size="sm"
-                  aria-label={`在 ${label} 中新建对话`}
-                  title="新对话"
-
-                  onClick={() => onNewChat(key)}
-                >
-                  <SquarePen />
+          <div className={rowActions}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <IconButton size="sm" aria-label={`${label} 的项目菜单`} title="项目菜单">
+                  <MoreHorizontal />
                 </IconButton>
-              )}
-            </div>
-          )}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="right" className="w-56">
+                <DropdownMenuLabel className="break-words text-ui-body text-ink">
+                  {label}
+                </DropdownMenuLabel>
+                <DropdownMenuLabel>{sessions.length} 个对话</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => onOpenProject(key)}>
+                  <FolderOpen />
+                  打开项目
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => setProjectPreference(key, { pinned: !preferences[key]?.pinned })}
+                >
+                  {preferences[key]?.pinned ? <PinOff /> : <Pin />}
+                  {preferences[key]?.pinned ? '取消置顶' : '置顶'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setEntryRequest({ action: 'rename', id: key })}>
+                  <Pencil />
+                  编辑项目
+                </DropdownMenuItem>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <List />
+                    分组
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="min-w-40">
+                    <DropdownMenuItem onSelect={() => setProjectPreference(key, { section: '' })}>
+                      默认分组
+                    </DropdownMenuItem>
+                    {sectionNames.map((name) => (
+                      <DropdownMenuItem
+                        key={name}
+                        onSelect={() => setProjectPreference(key, { section: name })}
+                      >
+                        {name}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        setSectionProjectId(key);
+                        setSectionName('');
+                      }}
+                    >
+                      <Plus />
+                      新建分组
+                    </DropdownMenuItem>
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+                <DropdownMenuItem
+                  onSelect={() =>
+                    void runAction('打开目录失败', async () => workspaceClient.openLocal(key))
+                  }
+                >
+                  <FolderOpen />在 {fileManagerName} 中显示
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={archiving} onSelect={() => setConfirmArchive(key)}>
+                  <Archive />
+                  归档项目对话
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => setEntryRequest({ action: 'remove', id: key })}
+                >
+                  <Trash2 />
+                  移除项目
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {onNewChat && (
+              <IconButton
+                size="sm"
+                aria-label={`在 ${label} 中新建对话`}
+                title="新对话"
+
+                onClick={() => onNewChat(key)}
+              >
+                <SquarePen />
+              </IconButton>
+            )}
+          </div>
         </div>
         {confirmArchive === key && (
           <div className="flex items-center gap-2 py-1 pl-8">
@@ -332,11 +321,11 @@ export function ProjectSessionNav({
           <div className="grid grid-cols-1 gap-px pb-1">
             {sessions.length === 0 && onNewChat && (
               <button
-                className="flex h-7 items-center gap-2 rounded-control pl-8 pr-2 text-left text-sm text-ink-3 transition-colors duration-base hover:bg-hover hover:text-ink-2"
+                className="flex h-7 items-center gap-2 rounded-control pl-8 pr-2 text-left text-ui-body text-ink-2 transition-colors duration-base hover:bg-hover hover:text-ink-2"
                 onClick={() => onNewChat(key)}
                 type="button"
               >
-                <SquarePen className="size-3.5 shrink-0" />
+                <SquarePen className="size-4 shrink-0" />
                 新建第一个对话
               </button>
             )}
@@ -354,7 +343,7 @@ export function ProjectSessionNav({
             ))}
             {unpinned.length > RECENT_SESSIONS && (
               <button
-                className="flex h-7 items-center rounded-control pl-8 pr-2 text-left text-xs text-ink-3 transition-colors duration-base hover:bg-hover hover:text-ink-2"
+                className="flex h-7 items-center rounded-control pl-8 pr-2 text-left text-ui-subhead text-ink-2 transition-colors duration-base hover:bg-hover hover:text-ink-2"
                 onClick={() => toggleFullSessionList(key)}
                 type="button"
               >
@@ -376,8 +365,8 @@ export function ProjectSessionNav({
           onClick={onOpenGeneralChat}
           type="button"
         >
-          <House className={navIcon(generalChatActive)} strokeWidth={1.8} />
-          <span className={hidden}>首页</span>
+          <House className={navIcon(generalChatActive)} />
+          <span className="truncate">首页</span>
         </button>
         {visibleEntries.map((item) => {
           const Icon = item.icon;
@@ -392,8 +381,8 @@ export function ProjectSessionNav({
               }
               type="button"
             >
-              <Icon className={navIcon(active)} strokeWidth={1.8} />
-              <span className={hidden}>{item.label}</span>
+              <Icon className={navIcon(active)} />
+              <span className="truncate">{item.label}</span>
             </button>
           );
         })}
@@ -403,7 +392,7 @@ export function ProjectSessionNav({
           sessionsByProject[project.id]?.some((session) => session.pinned),
         )) && (
         <section aria-label="置顶" className="mt-5 grid shrink-0 gap-px">
-          <p className={cn(navSectionTitle, labelFade, collapsed && 'opacity-0')}>置顶</p>
+          <p className={navSectionTitle}>置顶</p>
           {projects
             .filter((project) => preferences[project.id]?.pinned)
             .map((project) =>
@@ -432,11 +421,7 @@ export function ProjectSessionNav({
       )}
       <div className="mt-5 flex shrink-0 items-center justify-between px-2 pb-1">
         <span
-          className={cn(
-            'whitespace-nowrap text-xs font-medium text-ink-3',
-            labelFade,
-            collapsed && 'opacity-0',
-          )}
+          className="whitespace-nowrap text-ui-subhead text-ink-2"
           id="project-session-nav-title"
         >
           项目
@@ -448,7 +433,7 @@ export function ProjectSessionNav({
           onClick={onNewProject}
           title="新建项目"
         >
-          <Plus strokeWidth={1.8} />
+          <Plus />
         </IconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">

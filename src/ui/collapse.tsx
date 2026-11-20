@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRightIcon as ChevronRight } from '@heroicons/react/24/outline';
 import { useState, type ReactNode } from 'react';
 import { cn } from './cn';
 import { useMediaQuery } from './use-media-query';
@@ -46,7 +46,7 @@ function CollapseChevron({ open, className }: { open: boolean; className?: strin
     <ChevronRight
       aria-hidden="true"
       className={cn(
-        'size-3 shrink-0 transition-transform duration-base motion-reduce:transition-none',
+        'size-4 shrink-0 transition-transform duration-base motion-reduce:transition-none',
         open && 'rotate-90',
         className,
       )}

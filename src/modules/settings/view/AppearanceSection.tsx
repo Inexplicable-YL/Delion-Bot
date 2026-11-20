@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
+import { CheckIcon as Check } from '@heroicons/react/24/outline';
 import {
   fontSizeMax,
   fontSizeMin,
@@ -33,19 +33,19 @@ const icons: Array<{ id: IconPreference; label: string; src: string }> = [
 
 const zoomLabel = (zoom: ZoomPreference) => `${Math.round(zoom * 100)}%`;
 
-/** 主题卡片缩略图：靠 `bui-light` / `dark` 把卡片单独切到对应主题；「跟随系统」左右各半。 */
+/** 主题卡片缩略图：靠 `theme-light` / `dark` 把卡片单独切到对应主题；「跟随系统」左右各半。 */
 function ThemePreview({ mode }: { mode: ThemePreference }) {
   const bars = (
     <>
-      <span className="h-2 w-[70%] rounded-full bg-ink" />
-      <span className="h-2 w-[46%] rounded-full bg-accent" />
-      <span className="h-2 w-[58%] rounded-full bg-ink-3" />
+      <span className="h-2 w-2/3 rounded-full bg-ink" />
+      <span className="h-2 w-1/2 rounded-full bg-accent" />
+      <span className="h-2 w-3/5 rounded-full bg-ink-3" />
     </>
   );
   if (mode === 'system') {
     return (
       <div className="grid grid-cols-2 overflow-hidden rounded-control shadow-hairline">
-        <div className="bui-light grid content-center gap-2 bg-surface px-3 py-4">{bars}</div>
+        <div className="theme-light grid content-center gap-2 bg-surface px-3 py-4">{bars}</div>
         <div className="dark grid content-center gap-2 bg-surface px-3 py-4">{bars}</div>
       </div>
     );
@@ -54,7 +54,7 @@ function ThemePreview({ mode }: { mode: ThemePreference }) {
     <div
       className={cn(
         'grid content-center gap-2 rounded-control bg-surface px-3 py-4 shadow-hairline',
-        mode === 'dark' ? 'dark' : 'bui-light',
+        mode === 'dark' ? 'dark' : 'theme-light',
       )}
     >
       {bars}
@@ -135,7 +135,7 @@ export function AppearanceSection({
       <SectionHeader title="外观" />
       <SettingsGroup>
         <div className="grid gap-3 border-b border-line py-3.5" data-setting-id="theme">
-          <h3 className="text-sm font-medium text-ink">主题</h3>
+          <h3 className="text-ui-headline text-ink">主题</h3>
           <div aria-label="主题" className="grid grid-cols-3 gap-2" role="group">
             {themes.map(({ id, label }) => (
               <button
@@ -152,13 +152,13 @@ export function AppearanceSection({
                 <ThemePreview mode={id} />
                 {theme === id ? (
                   <span className="absolute right-1 top-1 grid size-4 place-items-center rounded-full bg-ink text-surface">
-                    <Check className="size-2.5" strokeWidth={2.5} />
+                    <Check className="size-2.5" />
                   </span>
                 ) : null}
                 <span
                   className={cn(
-                    'text-center text-xs',
-                    theme === id ? 'font-medium text-ink' : 'text-ink-3',
+                    'text-center text-ui-subhead',
+                    theme === id ? 'font-medium text-ink' : 'text-ink-2',
                   )}
                 >
                   {label}
@@ -214,7 +214,7 @@ export function AppearanceSection({
                 <img alt="" className="size-12 rounded-control border border-line" src={src} />
                 {icon === id ? (
                   <span className="absolute -right-1.5 -top-1.5 grid size-4 place-items-center rounded-full bg-ink text-surface">
-                    <Check className="size-2.5" strokeWidth={2.5} />
+                    <Check className="size-2.5" />
                   </span>
                 ) : null}
               </button>

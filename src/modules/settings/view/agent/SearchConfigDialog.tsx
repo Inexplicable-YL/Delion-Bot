@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+  PencilIcon as Pencil,
+  PlusIcon as Plus,
+  TrashIcon as Trash2,
+} from '@heroicons/react/24/outline';
 import { Button } from '../../../../ui/button';
 import { EmptyState } from '../../../../ui/empty-state';
 import { Input } from '../../../../ui/input';
@@ -52,7 +56,7 @@ const headersText = (headers: Record<string, string> | undefined) =>
     .map(([key, value]) => `${key}: ${value}`)
     .join('\n');
 
-const headerAreaClass = 'min-h-20 resize-y py-2 font-mono text-xs';
+const headerAreaClass = 'min-h-20 resize-y py-2 font-mono text-ui-subhead';
 
 export function SearchConfigDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -83,7 +87,7 @@ export function SearchConfigDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog onOpenChange={(open) => !open && onClose()} open>
-      <DialogContent scroll>
+      <DialogContent>
         {draft ? (
           <EntryForm
             draft={draft}
@@ -114,8 +118,8 @@ export function SearchConfigDialog({ onClose }: { onClose: () => void }) {
                   key={entry.id}
                 >
                   <div className="min-w-0 flex-1 grid gap-0.5">
-                    <span className="truncate text-sm font-medium">{entry.name}</span>
-                    <span className="text-xs text-ink-3">
+                    <span className="truncate text-ui-headline">{entry.name}</span>
+                    <span className="text-ui-subhead text-ink-2">
                       {webSearchProviderLabels[entry.provider]}
                       {entry.provider === 'deepseek' ? ' · 按次计费' : ''}
                     </span>
@@ -409,7 +413,7 @@ function EntryForm({
               </Select>
             ) : (
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs text-ink-3">已配置过 DeepSeek 模型？</span>
+                <span className="text-ui-subhead text-ink-2">已配置过 DeepSeek 模型？</span>
                 <Button
                   disabled={busy}
                   onClick={() => void importKey()}
@@ -423,8 +427,8 @@ function EntryForm({
             )}
             <div className="flex items-start justify-between gap-3 rounded-card border p-3">
               <div className="grid gap-0.5">
-                <span className="text-sm font-medium">网页读取也使用 DeepSeek</span>
-                <span className="text-xs leading-relaxed text-ink-3">
+                <span className="text-ui-headline">网页读取也使用 DeepSeek</span>
+                <span className="text-ui-subhead text-ink-2">
                   web_fetch 改走官方接口，取不到正文或 PDF 时回退本地抓取；同样按次计费。
                 </span>
               </div>

@@ -4,7 +4,7 @@ function CountBadge({ count, className }: { count: number; className?: string })
   return (
     <span
       className={cn(
-        'min-w-4 rounded-full bg-ink px-1 text-center text-xs font-medium leading-4 tabular-nums text-surface',
+        'inline-flex h-badge min-w-badge items-center justify-center rounded-full bg-fill px-1.5 text-ui-caption tabular-nums text-ink-2',
         className,
       )}
       data-slot="count-badge"

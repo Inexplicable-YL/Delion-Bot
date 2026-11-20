@@ -46,7 +46,7 @@ export function ProgressRing({
           style={{ transition: 'stroke-dashoffset 400ms cubic-bezier(0.23,1,0.32,1)' }}
         />
       </svg>
-      <span className="relative text-xs font-semibold tabular-nums">{children}</span>
+      <span className="relative text-ui-subhead tabular-nums">{children}</span>
     </span>
   );
 }

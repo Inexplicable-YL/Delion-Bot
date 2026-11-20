@@ -12,23 +12,28 @@ export function EventColorRow({
   value: CalendarEventColor;
 }) {
   return (
-    <div className={cn('flex h-11 items-center gap-2 px-3', className)}>
-      <span className="w-8 shrink-0 text-xs text-ink-3">颜色</span>
-      <div className="flex flex-1 items-center gap-1.5">
+    <div className={cn('grid gap-1', className)} role="group" aria-label="待办颜色">
+      <span className="text-ui-body">颜色</span>
+      <div className="flex flex-wrap items-center gap-1">
         {eventPalette.map(({ key, label }) => (
           <button
             aria-label={label}
             aria-pressed={value === key}
-            className={cn(
-              'size-5 rounded-full outline-offset-2 transition-transform hover:scale-110',
-              value === key && 'ring-2 ring-ink ring-offset-2 ring-offset-surface',
-            )}
+            className="grid size-control-xs place-items-center rounded-pill hover:bg-hover touch:size-control-lg"
             key={key}
             onClick={() => onColorChange(key)}
-            style={{ backgroundColor: `var(--cal-${key}-bg)` }}
             title={label}
             type="button"
-          />
+          >
+            <span
+              aria-hidden="true"
+              className={cn(
+                'size-5 rounded-pill shadow-hairline',
+                value === key && 'ring-2 ring-accent-ink ring-offset-2 ring-offset-surface',
+              )}
+              style={{ backgroundColor: `var(--cal-${key}-text)` }}
+            />
+          </button>
         ))}
       </div>
     </div>

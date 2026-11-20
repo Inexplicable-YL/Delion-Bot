@@ -49,7 +49,7 @@ export function useAppearance() {
     const apply = () => {
       const dark = theme === 'dark' || (theme === 'system' && media.matches);
       root.classList.toggle('dark', dark);
-      root.classList.toggle('light', !dark);
+      root.dataset.theme = dark ? 'dark' : 'light';
     };
     apply();
     localStorage.setItem(themeStorageKey, theme);

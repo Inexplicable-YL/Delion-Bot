@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
-import { ClipboardPaste, Copy, Plus, SquareTerminal, X } from 'lucide-react';
+import {
+  ClipboardIcon as ClipboardPaste,
+  CommandLineIcon as SquareTerminal,
+  DocumentDuplicateIcon as Copy,
+  PlusIcon as Plus,
+  XMarkIcon as X,
+} from '@heroicons/react/24/outline';
 import { onTerminalEvent, terminalClient } from './client';
 import { useTerminalStore } from './store';
 import { showToast } from '../../../ui/toast';
@@ -217,7 +223,7 @@ export function TerminalTab({ tabId }: { tabId: string }) {
             <div
               key={session.id}
               className={cn(
-                'flex shrink-0 items-center rounded-control text-sm text-ink-3',
+                'flex shrink-0 items-center rounded-control text-ui-body text-ink-2',
                 session.id === activeId && 'bg-hover text-ink',
               )}
             >
@@ -230,7 +236,9 @@ export function TerminalTab({ tabId }: { tabId: string }) {
               >
                 <SquareTerminal className="size-4" />
                 {session.title} {index + 1}
-                {session.exitCode !== null && <span className="text-xs text-ink-3">已结束</span>}
+                {session.exitCode !== null && (
+                  <span className="text-ui-subhead text-ink-2">已结束</span>
+                )}
               </button>
               <Button
                 aria-label={`关闭终端 ${index + 1}`}
@@ -283,12 +291,12 @@ export function TerminalTab({ tabId }: { tabId: string }) {
         </ErrorText>
       )}
       {active?.exitCode !== null && active && (
-        <p className="shrink-0 px-3 py-1 text-xs text-ink-3">
+        <p className="shrink-0 px-3 py-1 text-ui-subhead text-ink-2">
           进程已结束，退出码 {active.exitCode}。可新建终端继续操作。
         </p>
       )}
       {!activeId && (
-        <div className="flex flex-1 items-center justify-center text-sm text-ink-3">
+        <div className="flex flex-1 items-center justify-center text-ui-body text-ink-2">
           {busy ? '正在打开终端…' : '点击 + 新建终端'}
         </div>
       )}
@@ -302,7 +310,7 @@ export function TerminalTab({ tabId }: { tabId: string }) {
           else void paste();
         }}
         className={cn(
-          'min-h-0 flex-1 overflow-hidden bg-surface p-2 font-mono text-sm text-ink',
+          'min-h-0 flex-1 overflow-hidden bg-surface p-2 font-mono text-ui-body text-ink',
           !activeId && 'hidden',
         )}
       />

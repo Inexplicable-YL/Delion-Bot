@@ -9,7 +9,7 @@ export function Reasoning({ live, children }: { live: boolean; children: ReactNo
       <TraceDisclosure head={live ? <Shimmer>正在思考</Shimmer> : <span>思考过程</span>}>
         <div
           data-reasoning-body
-          className="max-h-72 overflow-y-auto border-l border-line pl-3 text-sm leading-6 whitespace-pre-wrap text-ink-3"
+          className="max-h-72 overflow-y-auto border-l border-line pl-3 text-ui-body whitespace-pre-wrap text-ink-2"
         >
           {children}
         </div>

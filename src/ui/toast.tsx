@@ -1,6 +1,12 @@
 'use client';
 
-import { CircleAlert, CircleCheck, Sparkles, X, type LucideIcon } from 'lucide-react';
+import {
+  CheckCircleIcon as CircleCheck,
+  ExclamationCircleIcon as CircleAlert,
+  InformationCircleIcon as Info,
+  XMarkIcon as X,
+} from '@heroicons/react/24/outline';
+import type { OutlineIcon } from './outline-icon';
 import { Toast } from 'radix-ui';
 import { useSyncExternalStore, type ReactNode } from 'react';
 import { cn } from './cn';
@@ -9,9 +15,9 @@ import { IconButton } from './icon-button';
 export type ToastVariant = 'error' | 'success';
 
 const tone = {
-  error: { icon: CircleAlert, badge: 'bg-danger-tint text-danger', role: 'alert' },
-  success: { icon: CircleCheck, badge: 'bg-success-tint text-success', role: 'status' },
-  neutral: { icon: Sparkles, badge: 'bg-inset text-ink-2', role: 'group' },
+  error: { icon: CircleAlert, color: 'text-danger', role: 'alert' },
+  success: { icon: CircleCheck, color: 'text-success', role: 'status' },
+  neutral: { icon: Info, color: 'text-ink-2', role: 'group' },
 } as const;
 
 export function ToastCard({
@@ -29,29 +35,28 @@ export function ToastCard({
   description?: string;
   onClose?: () => void;
   className?: string;
-  icon?: LucideIcon;
+  icon?: OutlineIcon;
   action?: ReactNode;
   children?: ReactNode;
 }) {
-  const { badge, role } = tone[variant];
+  const { color, role } = tone[variant];
   const Icon = icon ?? tone[variant].icon;
   return (
     <div
       role={role}
       aria-label={variant === 'neutral' ? title : undefined}
       className={cn(
-        `pointer-events-auto flex w-96 max-w-full items-start gap-2.5 rounded-card
-         border border-line bg-surface py-3 pl-3 pr-2 shadow-overlay`,
+        `pointer-events-auto flex w-96 max-w-full items-start gap-2.5 rounded-full glass-thick py-3 pl-4 pr-3`,
         className,
       )}
     >
-      <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-full', badge)}>
-        <Icon aria-hidden className="size-4" strokeWidth={1.8} />
+      <span className={cn('flex size-7 shrink-0 items-center justify-center', color)}>
+        <Icon aria-hidden className="size-4" />
       </span>
       <div className="min-w-0 flex-1 pt-0.5">
-        <p className="text-sm font-medium leading-5 text-ink">{title}</p>
+        <p className="text-ui-headline text-ink">{title}</p>
         {description && (
-          <p className="mt-0.5 break-words text-xs leading-[1.45] text-ink-2">{description}</p>
+          <p className="mt-0.5 break-words text-ui-subhead text-ink-2">{description}</p>
         )}
         {children}
       </div>
@@ -73,12 +78,8 @@ export interface ToastItem {
   description?: string;
 }
 
-const MAX_OPEN_TOASTS = 4;
-const DURATION_MS: Record<ToastItem['variant'], number> = {
-  error: 8000,
-  success: 4000,
-  neutral: 6000,
-};
+const MAX_OPEN_TOASTS = 3;
+const TOAST_DURATION_MS = 5000;
 
 let items: ToastItem[] = [];
 const listeners = new Set<() => void>();
@@ -115,7 +116,7 @@ export function Toaster() {
         <Toast.Root
           key={toast.id}
           open={toast.open}
-          duration={DURATION_MS[toast.variant]}
+          duration={TOAST_DURATION_MS}
           onOpenChange={(open) => {
             if (!open) dismissToast(toast.id);
           }}
@@ -131,7 +132,7 @@ export function Toaster() {
       ))}
       <Toast.Viewport
         data-toast-host=""
-        className="pointer-events-none absolute inset-x-0 top-0 z-toast flex flex-col items-center gap-2 px-4 pt-3"
+        className="pointer-events-none fixed inset-x-0 bottom-app-inset z-toast max-md:bottom-toast-mobile flex flex-col items-center gap-2 px-app pb-3"
       />
     </Toast.Provider>
   );

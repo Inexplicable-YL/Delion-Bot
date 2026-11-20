@@ -1,23 +1,37 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Blocks } from 'lucide-react';
+import { ChevronDownIcon, SquaresPlusIcon as Blocks } from '@heroicons/react/24/outline';
 import { defineView } from '../../../app/module';
 import { errorMessage } from '../../../core/protocol/contract';
 import { Button } from '../../../ui/button';
+import { ConfirmDialog } from '../../../ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../../ui/dropdown-menu';
+import { StatusPill } from '../../../ui/status-pill';
 import { Input } from '../../../ui/input';
 import { ErrorText } from '../../../ui/alert';
 import { McpTab, SettingsGroup, SectionHeader, SettingRow } from '../../settings/view';
 import { apps, toolkit } from '../contract';
 import { ConnectorAppIcon } from './ConnectorAppIcons';
-import { connectorsClient as client, useConnectorAccounts } from './use-connector-accounts';
+import {
+  authorizationCompleted,
+  connectorsClient as client,
+  type ConnectorAuthorization,
+  useConnectorAccounts,
+} from './use-connector-accounts';
 
-export { ConnectorAppIcons } from './ConnectorAppIcons';
+export { ConnectedAppIcons } from './ConnectorAppIcons';
 function Connectors() {
   const cache = useQueryClient();
   const [key, setKey] = useState('');
   const [editing, setEditing] = useState(false);
-  const [confirm, setConfirm] = useState<string | null>(null);
-  const [waiting, setWaiting] = useState<{ slug: string; until: number } | null>(null);
+  const [confirm, setConfirm] = useState<{ id: string; app: string; label: string } | null>(null);
+  const [waiting, setWaiting] = useState<ConnectorAuthorization[]>([]);
   const { configured, accounts } = useConnectorAccounts(waiting);
   const setup = useMutation({
     mutationFn: () => client.setup(key),
@@ -29,10 +43,30 @@ function Connectors() {
   });
   const action = useMutation({ mutationFn: (run: () => Promise<void>) => run() });
   const busy = action.isPending || setup.isPending;
-  const failure = action.error ?? configured.error ?? accounts.error;
+  const failure = (confirm ? null : action.error) ?? configured.error ?? accounts.error;
+  const pending = waiting.filter((link) => !authorizationCompleted(link, accounts.data));
+  if (pending.length !== waiting.length) setWaiting(pending);
+  const authorize = (slug: ConnectorAuthorization['slug']) => {
+    const link = pending.find((value) => value.slug === slug);
+    if (link && Date.now() < link.until) {
+      window.open(link.url, '_blank', 'noopener');
+      return;
+    }
+    const previousAccounts = new Set(
+      accounts.data
+        ?.filter((account) => account.toolkit.slug === slug && account.status === 'ACTIVE')
+        .map((account) => account.id),
+    );
+    action.mutate(async () => {
+      const url = await client.connect(slug);
+      const link = { slug, url, previousAccounts, until: Date.now() + 600_000 };
+      setWaiting((current) => [...current.filter((value) => value.slug !== slug), link]);
+      window.open(url, '_blank', 'noopener');
+    });
+  };
   return (
-    <main className="min-w-0 flex-1 overflow-y-auto bg-surface">
-      <div className="mx-auto grid w-full max-w-228 gap-8 px-4 py-6 md:px-10">
+    <div className="min-w-0 flex-1 overflow-y-auto bg-page">
+      <div className="mx-auto grid w-full max-w-reading gap-app-gap p-app">
         <SectionHeader title="连接器" />
         {configured.data !== undefined && (!configured.data || editing) ? (
           <SettingsGroup
@@ -47,7 +81,7 @@ function Connectors() {
               }}
             >
               <a
-                className="text-sm underline"
+                className="text-ui-body underline"
                 href="https://dashboard.composio.dev/"
                 target="_blank"
                 rel="noreferrer"
@@ -73,7 +107,7 @@ function Connectors() {
                   {errorMessage(setup.error)}
                 </ErrorText>
               )}
-              <details className="text-xs text-ink-3">
+              <details className="text-ui-subhead text-ink-2">
                 <summary className="cursor-pointer">受限项目密钥需要哪些权限？</summary>
                 <ul className="grid gap-1 py-2">
                   <li>Session management · Write only</li>
@@ -82,7 +116,7 @@ function Connectors() {
                 </ul>
               </details>
               <div>
-                <Button disabled={busy || !key.trim()} type="submit">
+                <Button disabled={busy || !key.trim()} type="submit" variant="accent">
                   {setup.isPending ? '正在验证…' : '验证并保存'}
                 </Button>{' '}
                 {editing && (
@@ -109,7 +143,10 @@ function Connectors() {
             description="选择应用，在浏览器完成授权。也可以在聊天中要求 Agent 连接应用。"
           >
             {toolkit.options.map((slug) => {
-              const items = accounts.data?.filter((a) => a.toolkit.slug === slug) ?? [];
+              const items = accounts.data?.filter((account) => account.toolkit.slug === slug) ?? [];
+              const active = items.filter((account) => account.status === 'ACTIVE').length;
+              const pendingAuthorization = pending.some((link) => link.slug === slug);
+              const canAuthorize = !busy && configured.data && !accounts.isLoading;
               return (
                 <SettingRow
                   settingId={slug}
@@ -117,61 +154,70 @@ function Connectors() {
                   title={apps[slug]}
                   leading={<ConnectorAppIcon slug={slug} />}
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    {items.map((a) => (
-                      <span key={a.id} className="inline-flex items-center gap-2 text-sm">
-                        {[
-                          a.alias,
-                          a.status === 'ACTIVE'
-                            ? '已连接'
-                            : a.status === 'INITIATED'
-                              ? '等待授权'
-                              : a.status,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}{' '}
-                        <Button
-                          disabled={busy}
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
-                            confirm === a.id
-                              ? action.mutate(async () => {
-                                  await client.disconnect(a.id);
-                                  setConfirm(null);
-                                  setWaiting(null);
-                                  await accounts.refetch();
-                                })
-                              : setConfirm(a.id)
-                          }
-                        >
-                          {confirm === a.id ? '确认断开' : '断开'}
-                        </Button>
-                        {confirm === a.id && (
-                          <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>
-                            取消
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {active > 0 ? (
+                      <StatusPill tone="green" dot={false}>
+                        {active === 1 ? '已连接' : `已连接 ${active} 个账户`}
+                      </StatusPill>
+                    ) : pendingAuthorization ||
+                      items.some((account) => account.status === 'INITIATED') ? (
+                      <StatusPill tone="neutral" dot={false}>
+                        等待授权
+                      </StatusPill>
+                    ) : null}
+                    {items.length > 0 && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            aria-label={`管理 ${apps[slug]} 账户`}
+                            size="sm"
+                            variant="secondary"
+                            disabled={busy}
+                          >
+                            管理账户
+                            <ChevronDownIcon />
                           </Button>
-                        )}
-                      </span>
-                    ))}
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={busy || !configured.data || accounts.isLoading}
-                      onClick={() =>
-                        action.mutate(async () => {
-                          const url = await client.connect(slug);
-                          window.open(url, '_blank', 'noopener');
-                          setWaiting({ slug, until: Date.now() + 600000 });
-                        })
-                      }
-                    >
-                      {items.length
-                        ? '重新授权'
-                        : waiting?.slug === slug
-                          ? '再次打开授权页'
-                          : '连接'}
-                    </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {items.map((account, index) => {
+                            const label = account.alias?.trim() || `账户 ${index + 1}`;
+                            return (
+                              <DropdownMenuItem
+                                key={account.id}
+                                variant="destructive"
+                                onSelect={() => {
+                                  action.reset();
+                                  setConfirm({ id: account.id, app: apps[slug], label });
+                                }}
+                              >
+                                断开 {label}
+                              </DropdownMenuItem>
+                            );
+                          })}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={!canAuthorize}
+                            onSelect={() => authorize(slug)}
+                          >
+                            {pendingAuthorization
+                              ? '打开授权页'
+                              : active > 0
+                                ? '连接其他账户'
+                                : '重新授权'}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                    {items.length === 0 && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={!canAuthorize}
+                        onClick={() => authorize(slug)}
+                      >
+                        {pendingAuthorization ? '打开授权页' : '连接'}
+                      </Button>
+                    )}
                   </div>
                 </SettingRow>
               );
@@ -194,14 +240,42 @@ function Connectors() {
           </SettingsGroup>
         )}
         {failure && <ErrorText>{errorMessage(failure)}</ErrorText>}
+        <ConfirmDialog
+          open={confirm !== null}
+          onOpenChange={(open) => !open && !busy && setConfirm(null)}
+          title="断开账户？"
+          description={
+            confirm ? (
+              <>
+                断开 {confirm.app} 的「{confirm.label}」后，需重新授权才能使用该账户。
+                {action.error && (
+                  <span className="mt-2 block text-danger">{errorMessage(action.error)}</span>
+                )}
+              </>
+            ) : (
+              ''
+            )
+          }
+          confirmLabel="断开账户"
+          destructive
+          busy={busy}
+          onConfirm={() => {
+            if (!confirm) return;
+            action.mutate(async () => {
+              await client.disconnect(confirm.id);
+              setConfirm(null);
+              await accounts.refetch();
+            });
+          }}
+        />
         <details>
-          <summary className="cursor-pointer text-sm font-medium">自定义 MCP 服务器</summary>
+          <summary className="cursor-pointer text-ui-headline">自定义 MCP 服务器</summary>
           <div className="pt-4">
             <McpTab />
           </div>
         </details>
       </div>
-    </main>
+    </div>
   );
 }
 export const connectorsView = defineView({

@@ -1,6 +1,6 @@
 // 连接一台服务器时的过程展示：步骤标签、上传字节进度条与逐行日志；失败时标题说清卡在哪一步。
 import { useState } from 'react';
-import { Check, X } from 'lucide-react';
+import { CheckIcon as Check, XMarkIcon as X } from '@heroicons/react/24/outline';
 import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
 import { Collapse, CollapseChevron } from '../../../ui/collapse';
@@ -94,13 +94,11 @@ export function SetupProgress({
     <div className="grid gap-3 rounded-card border border-line bg-field p-3.5">
       {failure ? (
         <div className="grid gap-1" role="alert">
-          <p className="flex items-center gap-1.5 text-sm font-medium text-danger">
+          <p className="flex items-center gap-1.5 text-ui-headline text-danger">
             <X className="size-4 shrink-0" />
             {failureTitle(failedLine?.step)}
           </p>
-          <p className="pl-5.5 text-xs leading-relaxed [overflow-wrap:anywhere] text-ink-2">
-            {failure}
-          </p>
+          <p className="pl-5.5 text-ui-subhead wrap-anywhere text-ink-2">{failure}</p>
           <div className="flex gap-2 pt-1.5 pl-5.5">
             <Button onClick={onRetry} size="sm" type="button" variant="secondary">
               重试
@@ -113,9 +111,9 @@ export function SetupProgress({
           </div>
         </div>
       ) : (
-        <p className="flex items-center gap-1.5 text-sm font-medium text-ink" role="status">
+        <p className="flex items-center gap-1.5 text-ui-headline text-ink" role="status">
           {running ? (
-            <Spinner className="shrink-0 text-ink-3" />
+            <Spinner className="shrink-0 text-ink-2" />
           ) : (
             <Check className="size-4 shrink-0 text-success" />
           )}
@@ -127,7 +125,7 @@ export function SetupProgress({
         </p>
       )}
 
-      <ol className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+      <ol className="flex flex-wrap gap-x-3 gap-y-1 text-ui-subhead">
         {visibleSteps.map((step) => {
           const status = statusOf(log, step, done && !failure);
           if (status === 'skipped' && step === 'upload') return null;
@@ -135,18 +133,18 @@ export function SetupProgress({
             <li
               className={cn(
                 'flex items-center gap-1',
-                status === 'pending' && 'text-ink-3/60',
+                status === 'pending' && 'text-ink-2',
                 status === 'running' && 'font-medium text-ink',
                 status === 'done' && 'text-ink-2',
-                status === 'skipped' && 'text-ink-3/60',
+                status === 'skipped' && 'text-ink-2',
                 status === 'failed' && 'font-medium text-danger',
               )}
               key={step}
             >
               {status === 'done' || status === 'skipped' ? (
-                <Check className="size-3 text-success" aria-hidden="true" />
+                <Check className="size-4 text-success" aria-hidden="true" />
               ) : status === 'failed' ? (
-                <X className="size-3" aria-hidden="true" />
+                <X className="size-4" aria-hidden="true" />
               ) : status === 'running' ? (
                 <span
                   aria-hidden="true"
@@ -175,11 +173,11 @@ export function SetupProgress({
             role="progressbar"
           >
             <div
-              className="h-full rounded-full bg-ink-2 transition-[width] duration-slow"
+              className="h-full rounded-full bg-ink-2 "
               style={{ width: `${(upload.bytes.sent / upload.bytes.total) * 100}%` }}
             />
           </div>
-          <p className="text-right text-xs tabular-nums text-ink-3">
+          <p className="text-right text-ui-subhead tabular-nums text-ink-2">
             {formatBytes(upload.bytes.sent)} / {formatBytes(upload.bytes.total)}
           </p>
         </div>
@@ -188,7 +186,7 @@ export function SetupProgress({
       <div className="grid gap-1.5">
         <button
           aria-expanded={expanded}
-          className="flex w-fit items-center gap-1 text-xs text-ink-3 transition-colors duration-base hover:text-ink-2"
+          className="flex w-fit items-center gap-1 text-ui-subhead text-ink-2 transition-colors duration-base hover:text-ink-2"
           onClick={() => setExpanded((value) => !value)}
           type="button"
         >
@@ -197,19 +195,19 @@ export function SetupProgress({
         </button>
         <Collapse open={expanded}>
           <div
-            className="grid max-h-36 content-start gap-0.5 overflow-y-auto rounded-control bg-surface px-2.5 py-2 font-mono text-xs leading-[1.7]"
+            className="grid max-h-36 content-start gap-0.5 overflow-y-auto rounded-control bg-surface px-2.5 py-2 font-mono text-ui-subhead"
             role="log"
           >
             {lines.length === 0 ? (
-              <p className="text-ink-3">等待服务器响应…</p>
+              <p className="text-ink-2">等待服务器响应…</p>
             ) : (
               lines.map((line, index) => (
                 <p
                   className={cn('flex min-w-0 gap-2', line.ok === false && 'text-danger')}
                   key={`${index}-${line.step}`}
                 >
-                  <span className="w-7 shrink-0 text-ink-3">{stepLabels[line.step]}</span>
-                  <span className="min-w-0 [overflow-wrap:anywhere] text-ink-2">
+                  <span className="w-7 shrink-0 text-ink-2">{stepLabels[line.step]}</span>
+                  <span className="min-w-0 wrap-anywhere text-ink-2">
                     {line.ok === false ? '✕ ' : line.ok ? '✓ ' : ''}
                     {line.detail}
                     {line.bytes && line.detail ? ` · ${formatBytes(line.bytes.total)}` : ''}

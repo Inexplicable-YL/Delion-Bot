@@ -1,17 +1,17 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Circle,
-  CircleCheckBig,
-  List,
-  Pencil,
-  Plus,
-  Trash2,
-  X,
-} from 'lucide-react';
+  CalendarDaysIcon as CalendarDays,
+  CheckCircleIcon as CircleCheckBig,
+  ChevronLeftIcon as ChevronLeft,
+  ChevronRightIcon as ChevronRight,
+  ListBulletIcon as List,
+  MinusCircleIcon as Circle,
+  PencilIcon as Pencil,
+  PlusIcon as Plus,
+  TrashIcon as Trash2,
+  XMarkIcon as X,
+} from '@heroicons/react/24/outline';
 import { createClient, errorMessage } from '../../../core/protocol/contract';
 import {
   todoCompleted,
@@ -23,18 +23,21 @@ import {
   type TodoState,
 } from '../contract';
 import { Button } from '../../../ui/button';
+import { ConfirmDialog } from '../../../ui/dialog';
+import { Textarea } from '../../../ui/textarea';
 import { useNow } from '../../../ui/use-now';
 import { CountBadge } from '../../../ui/count-badge';
 import { EmptyState } from '../../../ui/empty-state';
 import { Card } from '../../../ui/card';
 import { Input } from '../../../ui/input';
+import { Field } from '../../../ui/field';
+import { IconButton } from '../../../ui/icon-button';
 import { SegmentedControl } from '../../../ui/segmented-control';
 import { Switch } from '../../../ui/switch';
 import { cn } from '../../../ui/cn';
 import { showToast } from '../../../ui/toast';
 import { EventColorRow } from './EventColorRow';
-import { roundToMinute, startOfDay } from './calendar';
-import { DateTimeStepper } from './DateTimeStepper';
+import { dateKey, startOfDay } from './calendar';
 import { TodoCalendar } from './TodoCalendar';
 import { monthLabel } from './todo-calendar';
 import { TodoDetail } from './TodoDetail';
@@ -53,14 +56,16 @@ export function useTodoState() {
   return useQuery({ queryKey: ['todo', 'state'], queryFn: () => todo.state() });
 }
 
-const inputClass =
-  'w-full rounded-control bg-field px-2.5 py-1.5 text-sm text-ink shadow-hairline outline-none transition-[background-color,box-shadow] duration-base placeholder:text-ink-3 focus-visible:bg-surface focus-visible:shadow-focus';
+function deadlineFields(date: Date) {
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  return { date: dateKey(date), time: `${hour}:${minute}` };
+}
 
-/** 新建待办的默认截止时间取当天结束，避免保存瞬间就被判为「已过截止时间」。 */
-function defaultDueAt(): Date {
+function defaultDeadline() {
   const date = new Date();
   date.setHours(23, 59, 0, 0);
-  return date;
+  return deadlineFields(date);
 }
 
 const rowActionClass =
@@ -81,79 +86,88 @@ function TodoComposer({
 }) {
   const [title, setTitle] = useState(item?.title ?? '');
   const [notes, setNotes] = useState(item?.notes ?? '');
-  // 新建默认到今天结束：取当前时刻会让待办一保存就显示「已过截止时间」。
-  // 编辑保留原值，允许为空。
-  const [dueAt, setDueAt] = useState<Date | null>(() =>
-    item ? (item.dueAt ? roundToMinute(new Date(item.dueAt)) : null) : defaultDueAt(),
+  const [deadline, setDeadline] = useState(() =>
+    item ? (item.dueAt ? deadlineFields(new Date(item.dueAt)) : null) : defaultDeadline(),
   );
   const [color, setColor] = useState<CalendarEventColor>(item?.color ?? 'slate');
   return (
-    <TodoSheet
-      label={item ? '编辑待办' : '新建待办'}
-      title={item ? '编辑待办' : '新建待办'}
-      onClose={onCancel}
-    >
+    <TodoSheet title={item ? '编辑待办' : '新建待办'} onClose={onCancel}>
       <form
-        className="mt-4 flex flex-col gap-4"
+        className="mt-app-gap flex flex-col gap-app-gap"
         onSubmit={(event) => {
           event.preventDefault();
           onSave({
             id: item?.id,
             title,
             notes,
-            dueAt: dueAt ? dueAt.toISOString() : null,
+            dueAt: deadline ? new Date(`${deadline.date}T${deadline.time}`).toISOString() : null,
             color,
           });
         }}
       >
-        <Input
-          aria-label="标题"
-          autoFocus
-          className="h-10 px-0 text-base font-medium"
-          maxLength={200}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="例如：准备周会材料"
-          value={title}
-          variant="ghost"
-        />
-        <Card className="grid divide-y">
-          <div className="flex min-h-11 items-center gap-2 px-3">
-            <span className="w-8 shrink-0 text-xs text-ink-3">截止</span>
-            <div className="min-w-0 flex-1">
-              {dueAt === null ? (
-                <Button type="button" variant="outline" onClick={() => setDueAt(defaultDueAt())}>
-                  <Plus className="size-4" />
-                  设置截止时间
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <DateTimeStepper onChange={setDueAt} value={dueAt} />
-                  </div>
-                  <button
-                    className="inline-flex shrink-0 items-center gap-1 text-xs text-ink-3 transition-colors hover:text-ink"
-                    onClick={() => setDueAt(null)}
-                    type="button"
-                  >
-                    <X className="size-3" />
-                    清除
-                  </button>
-                </div>
-              )}
+        <Field label="标题">
+          <Input
+            aria-label="标题"
+            autoFocus
+            maxLength={200}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="例如：准备周会材料"
+            value={title}
+          />
+        </Field>
+        <fieldset className="min-w-0">
+          <legend className="text-ui-body">截止时间</legend>
+          {deadline ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Input
+                aria-label="截止日期"
+                className="w-auto flex-2"
+                max="9999-12-31"
+                min="0001-01-01"
+                onChange={(event) => setDeadline({ ...deadline, date: event.target.value })}
+                required
+                type="date"
+                value={deadline.date}
+              />
+              <Input
+                aria-label="截止时刻"
+                className="w-auto flex-1"
+                onChange={(event) => setDeadline({ ...deadline, time: event.target.value })}
+                required
+                type="time"
+                value={deadline.time}
+              />
+              <IconButton
+                aria-label="清除截止时间"
+                title="清除截止时间"
+                onClick={() => setDeadline(null)}
+              >
+                <X />
+              </IconButton>
             </div>
-          </div>
-          <EventColorRow onColorChange={setColor} value={color} />
-        </Card>
-        <textarea
-          aria-label="备注"
-          className={cn(inputClass, 'min-h-20 resize-y')}
-          maxLength={10000}
-          onChange={(event) => setNotes(event.target.value)}
-          placeholder="备注"
-          rows={3}
-          value={notes}
-        />
-        <div className="flex items-center justify-between gap-2">
+          ) : (
+            <Button
+              className="mt-2"
+              variant="secondary"
+              onClick={() => setDeadline(defaultDeadline())}
+            >
+              <Plus />
+              设置截止时间
+            </Button>
+          )}
+        </fieldset>
+        <EventColorRow onColorChange={setColor} value={color} />
+        <Field label="备注">
+          <Textarea
+            className="min-h-20 resize-y"
+            maxLength={10000}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="添加备注"
+            rows={3}
+            value={notes}
+          />
+        </Field>
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2">
           {item && onDelete ? (
             <Button
               variant="ghost"
@@ -169,10 +183,10 @@ function TodoComposer({
             <span />
           )}
           <div className="flex gap-2">
-            <Button type="button" variant="ghost" onClick={onCancel}>
+            <Button type="button" variant="secondary" onClick={onCancel}>
               取消
             </Button>
-            <Button disabled={busy || !title.trim()} type="submit">
+            <Button disabled={busy || !title.trim()} type="submit" variant="accent">
               保存
             </Button>
           </div>
@@ -194,6 +208,7 @@ export function TodoView({ target }: { target: NavTargets['todo'] }) {
   const [detailId, setDetailId] = useState<string | null>(target.todoId ?? null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [deleting, setDeleting] = useState<TodoItem | null>(null);
   // 每次跳转都是新对象，据此在渲染中切到它的详情。
   const [shownTarget, setShownTarget] = useState(target);
   if (target !== shownTarget) {
@@ -230,101 +245,97 @@ export function TodoView({ target }: { target: NavTargets['todo'] }) {
   const stepMonth = (amount: number) =>
     setMonth(new Date(month.getFullYear(), month.getMonth() + amount, 1));
   return (
-    <div className="relative mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden px-6 py-6 max-md:px-4">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">TODO</h1>
-          {view === 'calendar' && (
-            <span className="flex items-center gap-0.5">
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label="上个月"
-                onClick={() => stepMonth(-1)}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-              <span className="min-w-28 text-center text-sm font-medium tabular-nums text-ink">
-                {monthLabel(month)}
-              </span>
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label="下个月"
-                onClick={() => stepMonth(1)}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex gap-1">
-            <Button
-              size="sm"
-              disabled={!window.delionBot}
-              onClick={() => {
-                setCreating(true);
-                setEditingId(null);
-                setDetailId(null);
-              }}
-            >
-              <Plus className="size-4" />
-              新建待办
-            </Button>
+    <div className="min-h-0 flex-1 overflow-y-auto bg-page">
+      <div className="mx-auto grid w-full max-w-todo gap-app-gap p-app">
+        <header className="flex flex-wrap items-start justify-between gap-app-gap">
+          <div className="grid gap-1">
+            <h1 className="text-ui-large-title">待办</h1>
+            <p className="flex items-center gap-2 text-ui-callout text-ink-2">
+              未完成 <CountBadge count={pendingCount} />
+            </p>
           </div>
-        </div>
-      </header>
-      {error && (
-        <ErrorText size="sm" className="mt-3">
-          {error}
-        </ErrorText>
-      )}
-      <div className="flex flex-wrap items-center gap-2 py-4">
-        <span className="flex items-center gap-2 text-xs text-ink-3">
-          未完成 <CountBadge count={pendingCount} />
-        </span>
-        <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-2">
-          <label className="flex items-center gap-2 text-xs text-ink-3">
-            <Switch
-              checked={showCompleted}
-              label="显示已完成"
-              onChange={(showCompleted) => useTodoPreferences.setState({ showCompleted })}
-            />
-            显示已完成
-          </label>
+          <Button
+            variant="accent"
+            disabled={!window.delionBot}
+            onClick={() => {
+              setCreating(true);
+              setEditingId(null);
+              setDetailId(null);
+            }}
+          >
+            <Plus />
+            新建待办
+          </Button>
+        </header>
+        {error && <ErrorText size="sm">{error}</ErrorText>}
+        <div className="flex flex-wrap items-center justify-between gap-app-gap">
           <SegmentedControl
+            aria-label="待办视图"
             icons={{ calendar: CalendarDays, list: List }}
             labels={{ calendar: '日历', list: '列表' }}
             onChange={setView}
             options={views}
             value={view}
           />
+          <div className="flex items-center gap-2 text-ui-callout text-ink-2">
+            显示已完成
+            <Switch
+              checked={showCompleted}
+              label="显示已完成"
+              onChange={(showCompleted) => useTodoPreferences.setState({ showCompleted })}
+            />
+          </div>
         </div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none]">
         {!state ? (
-          <p className="py-8 text-center text-sm text-ink-3">
+          <p className="py-8 text-center text-ui-body text-ink-2">
             {window.delionBot ? '正在加载…' : '请在 Delion Bot 桌面端使用 TODO'}
           </p>
         ) : view === 'calendar' ? (
-          <TodoCalendar items={items} month={month} onOpenItem={(item) => setDetailId(item.id)} />
+          <Card className="overflow-visible" asChild>
+            <section aria-labelledby="todo-calendar-month">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-card-ui py-2">
+                <h2 className="text-ui-title-2 tabular-nums" id="todo-calendar-month">
+                  {monthLabel(month)}
+                </h2>
+                <div aria-label="切换月份" className="flex items-center gap-1" role="group">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setMonth(startOfDay(new Date()))}
+                  >
+                    今天
+                  </Button>
+                  <IconButton aria-label="上个月" title="上个月" onClick={() => stepMonth(-1)}>
+                    <ChevronLeft />
+                  </IconButton>
+                  <IconButton aria-label="下个月" title="下个月" onClick={() => stepMonth(1)}>
+                    <ChevronRight />
+                  </IconButton>
+                </div>
+              </div>
+              <TodoCalendar
+                items={items}
+                month={month}
+                onOpenItem={(item) => setDetailId(item.id)}
+              />
+            </section>
+          </Card>
         ) : !items.length ? (
           <EmptyState title="暂无符合条件的待办" />
         ) : (
-          <ul className="space-y-1">
+          <ul className="overflow-hidden rounded-card bg-surface shadow-card">
             {items.map((item) => {
               const done = todoCompleted(item.status);
               const overdue = !done && item.dueAt && Date.parse(item.dueAt) < now;
               return (
                 <li
                   key={item.id}
-                  className="group flex items-start gap-3 rounded-card px-3 py-2.5 transition-colors duration-base hover:bg-hover"
+                  className="group flex items-start gap-3 min-h-row-regular border-b border-line px-3 py-2.5 transition-colors duration-base last:border-0 hover:bg-hover"
                 >
                   <button
                     type="button"
                     disabled={busy}
-                    className="mt-0.5 shrink-0 text-ink-3 hover:text-ink"
+                    className="mt-0.5 shrink-0 text-ink-2 hover:text-ink"
                     aria-label={done ? `重新打开 ${item.title}` : `完成 ${item.title}`}
                     onClick={() =>
                       void run(() =>
@@ -344,12 +355,16 @@ export function TodoView({ target }: { target: NavTargets['todo'] }) {
                     onClick={() => setDetailId(item.id)}
                   >
                     <div className="flex items-center gap-2">
-                      <span className={cn('break-words text-sm font-medium', done && 'text-ink-3')}>
+                      <span className={cn('break-words text-ui-headline', done && 'text-ink-2')}>
                         {item.title}
                       </span>
                     </div>
-                    <p className="mt-1 text-xs text-ink-3">{todoStatusLabels[item.status]}</p>
-                    <p className={cn('mt-1 text-xs', overdue ? 'text-danger' : 'text-ink-3')}>
+                    <p className="mt-1 text-ui-subhead text-ink-2">
+                      {todoStatusLabels[item.status]}
+                    </p>
+                    <p
+                      className={cn('mt-1 text-ui-subhead', overdue ? 'text-danger' : 'text-ink-2')}
+                    >
                       {overdue ? '已过截止时间 · ' : ''}
                       {dateLabel(item.dueAt)}
                     </p>
@@ -376,11 +391,7 @@ export function TodoView({ target }: { target: NavTargets['todo'] }) {
                       className={rowActionClass}
                       aria-label={`删除 ${item.title}`}
                       title="删除"
-                      onClick={() =>
-                        void run(() => todo.remove(item.id), {
-                          failTitle: '删除待办失败',
-                        })
-                      }
+                      onClick={() => setDeleting(item)}
                     >
                       <Trash2 className="size-4" />
                     </Button>
@@ -400,11 +411,7 @@ export function TodoView({ target }: { target: NavTargets['todo'] }) {
             setDetailId(null);
             setEditingId(detail.id);
           }}
-          onDelete={() =>
-            void run(() => todo.remove(detail.id), {
-              failTitle: '删除待办失败',
-            })
-          }
+          onDelete={() => setDeleting(detail)}
         />
       )}
       {(creating || editing) && (
@@ -416,15 +423,7 @@ export function TodoView({ target }: { target: NavTargets['todo'] }) {
             setCreating(false);
             setEditingId(null);
           }}
-          onDelete={
-            editing
-              ? () =>
-                  void run(() => todo.remove(editing.id), {
-                    after: () => setEditingId(null),
-                    failTitle: '删除待办失败',
-                  })
-              : undefined
-          }
+          onDelete={editing ? () => setDeleting(editing) : undefined}
           onSave={(input) =>
             void run(() => todo.save(input), {
               after: () => {
@@ -436,6 +435,26 @@ export function TodoView({ target }: { target: NavTargets['todo'] }) {
           }
         />
       )}
+      <ConfirmDialog
+        open={deleting !== null}
+        onOpenChange={(open) => !open && !busy && setDeleting(null)}
+        title="删除待办？"
+        description={deleting ? `将永久删除「${deleting.title}」。` : ''}
+        confirmLabel="删除待办"
+        busy={busy}
+        destructive
+        onConfirm={() => {
+          if (!deleting) return;
+          void run(() => todo.remove(deleting.id), {
+            after: () => {
+              if (detailId === deleting.id) setDetailId(null);
+              if (editingId === deleting.id) setEditingId(null);
+              setDeleting(null);
+            },
+            failTitle: '删除待办失败',
+          });
+        }}
+      />
     </div>
   );
 }

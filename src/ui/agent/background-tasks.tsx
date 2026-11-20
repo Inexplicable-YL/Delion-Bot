@@ -1,6 +1,11 @@
 'use client';
 
-import { Bot, Layers, Square, SquareTerminal } from 'lucide-react';
+import {
+  CommandLineIcon as SquareTerminal,
+  CpuChipIcon as Bot,
+  RectangleStackIcon as Layers,
+  StopIcon as Square,
+} from '@heroicons/react/24/outline';
 import { cn } from '../cn';
 import { IconButton } from '../icon-button';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover';
@@ -28,12 +33,12 @@ export function BackgroundTasks({
       <PopoverTrigger asChild>
         <button
           aria-label={`后台任务（${tasks.length} 个运行中）`}
-          className="flex h-7 shrink-0 items-center gap-1 rounded-control px-1.5 text-ink-3 transition-colors duration-base hover:bg-hover hover:text-ink"
+          className="flex h-7 shrink-0 items-center gap-1 rounded-control px-1.5 text-ink-2 transition-colors duration-base hover:bg-hover hover:text-ink"
           title="后台任务"
           type="button"
         >
           <Layers className="size-4" />
-          <span className="text-xs tabular-nums">{tasks.length}</span>
+          <span className="text-ui-subhead tabular-nums">{tasks.length}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" aria-label="后台任务" className="w-72" side="top">
@@ -56,10 +61,10 @@ function BackgroundTaskList({
         const Icon = task.kind === 'bash' ? SquareTerminal : Bot;
         const label = (
           <>
-            <Icon className="size-3.5 shrink-0 text-ink-3" />
+            <Icon className="size-3.5 shrink-0 text-ink-2" />
             <span
               className={cn(
-                'min-w-0 flex-1 truncate text-sm text-ink',
+                'min-w-0 flex-1 truncate text-ui-body text-ink',
                 task.kind === 'bash' && 'font-mono',
               )}
               title={task.label}
@@ -82,7 +87,7 @@ function BackgroundTaskList({
             ) : (
               label
             )}
-            <span className="shrink-0 text-xs tabular-nums text-ink-3">
+            <span className="shrink-0 text-ui-subhead tabular-nums text-ink-2">
               {formatElapsed(now - task.startedAt)}
             </span>
             <IconButton aria-label="停止" onClick={() => onStop(task.id)} title="停止">

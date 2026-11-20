@@ -3,7 +3,7 @@ import type * as React from 'react';
 import { cn } from './cn';
 
 function TooltipProvider({
-  delayDuration = 0,
+  delayDuration = 500,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return (
@@ -37,7 +37,7 @@ function TooltipContent({
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         className={cn(
-          'z-overlay w-fit max-w-80 rounded-control bg-(--tooltip-bg) px-2 py-1 text-xs font-medium text-(--tooltip-fg) shadow-tooltip animate-pop-in',
+          'z-tooltip w-fit max-w-80 rounded-chip touch:hidden bg-(--tooltip-bg) px-2 py-1 text-ui-subhead text-(--tooltip-fg) shadow-tooltip animate-pop-in',
           className,
         )}
         data-slot="tooltip-content"

@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Terminal, Trash2 } from 'lucide-react';
+import {
+  CommandLineIcon as Terminal,
+  PencilIcon as Pencil,
+  PlusIcon as Plus,
+  TrashIcon as Trash2,
+} from '@heroicons/react/24/outline';
 import { agentClient, chatClient } from '../../../chat/view';
 import { Button } from '../../../../ui/button';
 import { Input } from '../../../../ui/input';
@@ -73,7 +78,7 @@ export function CommandsSection() {
     <div className="grid gap-10">
       <SectionHeader title="自定义指令" />
       {!window.delionBot ? (
-        <p className="text-sm text-ink-3">指令配置仅在桌面端可用。</p>
+        <p className="text-ui-body text-ink-2">指令配置仅在桌面端可用。</p>
       ) : (
         <>
           <div className="grid gap-2" data-setting-id="instruction">
@@ -83,7 +88,7 @@ export function CommandsSection() {
             />
             <textarea
               aria-label="全局指令"
-              className="min-h-24 rounded-control bg-field px-2.5 py-1.5 text-sm leading-relaxed text-ink shadow-hairline outline-none transition-[background-color,box-shadow] duration-base placeholder:text-ink-3 focus-visible:bg-surface focus-visible:shadow-focus"
+              className="min-h-24 rounded-control bg-field px-2.5 py-1.5 text-ui-body text-ink shadow-hairline outline-none transition-[background-color,box-shadow] duration-base placeholder:text-ink-2 focus-visible:bg-surface focus-visible:shadow-focus"
               disabled={instruction === undefined || instructionBusy}
               maxLength={2000}
               onChange={(event) => {
@@ -118,7 +123,7 @@ export function CommandsSection() {
               title="快捷指令"
             >
               {commands?.length === 0 && (
-                <p className="py-3.5 text-sm text-ink-3">
+                <p className="py-3.5 text-ui-body text-ink-2">
                   还没有自定义指令，例如「周报」：汇总本周日程与未读邮件。
                 </p>
               )}
@@ -131,11 +136,14 @@ export function CommandsSection() {
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span className="grid size-8 shrink-0 place-items-center rounded-card bg-fill">
-                          <Terminal className="size-4 text-ink-3" strokeWidth={1.8} />
+                          <Terminal className="size-4 text-ink-2" />
                         </span>
                         <div className="grid min-w-0 gap-0.5">
-                          <strong className="truncate text-sm">/{command.name}</strong>
-                          <span className="truncate text-xs text-ink-3" title={command.prompt}>
+                          <strong className="truncate text-ui-body">/{command.name}</strong>
+                          <span
+                            className="truncate text-ui-subhead text-ink-2"
+                            title={command.prompt}
+                          >
                             {command.prompt}
                           </span>
                         </div>
@@ -226,7 +234,7 @@ function CommandFormDialog({
 
   return (
     <Dialog onOpenChange={(open) => !open && !busy && onClose()} open>
-      <DialogContent scroll>
+      <DialogContent>
         <DialogTitle>
           {editing.mode === 'create' ? '新建指令' : `编辑 /${editing.command.name}`}
         </DialogTitle>
@@ -242,7 +250,6 @@ function CommandFormDialog({
         >
           <Field label="名称">
             <div className="flex items-center gap-1">
-              <span className="text-ink-3">/</span>
               <Input
                 autoComplete="off"
                 onChange={(event) => setName(event.target.value)}
@@ -254,7 +261,7 @@ function CommandFormDialog({
           </Field>
           <Field label="指令内容">
             <textarea
-              className="min-h-28 rounded-control bg-field px-2.5 py-1.5 text-sm text-ink shadow-hairline outline-none transition-[background-color,box-shadow] duration-base placeholder:text-ink-3 focus-visible:bg-surface focus-visible:shadow-focus"
+              className="min-h-28 rounded-control bg-field px-2.5 py-1.5 text-ui-body text-ink shadow-hairline outline-none transition-[background-color,box-shadow] duration-base placeholder:text-ink-2 focus-visible:bg-surface focus-visible:shadow-focus"
               maxLength={2000}
               onChange={(event) => setPrompt(event.target.value)}
               placeholder="每周帮我汇总待办和未读邮件"

@@ -2,7 +2,10 @@
 // 事实都在主进程；这里只记「每台服务器上次停在哪个目录」这类偏好。
 import { useState } from 'react';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Settings2 } from 'lucide-react';
+import {
+  AdjustmentsVerticalIcon as Settings2,
+  PlusIcon as Plus,
+} from '@heroicons/react/24/outline';
 import { Button } from '../../../../ui/button';
 import { Input } from '../../../../ui/input';
 import {
@@ -94,7 +97,7 @@ export function NewRemoteProjectDialog({
           if ((event.target as Element | null)?.closest('[data-toast-host]'))
             event.preventDefault();
         }}
-        className="grid max-h-[85vh] max-w-xl grid-rows-[auto_1fr] gap-4 p-5"
+        className="grid max-h-dialog max-w-xl grid-rows-[auto_1fr] gap-4 p-5"
       >
         <NewRemoteProjectPanel
           importing={importing}
@@ -280,7 +283,7 @@ function NewRemoteProjectPanel({
             />
           </Field>
 
-          <div className="grid gap-1.5 text-xs text-ink-2">
+          <div className="grid gap-1.5 text-ui-subhead text-ink-2">
             服务器
             <div className="flex items-center gap-2">
               <Select onValueChange={chooseValue} value={connectionId ?? ''}>
@@ -299,7 +302,7 @@ function NewRemoteProjectPanel({
                           />
                           <span className="truncate">{item.label}</span>
                           {destinationOf(item) !== item.label && (
-                            <span className="truncate font-normal text-ink-3">
+                            <span className="truncate font-normal text-ink-2">
                               {destinationOf(item)}
                             </span>
                           )}
@@ -308,14 +311,14 @@ function NewRemoteProjectPanel({
                     );
                   })}
                   {candidates.length > 0 && (
-                    <p className="px-2 pt-2 pb-1 text-xs text-ink-3">来自 ~/.ssh/config</p>
+                    <p className="px-2 pt-2 pb-1 text-ui-subhead text-ink-2">来自 ~/.ssh/config</p>
                   )}
                   {candidates.map((host) => (
                     <SelectItem key={host.alias} value={configValue(host.alias)}>
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="size-1.5 shrink-0 rounded-full border border-line-strong" />
                         <span className="truncate">{host.alias}</span>
-                        <span className="truncate font-normal text-ink-3">
+                        <span className="truncate font-normal text-ink-2">
                           {candidateDetail(host)}
                         </span>
                       </span>
@@ -323,7 +326,7 @@ function NewRemoteProjectPanel({
                   ))}
                   <SelectItem value={NEW_CONNECTION}>
                     <span className="flex items-center gap-2">
-                      <Plus className="size-3.5" />
+                      <Plus className="size-4" />
                       新建连接…
                     </span>
                   </SelectItem>
@@ -346,8 +349,8 @@ function NewRemoteProjectPanel({
           <div className="grid min-h-0 content-start gap-3">
             {connections !== null && connections.length === 0 && candidates.length === 0 && (
               <div className="grid gap-2 rounded-card border border-dashed border-line px-4 py-6 text-center">
-                <p className="text-sm text-ink-2">还没有可用的服务器</p>
-                <p className="text-xs text-ink-3">
+                <p className="text-ui-body text-ink-2">还没有可用的服务器</p>
+                <p className="text-ui-subhead text-ink-2">
                   新建一个 SSH 连接；在 ~/.ssh/config 里配置过的主机会自动出现在这里。
                 </p>
                 <Button
@@ -387,7 +390,10 @@ function NewRemoteProjectPanel({
           <div className="grid gap-2">
             {error && <ErrorText>{error}</ErrorText>}
             <div className="flex items-center justify-between gap-3">
-              <p className="min-w-0 truncate text-xs text-ink-3" title={target ?? undefined}>
+              <p
+                className="min-w-0 truncate text-ui-subhead text-ink-2"
+                title={target ?? undefined}
+              >
                 {target ? (
                   <>
                     项目目录 <code className="font-mono text-ink-2">{tildePath(target, home)}</code>

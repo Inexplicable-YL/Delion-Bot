@@ -25,12 +25,12 @@ export function CredentialRow({
     >
       <div className="flex min-w-0 items-center gap-3">
         <span className="grid size-8 shrink-0 place-items-center rounded-card bg-fill">
-          <Icon className="size-4 text-ink-3" strokeWidth={1.8} />
+          <Icon className="size-4 text-ink-2" strokeWidth={1.8} />
         </span>
         <div className="grid min-w-0 gap-0.5">
-          <strong className="text-sm">{name}</strong>
+          <strong className="text-ui-body">{name}</strong>
           {description && (
-            <span className="truncate text-xs text-ink-3" title={description}>
+            <span className="truncate text-ui-subhead text-ink-2" title={description}>
               {description}
             </span>
           )}
@@ -39,8 +39,8 @@ export function CredentialRow({
       <div className="flex min-w-0 items-center gap-2">
         <span
           className={cn(
-            'flex min-w-18 max-w-40 items-center gap-1.5 text-xs max-md:min-w-0',
-            connected ? 'text-ink' : 'text-ink-3',
+            'flex min-w-18 max-w-40 items-center gap-1.5 text-ui-subhead max-md:min-w-0',
+            connected ? 'text-ink' : 'text-ink-2',
           )}
           title={status}
         >

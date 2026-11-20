@@ -1,7 +1,10 @@
 // 回答末尾的「本轮改动」卡片：数据取自主进程冻结的轮次 diff（目录前后快照比较，
 // 覆盖 bash 等一切写文件的途径）；默认折叠防大轮次刷屏。
 import { useQuery } from '@tanstack/react-query';
-import { CodeXml, FolderOpen } from 'lucide-react';
+import {
+  CodeBracketIcon as CodeXml,
+  FolderOpenIcon as FolderOpen,
+} from '@heroicons/react/24/outline';
 import type { FileChangeSummary } from '../../../core/protocol/agent';
 import { ChangedFile, ChangesCard } from '../../../ui/agent/changes';
 import { showToast } from '../../../ui/toast';

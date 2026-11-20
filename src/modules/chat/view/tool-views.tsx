@@ -1,6 +1,9 @@
 import { lazy, Suspense } from 'react';
 import type { AgentToolResult, SubagentDetails } from '../../../core/protocol/agent';
-import { CodeXml, Terminal } from 'lucide-react';
+import {
+  CodeBracketIcon as CodeXml,
+  CommandLineIcon as Terminal,
+} from '@heroicons/react/24/outline';
 import { PlainLines, ToolCard } from '../../../ui/agent/tool-card';
 import { openLightbox } from '../../../ui/lightbox';
 import { SubagentCard } from '../../../ui/agent/task';
@@ -21,7 +24,7 @@ const CodeFileCard = lazy(() =>
 // read 读到图片时直接预览图片本体。输出形状见 core/protocol/agent 的 AgentToolOutput（text + image + 工具 details）。
 
 function Caption({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs text-ink-3">{children}</p>;
+  return <p className="text-ui-subhead text-ink-2">{children}</p>;
 }
 
 type ViewProps = { result: AgentToolResult; failed: boolean };
@@ -45,7 +48,7 @@ function BashView({ result, failed }: ViewProps) {
         bodyClassName="max-h-64 overflow-y-auto"
         copyText={`${command}${command && stdout ? '\n\n' : ''}${stdout}`}
         failed={failed}
-        icon={<Terminal aria-hidden className="size-3.5 shrink-0 text-ink-3" />}
+        icon={<Terminal aria-hidden className="size-4 shrink-0 text-ink-2" />}
         title="bash"
       >
         <PlainLines lines={lines} />
@@ -75,7 +78,7 @@ function TextView({ result, title, failed }: ViewProps & { title: string }) {
         bodyClassName="max-h-80 overflow-y-auto"
         copyText={text}
         failed={failed}
-        icon={<CodeXml aria-hidden className="size-3.5 shrink-0 text-ink-3" />}
+        icon={<CodeXml aria-hidden className="size-4 shrink-0 text-ink-2" />}
         title={title}
       >
         <PlainLines lines={text.split('\n')} />
@@ -177,8 +180,8 @@ function GenericView({ result, failed }: ViewProps) {
   return (
     <div className="mb-1 mt-1 min-w-0 space-y-1">
       {entries.map(([key, value]) => (
-        <p key={key} className="break-words text-xs leading-5">
-          <span className="text-ink-3">{key}: </span>
+        <p key={key} className="break-words text-ui-subhead">
+          <span className="text-ink-2">{key}: </span>
           <span className="text-ink-2">
             {typeof value === 'string' ? value : JSON.stringify(value)}
           </span>
@@ -189,7 +192,7 @@ function GenericView({ result, failed }: ViewProps) {
           bodyClassName="max-h-64 overflow-y-auto"
           copyText={text}
           failed={failed}
-          icon={<CodeXml aria-hidden className="size-3.5 shrink-0 text-ink-3" />}
+          icon={<CodeXml aria-hidden className="size-4 shrink-0 text-ink-2" />}
           title={result.name}
         >
           <PlainLines lines={text.split('\n')} />
@@ -244,7 +247,7 @@ export function ToolBody({
   return (
     <>
       {reasonOutsideBlock && (
-        <p className="mb-1.5 break-words whitespace-pre-wrap text-xs leading-5 text-ink-3">
+        <p className="mb-1.5 break-words whitespace-pre-wrap text-ui-subhead text-ink-2">
           {outputText(result) || '工具没有返回原因'}
         </p>
       )}

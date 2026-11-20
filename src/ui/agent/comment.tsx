@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, type ComponentProps, type ReactNode, type Ref } from 'react';
-import { Check, TextQuote, X } from 'lucide-react';
+import {
+  ChatBubbleBottomCenterTextIcon as TextQuote,
+  CheckIcon as Check,
+  XMarkIcon as X,
+} from '@heroicons/react/24/outline';
 import { cn } from '../cn';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../hover-card';
 import { IconButton } from '../icon-button';
@@ -9,7 +13,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '../popover';
 
 export type CommentItem = { quote: string; comment: string };
 
-const quoteBlock = 'whitespace-pre-wrap break-words border-l-2 border-line-strong pl-2 text-ink-3';
+const quoteBlock = 'whitespace-pre-wrap break-words border-l-2 border-line-strong pl-2 text-ink-2';
 
 // 聚焦不滚动消息视口；改评论时光标放在原文末尾。引用不变，所以只在挂载时执行。
 const focusAtEnd = (field: HTMLTextAreaElement | null) => {
@@ -33,7 +37,7 @@ export function CommentInput({
     <div className="flex items-end gap-1">
       <textarea
         aria-label="评论"
-        className="max-h-32 min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-sm leading-5 text-ink outline-none [field-sizing:content] placeholder:text-ink-3"
+        className="max-h-32 min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-ui-body text-ink outline-none [field-sizing:content] placeholder:text-ink-2"
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing) return;
@@ -52,12 +56,12 @@ export function CommentInput({
       />
       <button
         aria-label="确认"
-        className="flex size-7 shrink-0 items-center justify-center rounded-control bg-ink text-surface transition-transform duration-base active:scale-[0.94]"
+        className="flex size-7 shrink-0 items-center justify-center rounded-control bg-ink text-surface transition-transform duration-base active:scale-(--press-scale)"
         onClick={submit}
         title="确认"
         type="button"
       >
-        <Check className="size-4" strokeWidth={2.4} />
+        <Check className="size-4" />
       </button>
     </div>
   );
@@ -76,7 +80,7 @@ export function CommentFloat({
     <div
       className={cn(
         'absolute z-20 rounded-card bg-surface shadow-raised animate-pop-in',
-        editing ? 'w-80 max-w-[calc(100%-1rem)] p-1' : 'w-max p-0.5',
+        editing ? 'w-80 max-w-sheet p-1' : 'w-max p-0.5',
       )}
       ref={ref}
     >
@@ -88,7 +92,7 @@ export function CommentFloat({
 export function CommentFloatAction(props: ComponentProps<'button'>) {
   return (
     <button
-      className="flex h-7 select-none items-center gap-1.5 whitespace-nowrap rounded-control px-2 text-xs font-medium text-ink-2 transition-colors duration-fast hover:bg-hover hover:text-ink [&_svg]:size-3.5"
+      className="flex h-7 select-none items-center gap-1.5 whitespace-nowrap rounded-control px-2 text-ui-subhead text-ink-2 transition-colors duration-fast hover:bg-hover hover:text-ink [&_svg]:size-3.5"
       // 不抢焦点、不清选区：点下去之前选中的文字保持原样。
       onPointerDown={(event) => event.preventDefault()}
       type="button"
@@ -121,7 +125,7 @@ export function CommentChip({
         <PopoverAnchor asChild>
           <HoverCardTrigger asChild>
             <span
-              className="flex h-7 min-w-0 max-w-64 items-center rounded-control bg-field pr-0.5 text-xs text-ink-2 shadow-hairline"
+              className="flex h-7 min-w-0 max-w-64 items-center rounded-control bg-field pr-0.5 text-ui-subhead text-ink-2 shadow-hairline"
               style={{ animation: 'pop-in 200ms cubic-bezier(0.23,1,0.32,1) both' }}
             >
               <button
@@ -130,12 +134,12 @@ export function CommentChip({
                 onClick={() => setEditing(true)}
                 type="button"
               >
-                <TextQuote aria-hidden className="size-3.5 shrink-0 text-ink-3" />
-                {item.comment && <span className="max-w-24 truncate text-ink-3">{item.quote}</span>}
+                <TextQuote aria-hidden className="size-4 shrink-0 text-ink-2" />
+                {item.comment && <span className="max-w-24 truncate text-ink-2">{item.quote}</span>}
                 <span className="truncate">{item.comment || item.quote}</span>
               </button>
               <IconButton aria-label="移除评论" onClick={onRemove} size="sm">
-                <X strokeWidth={2.2} />
+                <X />
               </IconButton>
             </span>
           </HoverCardTrigger>
@@ -154,7 +158,7 @@ export function CommentChip({
         side="top"
         sideOffset={6}
       >
-        <blockquote className={cn(quoteBlock, 'mx-2 mt-1.5 line-clamp-3 text-xs leading-5')}>
+        <blockquote className={cn(quoteBlock, 'mx-2 mt-1.5 line-clamp-3 text-ui-subhead')}>
           {item.quote}
         </blockquote>
         <CommentInput

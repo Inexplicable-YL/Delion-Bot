@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Lock, Pencil, PlugZap, Plus, Search, Trash2 } from 'lucide-react';
+import {
+  BoltIcon as PlugZap,
+  CheckIcon as Check,
+  LockClosedIcon as Lock,
+  MagnifyingGlassIcon as Search,
+  PencilIcon as Pencil,
+  PlusIcon as Plus,
+  TrashIcon as Trash2,
+} from '@heroicons/react/24/outline';
 import { StatusPill } from '../../../../ui/status-pill';
 import { Switch } from '../../../../ui/switch';
 import { Button } from '../../../../ui/button';
@@ -55,7 +63,7 @@ function ProviderMonogram({ name, size }: { name: string; size: 'sm' | 'md' }) {
       aria-hidden="true"
       className={cn(
         'grid shrink-0 place-items-center rounded-card bg-fill font-medium text-ink-2',
-        size === 'sm' ? 'size-6 text-xs' : 'size-8 text-sm',
+        size === 'sm' ? 'size-6 text-ui-subhead' : 'size-8 text-ui-body',
       )}
     >
       {(name.trim()[0] ?? '新').toUpperCase()}
@@ -142,7 +150,7 @@ function CustomModelDialog({ model, settings, onClose, onSave }: ModelDialogProp
         if (!open) onClose();
       }}
     >
-      <DialogContent size="lg" scroll>
+      <DialogContent size="lg">
         <DialogHeader>
           <DialogTitle>编辑模型设置</DialogTitle>
           <DialogClose aria-label="关闭模型设置" />
@@ -181,33 +189,33 @@ function CustomModelDialog({ model, settings, onClose, onSave }: ModelDialogProp
             />
           </Field>
           <fieldset className="grid gap-2">
-            <legend className="mb-2 text-sm">输入类型</legend>
+            <legend className="mb-2 text-ui-body">输入类型</legend>
             <div className="flex flex-wrap gap-1.5">
               <span
-                className="flex items-center gap-1 rounded-control border border-transparent bg-selected px-2 py-1 text-xs text-ink"
+                className="flex items-center gap-1 rounded-control border border-transparent bg-selected px-2 py-1 text-ui-subhead text-ink"
                 title="文本输入固定开启"
               >
                 文本
-                <Lock aria-hidden="true" className="size-3" />
+                <Lock aria-hidden="true" className="size-4" />
               </span>
               <button
                 type="button"
                 aria-pressed={vision}
                 className={cn(
-                  'rounded-control border border-line px-2 py-1 text-xs transition-colors',
+                  'rounded-control border border-line px-2 py-1 text-ui-subhead transition-colors',
                   vision
                     ? 'border-transparent bg-selected text-ink'
-                    : 'text-ink-3 hover:bg-hover-strong',
+                    : 'text-ink-2 hover:bg-hover-strong',
                 )}
                 onClick={() => setVision((current) => !current)}
               >
                 视觉
               </button>
             </div>
-            <p className="text-xs text-ink-3">勾选视觉表示模型可读图片；文本固定开启。</p>
+            <p className="text-ui-subhead text-ink-2">勾选视觉表示模型可读图片；文本固定开启。</p>
           </fieldset>
           <fieldset className="grid gap-2">
-            <legend className="mb-2 text-sm">思考强度档位</legend>
+            <legend className="mb-2 text-ui-body">思考强度档位</legend>
             <div className="flex flex-wrap gap-1.5">
               {reasoningEffortLevels.map((level) => (
                 <button
@@ -215,10 +223,10 @@ function CustomModelDialog({ model, settings, onClose, onSave }: ModelDialogProp
                   type="button"
                   aria-pressed={effortLevels.includes(level)}
                   className={cn(
-                    'rounded-control border border-line px-2 py-1 text-xs transition-colors',
+                    'rounded-control border border-line px-2 py-1 text-ui-subhead transition-colors',
                     effortLevels.includes(level)
                       ? 'border-transparent bg-selected text-ink'
-                      : 'text-ink-3 hover:bg-hover-strong',
+                      : 'text-ink-2 hover:bg-hover-strong',
                   )}
                   onClick={() =>
                     setEffortLevels((current) =>
@@ -232,7 +240,7 @@ function CustomModelDialog({ model, settings, onClose, onSave }: ModelDialogProp
                 </button>
               ))}
             </div>
-            <p className="text-xs text-ink-3">
+            <p className="text-ui-subhead text-ink-2">
               未勾选时关闭思考强度选择；已勾选的档位可在对话输入框旁切换。
             </p>
           </fieldset>
@@ -358,7 +366,7 @@ function CatalogModelDialog({
             />
           </Field>
           {overCatalog && (
-            <p className="text-xs text-warning">
+            <p className="text-ui-subhead text-warning">
               超过厂商标注值：模型实际不支持时，请求会被服务拒绝，而不是自动压缩上下文。
             </p>
           )}
@@ -378,7 +386,7 @@ function CatalogModelDialog({
               </Select>
             </Field>
           ) : (
-            <p className="text-sm text-ink-3">这个模型不支持调节思考强度。</p>
+            <p className="text-ui-body text-ink-2">这个模型不支持调节思考强度。</p>
           )}
           {error && <ErrorText>{error}</ErrorText>}
           <div className="flex justify-end gap-2">
@@ -434,7 +442,7 @@ export function LlmSection() {
     return (
       <div className="grid gap-10" data-setting-id="providers">
         <SectionHeader title="模型服务" />
-        <p className="text-sm text-ink-3">模型服务配置仅在桌面端可用。</p>
+        <p className="text-ui-body text-ink-2">模型服务配置仅在桌面端可用。</p>
       </div>
     );
   }
@@ -475,7 +483,7 @@ export function LlmSection() {
           {groups.map(({ label, items }) =>
             items.length ? (
               <div className="grid" key={label}>
-                <p className="px-2 pb-1 pt-3 text-xs font-medium text-ink-3">{label}</p>
+                <p className="px-2 pb-1 pt-3 text-ui-subhead text-ink-2">{label}</p>
                 <ul className="grid gap-0.5">
                   {items.map((provider) => {
                     const active = detail?.mode === 'edit' && detail.id === provider.id;
@@ -484,7 +492,7 @@ export function LlmSection() {
                         <button
                           aria-current={active ? 'true' : undefined}
                           className={cn(
-                            'flex h-8 w-full min-w-0 items-center gap-2.5 rounded-card px-2 text-left text-sm transition-colors',
+                            'flex h-8 w-full min-w-0 items-center gap-2.5 rounded-card px-2 text-left text-ui-body transition-colors',
                             active
                               ? 'bg-hover font-medium text-ink'
                               : 'text-ink-2 hover:bg-hover hover:text-ink',
@@ -529,7 +537,9 @@ export function LlmSection() {
           </SettingsGroup>
         ) : providers?.length === 0 ? (
           <SettingsGroup>
-            <p className="py-3.5 text-sm text-ink-3">还没有配置提供商。添加一个以启用对话助手。</p>
+            <p className="py-3.5 text-ui-body text-ink-2">
+              还没有配置提供商。添加一个以启用对话助手。
+            </p>
           </SettingsGroup>
         ) : null}
       </div>
@@ -764,9 +774,7 @@ function ProviderDetail({
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <ProviderMonogram name={provider?.name ?? name} size="md" />
-          <strong className="truncate text-base font-semibold">
-            {provider?.name ?? '新建提供商'}
-          </strong>
+          <strong className="truncate text-ui-title-3">{provider?.name ?? '新建提供商'}</strong>
         </div>
         {provider && (
           <div className="flex shrink-0 items-center gap-2">
@@ -818,7 +826,7 @@ function ProviderDetail({
         }}
       >
         {creating ? (
-          <div className="grid gap-2 text-sm">
+          <div className="grid gap-2 text-ui-body">
             厂商
             <Select onValueChange={chooseVendor} value={piProvider ?? CUSTOM}>
               <SelectTrigger aria-label="厂商">
@@ -833,13 +841,13 @@ function ProviderDetail({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs leading-relaxed text-ink-3">
+            <p className="text-ui-subhead text-ink-2">
               内置厂商的协议与模型参数由 Pi 识别，目录定期从 pi.dev
               更新；列表里没有的服务选「自定义」。
             </p>
           </div>
         ) : piProvider ? (
-          <p className="text-xs text-ink-3 [overflow-wrap:anywhere]">
+          <p className="text-ui-subhead text-ink-2 wrap-anywhere">
             {vendor?.name ?? piProvider} · {provider.baseUrl}
           </p>
         ) : null}
@@ -870,7 +878,7 @@ function ProviderDetail({
             />
           </Field>
         )}
-        <div className="grid gap-2 text-sm">
+        <div className="grid gap-2 text-ui-body">
           <span>API Key</span>
           <Input
             autoComplete="off"
@@ -884,15 +892,15 @@ function ProviderDetail({
             type="password"
             value={apiKey}
           />
-          <p className="text-xs leading-relaxed text-ink-3">
+          <p className="text-ui-subhead text-ink-2">
             密钥经系统加密保存在本机，不会回传页面。留空即沿用已保存的密钥。
           </p>
         </div>
-        <div className="grid gap-2 text-sm">
+        <div className="grid gap-2 text-ui-body">
           <div className="flex items-center justify-between gap-2">
             <span>
               模型列表{' '}
-              <span className="text-xs text-ink-3">
+              <span className="text-ui-subhead text-ink-2">
                 {models.length} / {LLM_MODEL_LIMIT}
               </span>
             </span>
@@ -926,12 +934,12 @@ function ProviderDetail({
           {verifyResult && (
             <p
               className={cn(
-                'flex flex-wrap items-center gap-1.5 text-xs [overflow-wrap:anywhere]',
+                'flex flex-wrap items-center gap-1.5 text-ui-subhead wrap-anywhere',
                 verifyResult.ok ? 'text-success' : 'text-danger',
               )}
               role="status"
             >
-              {verifyResult.ok && <Check className="size-3.5 shrink-0" />}
+              {verifyResult.ok && <Check className="size-4 shrink-0" />}
               {verifyResult.message}
               {verifyResult.ok && verifyResult.models?.length ? (
                 <button
@@ -960,7 +968,7 @@ function ProviderDetail({
                 <li className="grid gap-1 px-3 py-2" key={id}>
                   <div className="flex min-w-0 items-center gap-2">
                     <span
-                      className="min-w-0 flex-1 truncate font-mono text-xs"
+                      className="min-w-0 flex-1 truncate font-mono text-ui-subhead"
                       title={catalogModel?.name ?? id}
                     >
                       {id}
@@ -1013,7 +1021,7 @@ function ProviderDetail({
                     </div>
                   </div>
                   {settings?.effortLevels?.length ? (
-                    <span className="text-xs text-ink-3">
+                    <span className="text-ui-subhead text-ink-2">
                       思考：{settings.effortLevels.join(' · ')}
                       {catalogModel && settings.effort ? `（默认 ${settings.effort}）` : ''}
                     </span>
@@ -1021,7 +1029,7 @@ function ProviderDetail({
                   {result && result !== 'pending' && (
                     <p
                       className={cn(
-                        'text-xs [overflow-wrap:anywhere]',
+                        'text-ui-subhead wrap-anywhere',
                         result.ok ? 'text-success' : 'text-danger',
                       )}
                       role="status"
@@ -1034,11 +1042,11 @@ function ProviderDetail({
             })}
           </ul>
           {importNotice && (
-            <p className="text-xs text-ink-3" role="status">
+            <p className="text-ui-subhead text-ink-2" role="status">
               {importNotice}
             </p>
           )}
-          <p className="text-xs leading-relaxed text-ink-3">
+          <p className="text-ui-subhead text-ink-2">
             {piProvider
               ? '模型目录随 Pi 更新；目录里没有的模型请改用「自定义」服务接入。'
               : '列表结果不代表模型可调用，可用性请用模型行的检测按钮确认。'}
@@ -1063,7 +1071,7 @@ function ProviderDetail({
             if (!open) setAddingModel(false);
           }}
         >
-          <DialogContent scroll>
+          <DialogContent>
             <DialogHeader>
               <DialogTitle>添加模型</DialogTitle>
               <DialogClose aria-label="关闭添加模型" />
@@ -1092,8 +1100,8 @@ function ProviderDetail({
                       .map((model) => (
                         <li className="flex min-w-0 items-center gap-2 px-3 py-2" key={model.id}>
                           <span className="grid min-w-0 flex-1">
-                            <span className="truncate text-sm">{model.name}</span>
-                            <span className="truncate font-mono text-xs text-ink-3">
+                            <span className="truncate text-ui-body">{model.name}</span>
+                            <span className="truncate font-mono text-ui-subhead text-ink-2">
                               {model.id} · {compactTokens(model.contextWindow)}
                               {model.vision ? ' · 视觉' : ''}
                             </span>
@@ -1112,7 +1120,7 @@ function ProviderDetail({
                   </ul>
                 </Card>
                 {importNotice && (
-                  <p className="text-xs text-ink-3" role="status">
+                  <p className="text-ui-subhead text-ink-2" role="status">
                     {importNotice}
                   </p>
                 )}
@@ -1139,7 +1147,10 @@ function ProviderDetail({
                       .filter((id) => id.toLowerCase().includes(modelInput.trim().toLowerCase()))
                       .map((id) => (
                         <li className="flex min-w-0 items-center gap-2 px-3 py-2" key={id}>
-                          <span className="min-w-0 flex-1 truncate font-mono text-xs" title={id}>
+                          <span
+                            className="min-w-0 flex-1 truncate font-mono text-ui-subhead"
+                            title={id}
+                          >
                             {id}
                           </span>
                           <Button
@@ -1157,14 +1168,17 @@ function ProviderDetail({
                 </Card>
                 {verifyResult && (
                   <p
-                    className={cn('text-xs', verifyResult.ok ? 'text-success' : 'text-danger')}
+                    className={cn(
+                      'text-ui-subhead',
+                      verifyResult.ok ? 'text-success' : 'text-danger',
+                    )}
                     role="status"
                   >
                     {verifyResult.message}
                   </p>
                 )}
                 {importNotice && (
-                  <p className="text-xs text-ink-3" role="status">
+                  <p className="text-ui-subhead text-ink-2" role="status">
                     {importNotice}
                   </p>
                 )}

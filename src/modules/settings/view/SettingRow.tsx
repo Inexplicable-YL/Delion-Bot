@@ -18,13 +18,16 @@ export function SettingRow({
 }) {
   const label = (
     <div className="grid content-start gap-1">
-      <h3 className="text-sm font-medium text-ink">{title}</h3>
-      {description && <p className="text-xs leading-relaxed text-ink-3">{description}</p>}
+      <h3 className="text-ui-headline text-ink">{title}</h3>
+      {description && <p className="text-ui-callout text-ink-2">{description}</p>}
     </div>
   );
   return (
     <div
-      className={cn('border-b border-line py-3.5 last:border-0', nested && 'ml-4')}
+      className={cn(
+        'border-b border-line min-h-row-regular py-2.5 last:border-0',
+        nested && 'ml-4',
+      )}
       data-setting-id={settingId}
     >
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">

@@ -1,5 +1,12 @@
 // 常驻只保留左右分屏；向下分屏与关闭等低频操作收进组菜单。
-import { Columns2, Ellipsis, Maximize2, Minimize2, Rows2, X } from 'lucide-react';
+import {
+  ArrowsPointingInIcon as Minimize2,
+  ArrowsPointingOutIcon as Maximize2,
+  EllipsisHorizontalIcon as Ellipsis,
+  TableCellsIcon as Rows2,
+  ViewColumnsIcon as Columns2,
+  XMarkIcon as X,
+} from '@heroicons/react/24/outline';
 import type { GroupNode } from '../../../modules/workspace/contract';
 import { Button } from '../../../ui/button';
 import {
@@ -17,7 +24,7 @@ export function GroupToolbar({ group }: { group: GroupNode }) {
   const closeTabs = useWorkbenchLayout((s) => s.closeTabs);
   if (!group.active) return null;
   return (
-    <div className="flex shrink-0 items-center gap-0.5 self-end pb-1">
+    <div className="flex shrink-0 items-center gap-0.5 self-center">
       <Button
         size="icon-xs"
         variant="ghost"

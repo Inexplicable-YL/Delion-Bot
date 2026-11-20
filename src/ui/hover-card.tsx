@@ -22,7 +22,7 @@ function HoverCardContent({
       <HoverCardPrimitive.Content
         className={cn(
           menuPanel,
-          'grid gap-1.5 p-3 text-xs origin-(--radix-hover-card-content-transform-origin)',
+          'grid gap-1.5 p-3 text-ui-subhead origin-(--radix-hover-card-content-transform-origin)',
           className,
         )}
         collisionPadding={collisionPadding}

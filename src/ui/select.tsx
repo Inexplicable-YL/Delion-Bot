@@ -1,5 +1,5 @@
 import { Select as SelectPrimitive } from 'radix-ui';
-import { CheckIcon, ChevronDownIcon } from 'lucide-react';
+import { CheckIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import type * as React from 'react';
 import { cn } from './cn';
 import { menuItem, menuPanel } from './menu-styles';
@@ -26,7 +26,7 @@ function SelectTrigger({
   return (
     <SelectPrimitive.Trigger
       className={cn(
-        'flex h-8 w-fit min-w-0 max-w-full items-center justify-between gap-1.5 whitespace-nowrap rounded-control bg-field px-2.5 text-sm font-medium text-ink shadow-hairline outline-none transition-[background-color,box-shadow] duration-base hover:shadow-hairline-strong data-[state=open]:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-50 data-[placeholder]:text-ink-3 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-3.5 *:data-[slot=select-value]:truncate',
+        'flex h-control-sm touch:h-control-lg w-fit min-w-0 max-w-full items-center justify-between gap-1.5 whitespace-nowrap rounded-control bg-field px-2.5 text-ui-headline text-ink shadow-hairline outline-none transition-[background-color,box-shadow] duration-base hover:shadow-hairline-strong data-[state=open]:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink disabled:pointer-events-none disabled:opacity-50 data-[placeholder]:text-ink-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-3.5 *:data-[slot=select-value]:truncate',
         triggerSizes[size],
         className,
       )}
@@ -34,7 +34,7 @@ function SelectTrigger({
       {...props}
     >
       {children}
-      <ChevronDownIcon className="size-3.5 text-ink-3" />
+      <ChevronDownIcon className="size-4 text-ink-2" />
     </SelectPrimitive.Trigger>
   );
 }
@@ -82,7 +82,7 @@ function SelectItem({
     >
       <span className="pointer-events-none absolute right-2 flex size-3.5 items-center justify-center">
         <SelectPrimitive.ItemIndicator>
-          <CheckIcon className="size-3.5 text-ink" strokeWidth={2.5} />
+          <CheckIcon className="size-4 text-ink" />
         </SelectPrimitive.ItemIndicator>
       </span>
       <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

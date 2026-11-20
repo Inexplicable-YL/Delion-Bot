@@ -10,9 +10,9 @@ afterEach(() => {
   for (const toast of toasts()) dismissToast(toast.id);
 });
 
-it('最多保留 4 条打开的通知，超出丢最旧', () => {
+it('最多保留 3 条打开的通知，超出丢最旧', () => {
   for (let index = 0; index < 5; index++) showToast({ variant: 'error', title: `t${index}` });
-  expect(toasts().map((toast) => toast.title)).toEqual(['t1', 't2', 't3', 't4']);
+  expect(toasts().map((toast) => toast.title)).toEqual(['t2', 't3', 't4']);
 });
 
 it('关闭后不再出现在打开列表，并在宿主里渲染与移除', async () => {

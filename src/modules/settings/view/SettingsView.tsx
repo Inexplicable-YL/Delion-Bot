@@ -42,10 +42,10 @@ export function SettingsView({
   zoom,
 }: SettingsViewProps) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface md:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col gap-app-gap bg-page md:flex-row">
       <SettingsNav onSectionChange={onSectionChange} value={section} />
       <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:none]">
-        <div className="mx-auto w-full max-w-228 px-4 pb-8 pt-5 md:px-10 md:pt-8">
+        <div className="mx-auto w-full max-w-reading px-app pb-8 pt-app">
           {section === 'general' && <GeneralSection navEntries={navEntries} />}
           {section === 'appearance' && (
             <AppearanceSection

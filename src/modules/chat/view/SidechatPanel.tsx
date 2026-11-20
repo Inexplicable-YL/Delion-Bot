@@ -2,13 +2,13 @@
 // 列表都区分开。草稿以 `sidechat:<主会话 id>` 为键（与会话草稿共用存储），附件在面板里各自暂存。
 import { useEffect, useEffectEvent, useState } from 'react';
 import {
-  ChevronDown,
-  ChevronUp,
-  MessageCircleDashed,
-  MessageCircleQuestion,
-  SquareArrowOutUpRight,
-  X,
-} from 'lucide-react';
+  ArrowTopRightOnSquareIcon as SquareArrowOutUpRight,
+  ChatBubbleOvalLeftEllipsisIcon as MessageCircleDashed,
+  ChevronDownIcon as ChevronDown,
+  ChevronUpIcon as ChevronUp,
+  QuestionMarkCircleIcon as MessageCircleQuestion,
+  XMarkIcon as X,
+} from '@heroicons/react/24/outline';
 import type { ChatMediaView, WorkspaceChat } from '../../../core/protocol/agent';
 import {
   CHAT_ATTACHMENT_MAX,
@@ -162,8 +162,8 @@ export function SidechatPanel({
   };
 
   const title = (
-    <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-ink-2">
-      <MessageCircleQuestion className="size-3.5 shrink-0" />
+    <span className="flex min-w-0 items-center gap-1.5 text-ui-subhead text-ink-2">
+      <MessageCircleQuestion className="size-4 shrink-0" />
       <span className="truncate">旁问 · 关闭后不保留</span>
       {view.running && <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-success" />}
     </span>
@@ -186,7 +186,7 @@ export function SidechatPanel({
       type="button"
     >
       {title}
-      <ChevronDown className="size-3.5 text-ink-3" />
+      <ChevronDown className="size-4 text-ink-2" />
     </button>
   );
 
@@ -206,7 +206,7 @@ export function SidechatPanel({
         aria-label="旁问"
         // 固定高度：消息区是 flex-1 的滚动容器，只有 max-h 时它撑开而不滚动，长回复被裁掉。
         className={cn(
-          'absolute right-3 top-12 z-drawer flex h-[min(36rem,calc(100%-4rem))] w-[min(26rem,calc(100%-1.5rem))] origin-top-right flex-col rounded-window border border-dashed border-line-strong bg-surface shadow-raised',
+          'absolute right-3 top-12 z-drawer flex sidechat-height sidechat-width origin-top-right flex-col rounded-window border border-dashed border-line-strong bg-surface shadow-raised',
           motion === 'collapse' && 'pointer-events-none',
         )}
         onAnimationEnd={(event) => {

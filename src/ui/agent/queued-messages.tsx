@@ -1,6 +1,6 @@
 'use client';
 
-import { Undo2 } from 'lucide-react';
+import { ArrowUturnLeftIcon as Undo2 } from '@heroicons/react/24/outline';
 
 export function QueuedMessages({
   messages,
@@ -12,7 +12,7 @@ export function QueuedMessages({
   return (
     <div
       aria-label="待送达的消息"
-      className="mb-2 flex items-start gap-2 rounded-card bg-surface px-3 py-1.5 text-sm leading-6 shadow-hairline"
+      className="mb-2 flex items-start gap-2 rounded-card bg-surface px-3 py-1.5 text-ui-body shadow-hairline"
       role="status"
       style={{ animation: 'pop-in 180ms cubic-bezier(0.23,1,0.32,1) both' }}
     >
@@ -21,7 +21,7 @@ export function QueuedMessages({
           <li className="flex min-w-0 items-baseline gap-2" key={index}>
             <span
               aria-hidden
-              className="min-w-3 shrink-0 text-right text-xs tabular-nums text-ink-3"
+              className="min-w-3 shrink-0 text-right text-ui-subhead tabular-nums text-ink-2"
             >
               {index + 1}
             </span>
@@ -33,7 +33,7 @@ export function QueuedMessages({
       </ol>
       {onWithdraw && (
         <button
-          className="-mr-1 flex h-6 shrink-0 items-center gap-1 rounded-chip px-1.5 text-xs text-ink-3 transition-colors hover:bg-hover hover:text-ink [&_svg]:size-3"
+          className="-mr-1 flex h-6 shrink-0 items-center gap-1 rounded-chip px-1.5 text-ui-subhead text-ink-2 transition-colors hover:bg-hover hover:text-ink [&_svg]:size-3"
           onClick={onWithdraw}
           title="撤回到输入框"
           type="button"

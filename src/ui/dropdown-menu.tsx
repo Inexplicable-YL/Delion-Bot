@@ -1,5 +1,9 @@
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
-import { CheckIcon, ChevronRightIcon, CircleIcon } from 'lucide-react';
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  MinusCircleIcon as CircleIcon,
+} from '@heroicons/react/24/outline';
 import { useRef } from 'react';
 import type * as React from 'react';
 import { cn } from './cn';
@@ -69,7 +73,7 @@ function DropdownMenuCheckboxItem({
     >
       <span className="pointer-events-none absolute left-2 flex size-3.5 items-center justify-center">
         <DropdownMenuPrimitive.ItemIndicator>
-          <CheckIcon className="size-3.5 text-ink" strokeWidth={2.5} />
+          <CheckIcon className="size-4 text-ink" />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}
@@ -113,7 +117,7 @@ function DropdownMenuLabel({
 }) {
   return (
     <DropdownMenuPrimitive.Label
-      className={cn('px-2 pt-1.5 pb-1 text-xs font-medium text-ink-3 data-[inset]:pl-8', className)}
+      className={cn('px-2 pt-1.5 pb-1 text-ui-subhead text-ink-2 data-[inset]:pl-8', className)}
       data-inset={inset}
       data-slot="dropdown-menu-label"
       {...props}
@@ -137,7 +141,7 @@ function DropdownMenuSeparator({
 function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'span'>) {
   return (
     <span
-      className={cn('ml-auto text-xs tracking-widest text-ink-3', className)}
+      className={cn('ml-auto text-ui-subhead text-ink-2', className)}
       data-slot="dropdown-menu-shortcut"
       {...props}
     />

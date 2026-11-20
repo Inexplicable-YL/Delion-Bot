@@ -1,4 +1,4 @@
-import { Minus, Plus } from 'lucide-react';
+import { MinusIcon as Minus, PlusIcon as Plus } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
@@ -80,7 +80,7 @@ export function SheetPreview({ url }: { url: string }) {
   const current = sheets[active];
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center justify-center-safe gap-2 overflow-x-auto border-b px-3 py-1 text-xs">
+      <div className="flex shrink-0 items-center justify-center-safe gap-2 overflow-x-auto border-b px-3 py-1 text-ui-subhead">
         <Button size="icon-sm" variant="ghost" aria-label="缩小表格" onClick={() => step(-1)}>
           <Minus />
         </Button>
@@ -101,11 +101,13 @@ export function SheetPreview({ url }: { url: string }) {
           ref={pinchZoomRef(setZoom, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP)}
           className="absolute inset-0 overflow-auto overscroll-contain bg-surface [overflow-anchor:none] [scrollbar-gutter:stable]"
         >
-          {loaded && !sheets.length && <p className="p-6 text-sm text-ink-3">工作簿没有工作表。</p>}
+          {loaded && !sheets.length && (
+            <p className="p-6 text-ui-body text-ink-2">工作簿没有工作表。</p>
+          )}
           {current && (
-            <div style={{ zoom }} className="inline-block min-w-full p-4 text-xs">
+            <div style={{ zoom }} className="inline-block min-w-full p-4 text-ui-subhead">
               {current.truncated && (
-                <p role="status" className="mb-2 text-ink-3">
+                <p role="status" className="mb-2 text-ink-2">
                   表格较大，仅显示前 {SHEET_ROW_LIMIT} 行。
                 </p>
               )}
@@ -125,7 +127,7 @@ export function SheetPreview({ url }: { url: string }) {
           </ErrorText>
         )}
         {!loaded && !error && (
-          <p role="status" className="absolute inset-x-0 top-0 p-3 text-sm text-ink-3">
+          <p role="status" className="absolute inset-x-0 top-0 p-3 text-ui-body text-ink-2">
             正在加载表格…
           </p>
         )}

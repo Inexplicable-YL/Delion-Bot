@@ -6,7 +6,7 @@ import { Collapse, CollapseChevron } from '../collapse';
 import { fadeIn } from '../motion';
 
 const toggleClass =
-  'group/row flex h-7 w-full min-w-0 items-center gap-1 text-left text-sm text-ink-3 transition-colors duration-base hover:text-ink-2 focus-visible:outline-none focus-visible:text-ink-2';
+  'group/row flex h-7 w-full min-w-0 items-center gap-1 text-left text-ui-body text-ink-2 transition-colors duration-base hover:text-ink-2 focus-visible:outline-none focus-visible:text-ink-2';
 
 /** 一行可展开的步骤：思考、工具步骤与工具组共用。 */
 export function TraceDisclosure({ head, children }: { head: ReactNode; children: ReactNode }) {

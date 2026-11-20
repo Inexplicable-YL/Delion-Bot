@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Folder } from 'lucide-react';
+import { FolderIcon as Folder } from '@heroicons/react/24/outline';
 import type { WorkbenchLayout } from '../../../../modules/workspace/contract';
 import { Button } from '../../../../ui/button';
 import { SectionHeader, SettingRow, SettingsGroup } from '../../../../modules/settings/view';
@@ -55,7 +55,7 @@ export function WorkspaceSection() {
       <SettingsGroup>
         <SettingRow settingId="work-directory" title="工作目录">
           <div className="flex items-center justify-end gap-3">
-            <span className="truncate text-xs text-ink-3" title={directory || undefined}>
+            <span className="truncate text-ui-subhead text-ink-2" title={directory || undefined}>
               {directory || '未选择'}
             </span>
             <Button onClick={chooseDirectory} size="sm" variant="secondary">

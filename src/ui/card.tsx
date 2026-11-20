@@ -3,11 +3,11 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
 import { cn } from './cn';
 
-const cardVariants = cva('rounded-card', {
+const cardVariants = cva('rounded-card bg-surface', {
   variants: {
     variant: {
-      outline: 'overflow-hidden border border-line',
-      surface: 'border border-line bg-surface p-4',
+      outline: 'overflow-hidden shadow-card',
+      surface: 'p-card-ui shadow-card',
       inset: 'bg-inset px-4 py-3',
     },
   },

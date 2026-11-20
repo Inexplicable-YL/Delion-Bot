@@ -15,7 +15,7 @@ export function DownloadProgressRow({
 }) {
   const percent = total ? Math.floor((received / total) * 100) : 0;
   return (
-    <div className="flex items-center gap-2 text-xs tabular-nums text-ink-3">
+    <div className="flex items-center gap-2 text-ui-subhead tabular-nums text-ink-2">
       <span className="min-w-28 shrink-0 whitespace-nowrap">
         {formatBytes(received) ?? '0 B'} / {total === null ? '—' : (formatBytes(total) ?? '—')}
       </span>
@@ -27,10 +27,7 @@ export function DownloadProgressRow({
         className={cn('h-1 overflow-hidden rounded-full bg-line', barClassName)}
         role="progressbar"
       >
-        <div
-          className="h-full rounded-full bg-ink-2 transition-[width] duration-slower ease-out"
-          style={{ width: `${percent}%` }}
-        />
+        <div className="h-full rounded-full bg-ink-2 " style={{ width: `${percent}%` }} />
       </div>
       <span aria-hidden="true" className="w-10 shrink-0 text-right">
         {percent}%

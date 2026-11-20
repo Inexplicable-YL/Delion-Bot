@@ -1,7 +1,7 @@
 // 「新建远程项目」面板与「设置 › 远程」共用的 SSH 连接表单；密码与密钥内容都交给 ssh 自己读取。
 import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeftIcon as ArrowLeft } from '@heroicons/react/24/outline';
 import { Button } from '../../../ui/button';
 import { Card } from '../../../ui/card';
 import { Input } from '../../../ui/input';
@@ -120,7 +120,7 @@ export function ConnectionForm({
   return (
     <form className="grid gap-4" onSubmit={(event) => void submit(event)}>
       <button
-        className="flex w-fit items-center gap-1.5 text-sm font-medium text-ink-2 transition-colors duration-base hover:text-ink"
+        className="flex w-fit items-center gap-1.5 text-ui-headline text-ink-2 transition-colors duration-base hover:text-ink"
         onClick={onBack}
         type="button"
       >
@@ -173,12 +173,12 @@ export function ConnectionForm({
         </Field>
       </div>
       {/* 不提供密码输入：Delion Bot 只支持密钥与 ssh agent，放一个点了没用的控件更糟。 */}
-      <p className="text-xs leading-relaxed text-ink-3">
+      <p className="text-ui-subhead text-ink-2">
         暂不支持密码登录：请使用密钥或 ssh agent，或在 ~/.ssh/config 中为该主机配置好认证。
       </p>
       {projects.length > 0 && (
         <Card className="grid gap-1" variant="inset">
-          <h3 className="text-sm font-semibold text-ink-2">使用此连接的项目</h3>
+          <h3 className="text-ui-headline text-ink-2">使用此连接的项目</h3>
           <ul className="grid">
             {projects.map((project) => (
               <li
@@ -186,10 +186,10 @@ export function ConnectionForm({
                 key={project.id}
               >
                 <div className="flex min-w-0 items-baseline gap-3">
-                  <span className="shrink-0 text-sm" title={project.name}>
+                  <span className="shrink-0 text-ui-body" title={project.name}>
                     {project.name}
                   </span>
-                  <span className="truncate text-xs text-ink-3" title={project.path}>
+                  <span className="truncate text-ui-subhead text-ink-2" title={project.path}>
                     {project.path}
                   </span>
                 </div>
@@ -242,7 +242,7 @@ export function ConnectionForm({
         <div className="flex items-center gap-2">
           {connection && onRemoved && !removeConfirm && (
             <Button
-              className="text-ink-3 hover:text-danger"
+              className="text-ink-2 hover:text-danger"
               disabled={busy}
               onClick={() => setRemoveConfirm(true)}
               type="button"

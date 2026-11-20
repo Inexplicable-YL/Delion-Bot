@@ -28,20 +28,20 @@ export function ToolStep({ status, label, target, stats, progress, children }: T
           </span>
           {target?.text && (
             <span
-              className={cn('min-w-0 truncate', target.mono && 'font-mono text-xs')}
+              className={cn('min-w-0 truncate', target.mono && 'font-mono text-ui-subhead')}
               title={target.title}
             >
               {target.text}
             </span>
           )}
           {stats && (status === 'done' || status === 'interrupted') && (
-            <span className="shrink-0 font-mono text-xs tabular-nums">
+            <span className="shrink-0 font-mono text-ui-subhead tabular-nums">
               <span className="text-success">+{stats.added}</span>{' '}
               <span className="text-danger">−{stats.deleted}</span>
             </span>
           )}
           {progress && (
-            <span className="min-w-0 truncate text-xs" title={progress.title}>
+            <span className="min-w-0 truncate text-ui-subhead" title={progress.title}>
               {progress.text}
             </span>
           )}

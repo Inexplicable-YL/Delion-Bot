@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Button } from '../../../ui/button';
 import { useDismissOnOutsidePointer } from '../../../ui/use-dismiss-on-outside-pointer';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../ui/hover-card';
-import { Archive, Cloud, Folder, Pin, PinOff } from 'lucide-react';
+import {
+  ArchiveBoxIcon as Archive,
+  BookmarkIcon as Pin,
+  BookmarkSlashIcon as PinOff,
+  CloudIcon as Cloud,
+  FolderIcon as Folder,
+} from '@heroicons/react/24/outline';
 import type { RunStatus } from '../../../core/protocol/agent';
 import { cn } from '../../../ui/cn';
 import { useSessionRunStatus, updateSession } from '../../../modules/chat/view';
@@ -75,7 +81,7 @@ export function SessionRow({
         <HoverCardTrigger asChild>
           <button
             aria-current={active ? 'page' : undefined}
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-chip text-left"
             onClick={() => onOpen(session.id)}
             type="button"
           >
@@ -86,15 +92,15 @@ export function SessionRow({
                 className={cn('size-1.5 shrink-0 rounded-full', visual.className)}
               />
             )}
-            <span className={cn('sidebar-title min-w-0 flex-1 text-sm', active && 'font-medium')}>
+            <span className={cn('min-w-0 flex-1 truncate text-ui-body', active && 'font-medium')}>
               {title}
             </span>
-            {session.pinned && <Pin className="size-3 shrink-0 text-ink-3" aria-label="已置顶" />}
+            {session.pinned && <Pin className="size-4 shrink-0 text-ink-2" aria-label="已置顶" />}
           </button>
         </HoverCardTrigger>
         <HoverCardContent align="start" className="max-w-80" side="right" sideOffset={8}>
           <span className="break-words font-medium">{title}</span>
-          <span className="flex items-center gap-1.5 text-ink-3">
+          <span className="flex items-center gap-1.5 text-ink-2">
             <ProjectIcon className="size-3.5" aria-hidden="true" />
             {projectName ?? '随聊'}
             {visual && ` · ${visual.label}`}
@@ -106,7 +112,7 @@ export function SessionRow({
           data-archive-confirm=""
           size="sm"
           variant="destructive"
-          className="h-6 px-2 text-xs"
+          className="h-6 px-2 text-ui-subhead"
           disabled={busy}
           onBlur={() => setConfirming(false)}
           onClick={() => void change(true)}
@@ -114,7 +120,7 @@ export function SessionRow({
           确认归档
         </Button>
       ) : (
-        <div className={cn(rowActions, active ? 'bg-selected' : 'bg-hover')}>
+        <div className={rowActions}>
           <IconButton
             size="sm"
             disabled={busy}

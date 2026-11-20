@@ -1,4 +1,4 @@
-import { CircleArrowUp } from 'lucide-react';
+import { ArrowUpCircleIcon as CircleArrowUp } from '@heroicons/react/24/outline';
 import { useUpdateState, pendingUpdate } from './update';
 import { IconButton } from '../../../ui/icon-button';
 
@@ -14,7 +14,7 @@ export function UpdateBadge({ onOpen }: { onOpen: () => void }) {
       onClick={onOpen}
       title="有可用的更新"
     >
-      <CircleArrowUp strokeWidth={1.8} />
+      <CircleArrowUp />
     </IconButton>
   );
 }

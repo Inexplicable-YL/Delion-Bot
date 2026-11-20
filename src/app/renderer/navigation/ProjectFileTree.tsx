@@ -1,23 +1,23 @@
 // 条目动作与远端上传/下载都经 props 交给接线方；远端条目只读，不参与内部拖拽与移动。
 import {
-  Archive,
-  Cloud,
-  Download,
-  Ellipsis,
-  ExternalLink,
-  FilePlus2,
-  FolderOpen,
-  FolderPlus,
-  FolderKanban,
-  Pencil,
-  Trash2,
-  FolderInput,
-  FileInput,
-  PanelRightOpen,
-  SquareArrowOutUpRight,
-  TriangleAlert,
-  Upload,
-} from 'lucide-react';
+  ArchiveBoxIcon as Archive,
+  ArrowDownTrayIcon as Download,
+  ArrowTopRightOnSquareIcon as ExternalLink,
+  ArrowTopRightOnSquareIcon as SquareArrowOutUpRight,
+  ArrowUpTrayIcon as Upload,
+  Bars3BottomRightIcon as PanelRightOpen,
+  CloudIcon as Cloud,
+  DocumentArrowUpIcon as FileInput,
+  DocumentPlusIcon as FilePlus2,
+  EllipsisHorizontalIcon as Ellipsis,
+  ExclamationTriangleIcon as TriangleAlert,
+  FolderArrowDownIcon as FolderInput,
+  FolderIcon as FolderKanban,
+  FolderOpenIcon as FolderOpen,
+  FolderPlusIcon as FolderPlus,
+  PencilIcon as Pencil,
+  TrashIcon as Trash2,
+} from '@heroicons/react/24/outline';
 import { useEffect, useId, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from 'use-debounce';
@@ -65,7 +65,7 @@ function ConnectingHint() {
   }, []);
   if (!slow) return null;
   return (
-    <p className="flex items-center gap-2 px-3 py-3 text-xs text-ink-3" role="status">
+    <p className="flex items-center gap-2 px-3 py-3 text-ui-subhead text-ink-2" role="status">
       <Spinner size="sm" />
       正在连接远端…
     </p>
@@ -326,18 +326,18 @@ export function ProjectFileTree({
         <ErrorText className="px-3 py-2">{localError ?? errorMessage(search.error)}</ErrorText>
       )}
       {searching && search.isFetching && (
-        <p role="status" className="px-3 py-2 text-xs text-ink-3">
+        <p role="status" className="px-3 py-2 text-ui-subhead text-ink-2">
           正在搜索…
         </p>
       )}
       {remote.degraded && (
-        <p className="flex items-start gap-1.5 px-3 py-2 text-xs [overflow-wrap:anywhere] text-ink-3">
-          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        <p className="flex items-start gap-1.5 px-3 py-2 text-ui-subhead wrap-anywhere text-ink-2">
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>{remote.degraded}</span>
         </p>
       )}
       {remote.status && (
-        <p className="px-3 py-2 text-xs [overflow-wrap:anywhere] text-ink-3" role="status">
+        <p className="px-3 py-2 text-ui-subhead wrap-anywhere text-ink-2" role="status">
           {remote.status}
         </p>
       )}

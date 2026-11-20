@@ -1,7 +1,10 @@
 // 回复评论：在已完成回复的正文里选中文字 → 浮出「添加到对话」→ 原地变为评论输入框 → 确认后进入
 // composer 附件条上方的评论轨道，随草稿保存，发送时作为结构化评论交给主进程拼进提示词。
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { MessageCircleQuestion, MessageSquarePlus } from 'lucide-react';
+import {
+  ChatBubbleLeftEllipsisIcon as MessageSquarePlus,
+  QuestionMarkCircleIcon as MessageCircleQuestion,
+} from '@heroicons/react/24/outline';
 import type { ChatComment } from '../../../core/protocol/agent';
 import {
   CommentChip,

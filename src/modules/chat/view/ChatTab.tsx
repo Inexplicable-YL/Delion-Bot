@@ -1,6 +1,13 @@
+import { cn } from '../../../ui/cn';
 import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Download, GitCompare, History, MessageCircleQuestion, SquarePen } from 'lucide-react';
+import {
+  ArrowDownTrayIcon as Download,
+  ArrowsRightLeftIcon as GitCompare,
+  ClockIcon as History,
+  PencilSquareIcon as SquarePen,
+  QuestionMarkCircleIcon as MessageCircleQuestion,
+} from '@heroicons/react/24/outline';
 import type { TabId } from '../../../app/module';
 import type { ChatComment, ChatSessionSummary, WorkspaceChat } from '../../../core/protocol/agent';
 import { chatClient } from './client';
@@ -43,7 +50,7 @@ export function ChatTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
 
   if (sessionId === null) {
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-center text-sm text-ink-3">
+      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-center text-ui-body text-ink-2">
         无效的会话标签
       </div>
     );
@@ -87,7 +94,7 @@ function ChatComposerArea({
   );
   const context = composerContext(chat, project, chatState.busy);
   return (
-    <div className="mx-auto w-full max-w-3xl shrink-0 p-3">
+    <div className={cn('mx-auto w-full max-w-reading shrink-0', !hero && 'px-app pb-app')}>
       <ChatComposer
         hero={hero}
         attachments={chatState.attachments}
@@ -217,12 +224,25 @@ function ChatSessionView({
       />
     ));
 
+  const modelSetup = chat && !chat.configured && (
+    <div className="flex flex-wrap items-center gap-2 pb-3 text-ui-callout text-ink-2">
+      <span>配置模型后即可发送消息。</span>
+      <Button
+        size="sm"
+        variant="accent"
+        onClick={() => navigate({ page: 'settings', section: 'providers' })}
+      >
+        配置模型
+      </Button>
+    </div>
+  );
+
   return (
     <div
       aria-label="对话"
       className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface @container"
     >
-      <div className="flex h-10 shrink-0 items-center gap-1 px-3">
+      <div className="flex min-h-toolbar shrink-0 items-center gap-1 px-app">
         <IconButton aria-label="历史对话" onClick={() => setSessionsOpen(true)} title="历史对话">
           <History />
         </IconButton>
@@ -263,19 +283,7 @@ function ChatSessionView({
           </IconButton>
         )}
       </div>
-      {/* chat 在 IPC 返回前为 null，需等它就位再判定，否则已配置用户每次进会话都闪现 Key 表单。 */}
-      {chat && !chat.configured && (
-        <div className="flex items-center gap-2 px-3 text-xs text-ink-3">
-          <span>配置模型服务后即可开始对话</span>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => navigate({ page: 'settings', section: 'providers' })}
-          >
-            配置模型
-          </Button>
-        </div>
-      )}
+      {conversation && modelSetup}
       {conversation ? (
         <ChatThread
           chat={chat}
@@ -287,17 +295,16 @@ function ChatSessionView({
           onSaveNote={onSaveNote}
         />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-10">
-          <div className="my-auto">
-            <h1 className="mb-6 text-center text-3xl font-semibold tracking-tight @max-[400px]:text-2xl">
-              现在想聊些什么？
-            </h1>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-app pb-10">
+          <div className="mx-auto my-auto w-full max-w-reading">
+            <h1 className="mb-4 text-ui-large-title">开始对话</h1>
+            {modelSetup}
             {composer(true)}
           </div>
         </div>
       )}
       {subagent ? (
-        <div className="mx-auto flex w-full max-w-3xl shrink-0 items-center gap-2 px-6 py-3 text-xs text-ink-3">
+        <div className="mx-auto flex w-full max-w-reading shrink-0 items-center gap-2 px-6 py-3 text-ui-subhead text-ink-2">
           <span className="min-w-0 truncate">子 Agent · {subagent.description} · 只读</span>
           <Button size="sm" variant="ghost" onClick={() => openSession(subagent.parentId)}>
             回到父会话

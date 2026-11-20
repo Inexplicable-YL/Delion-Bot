@@ -1,5 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Bell, BellOff, Check, CheckCheck, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import {
+  AdjustmentsHorizontalIcon as SlidersHorizontal,
+  ArrowPathIcon as RefreshCw,
+  BellIcon as Bell,
+  BellSlashIcon as BellOff,
+  CheckIcon as Check,
+  ClipboardDocumentCheckIcon as CheckCheck,
+} from '@heroicons/react/24/outline';
 import type { Navigate, NoticeKind } from '../../../app/module';
 import { errorMessage } from '../../../core/protocol/contract';
 import { Callout } from '../../../ui/alert';
@@ -52,7 +59,7 @@ function snoozeUntil(kind: '30m' | '1h' | 'tomorrow'): string {
 
 function SourceIcon({ kind }: { kind: NoticeKind | undefined }) {
   const Icon = kind?.icon ?? Bell;
-  return <Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-ink-3" />;
+  return <Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-ink-2" />;
 }
 
 function NotificationRow({
@@ -84,14 +91,17 @@ function NotificationRow({
         <SourceIcon kind={kinds[item.source]} />
         <span className="min-w-0 flex-1">
           <span
-            className={cn('block break-words text-sm', unread ? 'font-semibold' : 'font-normal')}
+            className={cn(
+              'block break-words text-ui-body',
+              unread ? 'font-semibold' : 'font-normal',
+            )}
           >
             {item.title}
           </span>
-          <span className="mt-1 block break-words text-sm leading-relaxed text-ink-3 line-clamp-3">
+          <span className="mt-1 block break-words text-ui-body text-ink-2 line-clamp-3">
             {item.body}
           </span>
-          <span className="mt-2 block text-xs tabular-nums text-ink-3">
+          <span className="mt-2 block text-ui-subhead tabular-nums text-ink-2">
             {kinds[item.source]?.label ?? item.source} · {formatTime(item.createdAt, now)}
           </span>
         </span>
@@ -160,12 +170,12 @@ function NotificationsView({ navigate, kinds }: { navigate: Navigate; kinds: Kin
     : [];
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-4xl flex-col overflow-y-auto px-6 py-6 [scrollbar-width:none] max-md:px-4">
+    <div className="mx-auto flex h-full w-full max-w-reading flex-col overflow-y-auto p-app">
       <header className="flex items-center justify-between gap-3 border-b pb-4 max-md:items-start max-md:flex-col">
         <div className="flex items-baseline gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">通知</h1>
+          <h1 className="text-ui-large-title">通知</h1>
           {state?.unreadCount ? (
-            <span className="text-sm tabular-nums text-ink-3">{state.unreadCount} 未读</span>
+            <span className="text-ui-body tabular-nums text-ink-2">{state.unreadCount} 未读</span>
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-1">
@@ -247,7 +257,7 @@ function NotificationsView({ navigate, kinds }: { navigate: Navigate; kinds: Kin
       </header>
 
       {state?.snoozedUntil ? (
-        <div className="mt-4 flex items-start gap-2 rounded-card border border-line bg-inset px-4 py-3 text-sm text-ink-3">
+        <div className="mt-4 flex items-start gap-2 rounded-card border border-line bg-inset px-4 py-3 text-ui-body text-ink-2">
           <BellOff aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <p>已暂停至 {new Date(state.snoozedUntil).toLocaleString('zh-CN')}；仍会收集新通知。</p>
         </div>
@@ -278,7 +288,7 @@ function NotificationsView({ navigate, kinds }: { navigate: Navigate; kinds: Kin
       ))}
 
       {query.isPending && !query.error ? (
-        <p className="py-12 text-center text-sm text-ink-3">正在获取通知…</p>
+        <p className="py-12 text-center text-ui-body text-ink-2">正在获取通知…</p>
       ) : null}
       {state && items.length === 0 ? (
         <EmptyState
@@ -289,7 +299,7 @@ function NotificationsView({ navigate, kinds }: { navigate: Navigate; kinds: Kin
 
       <section aria-label="通知列表" className="mt-4 flex flex-col gap-1 pb-6">
         {state && state.totalCount > state.items.length && (
-          <p className="text-xs text-ink-3">
+          <p className="text-ui-subhead text-ink-2">
             显示最近 {state.items.length} 条，共 {state.totalCount} 条通知。
           </p>
         )}

@@ -1,4 +1,7 @@
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import {
+  ChevronDoubleLeftIcon as PanelLeftClose,
+  ChevronDoubleRightIcon as PanelLeftOpen,
+} from '@heroicons/react/24/outline';
 
 type PanelToggleButtonProps = {
   collapsed: boolean;
@@ -19,12 +22,12 @@ export function PanelToggleButton({
       aria-controls={controlsId}
       aria-expanded={!collapsed}
       aria-label={collapsed ? `展开${label}` : `收起${label}`}
-      className="grid size-7 shrink-0 place-items-center rounded-control text-ink-3 transition-colors duration-base hover:bg-hover hover:text-ink"
+      className="grid size-7 shrink-0 place-items-center rounded-control text-ink-2 transition-colors duration-base hover:bg-hover hover:text-ink"
       onClick={onToggle}
       title={collapsed ? `展开${label}` : `收起${label}`}
       type="button"
     >
-      <Icon className="size-4" strokeWidth={1.8} />
+      <Icon className="size-4" />
     </button>
   );
 }

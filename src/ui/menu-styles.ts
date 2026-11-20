@@ -1,8 +1,8 @@
 export const menuPanel =
-  'z-overlay min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-card bg-surface p-1 text-ink shadow-raised animate-pop-in';
+  'glass-thick z-popover min-w-32 overflow-x-hidden overflow-y-auto rounded-card p-1 text-ink animate-pop-in';
 
 export const menuItem =
-  "relative flex h-8 cursor-default select-none items-center gap-2 rounded-chip px-2 text-sm text-ink outline-hidden transition-colors duration-fast focus:bg-hover data-[highlighted]:bg-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-ink-3";
+  "relative flex min-h-control-sm touch:min-h-control-lg cursor-default select-none items-center gap-2 rounded-control px-2 text-ui-body text-ink outline-hidden transition-colors duration-fast focus:bg-accent-tint data-[highlighted]:bg-accent-tint data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-ink-2";
 
 export const menuItemDestructive =
   'data-[variant=destructive]:text-danger data-[variant=destructive]:focus:bg-danger-tint data-[variant=destructive]:data-[highlighted]:bg-danger-tint data-[variant=destructive]:*:[svg]:!text-danger';

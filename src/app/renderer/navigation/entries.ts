@@ -1,7 +1,7 @@
 // 功能入口的单一真源：侧栏、折叠后标题栏图标与设置 › 通用 的显示开关都读这里。
 // 隐藏只影响导航，能力仍在。首页固定显示，不在此列表。
 import type { ComponentType } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { FolderOpenIcon as FolderOpen } from '@heroicons/react/24/outline';
 import type { NavTargets } from '../../module';
 import { navPages } from '../../views';
 import { usePreferences } from '../shell/preferences';

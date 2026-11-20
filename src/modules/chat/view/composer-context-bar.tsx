@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, ChevronDown, Cloud, Folder, GitBranch, MessageSquare, Search } from 'lucide-react';
+import {
+  ChatBubbleLeftIcon as MessageSquare,
+  CheckIcon as Check,
+  ChevronDownIcon as ChevronDown,
+  CloudIcon as Cloud,
+  FolderIcon as Folder,
+  MagnifyingGlassIcon as Search,
+  ShareIcon as GitBranch,
+} from '@heroicons/react/24/outline';
 import type { WorkspaceEntry } from '../../workspace/contract';
 import { useChatTabSource } from './chat-source';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/popover';
@@ -10,13 +18,13 @@ import { workspaceClient, useWorkspaceStore } from '../../workspace/view';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const pill =
-  'flex h-7 min-w-0 max-w-60 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-xs text-ink-3 transition-colors duration-base hover:bg-hover hover:text-ink';
-const searchRow = 'mb-1 flex items-center gap-2 rounded-control px-2 py-1.5 text-ink-3';
+  'flex h-7 min-w-0 max-w-60 items-center gap-1.5 rounded-control border border-line bg-surface px-2 text-ui-subhead text-ink-2 transition-colors duration-base hover:bg-hover hover:text-ink';
+const searchRow = 'mb-1 flex items-center gap-2 rounded-control px-2 py-1.5 text-ink-2';
 const searchInput =
-  'min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3';
+  'min-w-0 flex-1 bg-transparent text-ui-body text-ink outline-none placeholder:text-ink-2';
 const option =
-  'flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-sm text-ink transition-colors duration-fast hover:bg-hover';
-const empty = 'px-2 py-2 text-xs text-ink-3';
+  'flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-ui-body text-ink transition-colors duration-fast hover:bg-hover';
+const empty = 'px-2 py-2 text-ui-subhead text-ink-2';
 
 const matches = (value: string, query: string) =>
   value.toLowerCase().includes(query.trim().toLowerCase());
@@ -50,9 +58,9 @@ export function ComposerContextBar({ context }: { context: ComposerContext }) {
 
   const local = (entry: WorkspaceEntry) =>
     entry.remoteId ? (
-      <Cloud aria-hidden className="size-3.5 shrink-0" />
+      <Cloud aria-hidden className="size-4 shrink-0" />
     ) : (
-      <Folder aria-hidden className="size-3.5 shrink-0" />
+      <Folder aria-hidden className="size-4 shrink-0" />
     );
 
   const chooseProject = (id: string | null) => {
@@ -88,17 +96,17 @@ export function ComposerContextBar({ context }: { context: ComposerContext }) {
         <PopoverTrigger asChild>
           <button aria-label="切换项目" className={pill} type="button">
             {context.remote ? (
-              <Cloud aria-hidden className="size-3.5 shrink-0" />
+              <Cloud aria-hidden className="size-4 shrink-0" />
             ) : (
-              <Folder aria-hidden className="size-3.5 shrink-0" />
+              <Folder aria-hidden className="size-4 shrink-0" />
             )}
             <span className="truncate text-ink-2">{context.name}</span>
-            <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
+            <ChevronDown aria-hidden className="size-4 shrink-0 opacity-60" />
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-64" side="top">
           <label className={searchRow}>
-            <Search aria-hidden className="size-3.5 shrink-0" />
+            <Search aria-hidden className="size-4 shrink-0" />
             <input
               aria-label="搜索项目"
               className={searchInput}
@@ -119,7 +127,7 @@ export function ComposerContextBar({ context }: { context: ComposerContext }) {
                   {local(entry)}
                   <span className="truncate">{entry.name}</span>
                 </span>
-                {entry.id === projectId && <Check aria-hidden className="size-3.5 shrink-0" />}
+                {entry.id === projectId && <Check aria-hidden className="size-4 shrink-0" />}
               </button>
             ))}
             {visibleProjects.length === 0 && <p className={empty}>没有匹配的项目</p>}
@@ -127,10 +135,10 @@ export function ComposerContextBar({ context }: { context: ComposerContext }) {
           <div className="my-1 h-px bg-line" />
           <button className={option} onClick={() => chooseProject(null)} type="button">
             <span className="flex min-w-0 flex-1 items-center gap-2">
-              <MessageSquare aria-hidden className="size-3.5 shrink-0" />
+              <MessageSquare aria-hidden className="size-4 shrink-0" />
               <span className="truncate">不在项目里（随聊）</span>
             </span>
-            {projectId === null && <Check aria-hidden className="size-3.5 shrink-0" />}
+            {projectId === null && <Check aria-hidden className="size-4 shrink-0" />}
           </button>
         </PopoverContent>
       </Popover>
@@ -139,14 +147,14 @@ export function ComposerContextBar({ context }: { context: ComposerContext }) {
         <Popover onOpenChange={setBranchOpen} open={branchOpen}>
           <PopoverTrigger asChild>
             <button aria-label="切换分支" className={pill} type="button">
-              <GitBranch aria-hidden className="size-3.5 shrink-0" />
+              <GitBranch aria-hidden className="size-4 shrink-0" />
               <span className="truncate">{current}</span>
-              <ChevronDown aria-hidden className="size-3 shrink-0 opacity-60" />
+              <ChevronDown aria-hidden className="size-4 shrink-0 opacity-60" />
             </button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-64" side="top">
             <label className={searchRow}>
-              <Search aria-hidden className="size-3.5 shrink-0" />
+              <Search aria-hidden className="size-4 shrink-0" />
               <input
                 aria-label="搜索分支"
                 className={searchInput}
@@ -163,9 +171,9 @@ export function ComposerContextBar({ context }: { context: ComposerContext }) {
                   onClick={() => switchBranch(branch)}
                   type="button"
                 >
-                  <GitBranch aria-hidden className="size-3.5 shrink-0" />
+                  <GitBranch aria-hidden className="size-4 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{branch}</span>
-                  {branch === current && <Check aria-hidden className="size-3.5 shrink-0" />}
+                  {branch === current && <Check aria-hidden className="size-4 shrink-0" />}
                 </button>
               ))}
               {branchesFailed ? (

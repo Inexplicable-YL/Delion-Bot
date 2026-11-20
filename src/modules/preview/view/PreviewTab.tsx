@@ -86,13 +86,13 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
 
   if (!parsePreviewTabId(tabId))
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-sm text-ink-3">
+      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-ui-body text-ink-2">
         无效的预览标签：{tabId}
       </div>
     );
   if (!doc || !content)
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-sm text-ink-3">
+      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-ui-body text-ink-2">
         {error ? (
           <div role="alert" className="min-w-0">
             <p className="break-words">{error}</p>
@@ -161,7 +161,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
       )}
       {branch === 'pdf' &&
         (content.previewUrl ? (
-          <Suspense fallback={<p className="p-4 text-sm text-ink-3">正在加载阅读器…</p>}>
+          <Suspense fallback={<p className="p-4 text-ui-body text-ink-2">正在加载阅读器…</p>}>
             <PdfReader
               key={content.previewUrl}
               url={content.previewUrl}
@@ -170,7 +170,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
             />
           </Suspense>
         ) : (
-          <p className="p-4 text-sm text-ink-3">正在准备预览…</p>
+          <p className="p-4 text-ui-body text-ink-2">正在准备预览…</p>
         ))}
       {branch === 'image' && (
         <div className="min-h-0 flex-1 overflow-auto p-4">
@@ -192,7 +192,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
       )}
       {(branch === 'docx' || branch === 'xlsx') &&
         (content.previewUrl ? (
-          <Suspense fallback={<p className="p-4 text-sm text-ink-3">正在加载预览…</p>}>
+          <Suspense fallback={<p className="p-4 text-ui-body text-ink-2">正在加载预览…</p>}>
             {branch === 'docx' ? (
               <DocxPreview key={content.previewUrl} url={content.previewUrl} />
             ) : (
@@ -200,7 +200,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
             )}
           </Suspense>
         ) : (
-          <p className="p-4 text-sm text-ink-3">正在准备预览…</p>
+          <p className="p-4 text-ui-body text-ink-2">正在准备预览…</p>
         ))}
       {branch === 'pptx' && (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -212,7 +212,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
             />
           )}
           {exported?.previewUrl ? (
-            <Suspense fallback={<p className="p-4 text-sm text-ink-3">正在加载阅读器…</p>}>
+            <Suspense fallback={<p className="p-4 text-ui-body text-ink-2">正在加载阅读器…</p>}>
               <PdfReader
                 key={exported.previewUrl}
                 url={exported.previewUrl}
@@ -230,12 +230,12 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
         </div>
       )}
       {branch === 'binary' && (
-        <p className="p-6 text-sm text-ink-3">
+        <p className="p-6 text-ui-body text-ink-2">
           这个文件不是 UTF-8 文本或体积过大，无法内嵌预览，请下载文件或用默认程序打开。
         </p>
       )}
       {content.truncated && branch === 'text' && (
-        <p className="shrink-0 border-b px-4 py-2 text-xs text-ink-3">
+        <p className="shrink-0 border-b px-4 py-2 text-ui-subhead text-ink-2">
           文件超过 1 MB，这里只显示开头部分。
         </p>
       )}

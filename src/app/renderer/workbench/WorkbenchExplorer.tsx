@@ -1,16 +1,16 @@
 // 工作台目录侧栏的装配层：项目文件树 + 同步来的资料 + 归档区；树的展开/筛选/选中态在 navigation/store。
 import { useEffect, useRef, useState } from 'react';
 import {
-  Archive,
-  ChevronsDownUp,
-  FilePlus2,
-  FileInput,
-  FolderPlus,
-  Globe,
-  PanelLeft,
-  Plus,
-  Upload,
-} from 'lucide-react';
+  ArchiveBoxIcon as Archive,
+  ArrowUpTrayIcon as Upload,
+  ArrowsPointingInIcon as ChevronsDownUp,
+  Bars3BottomLeftIcon as PanelLeft,
+  DocumentArrowUpIcon as FileInput,
+  DocumentPlusIcon as FilePlus2,
+  FolderPlusIcon as FolderPlus,
+  GlobeAltIcon as Globe,
+  PlusIcon as Plus,
+} from '@heroicons/react/24/outline';
 import { workspaceArchiveId, type WorkspaceEntry } from '../../../modules/workspace/contract';
 import { parseRemoteNodeId } from '../../../modules/remotes/contract';
 import { Button } from '../../../ui/button';
@@ -108,8 +108,7 @@ export function WorkbenchExplorer({
   const expanded = useTreeState((s) => s.expanded);
   const query = useTreeState((s) => s.query);
   const pendingCreate = useTreeState((s) => s.pendingCreate);
-  const { width, resizing, onChange, onResizingChange } =
-    usePreferenceWidth('workspaceSidebarWidth');
+  const { width, onChange } = usePreferenceWidth('workspaceSidebarWidth');
   const collapsed = usePreferences((s) => s.workspaceSidebarCollapsed);
   const mobileOpen = useMobileDrawer((s) => s.drawer === 'explorer');
   const narrow = useExplorerState((s) => s.narrow);
@@ -230,15 +229,15 @@ export function WorkbenchExplorer({
   // 窄屏抽屉只看 mobileOpen：忽略宽屏折叠残留，否则折叠目录后缩窗会永远打不开目录。
   const visible = narrow ? mobileOpen : !collapsed;
   const effectiveWidth = Math.min(width, Math.max(200, Math.round(viewportWidth * 0.28)));
-  const sectionClass = 'flex h-8 items-center gap-1 px-3 text-xs font-medium text-ink-3';
-  const eyebrowClass = 'px-3 pt-3 pb-1 text-xs font-medium tracking-wider text-ink-3/70';
+  const sectionClass = 'flex h-8 items-center gap-1 px-3 text-ui-subhead text-ink-2';
+  const eyebrowClass = 'px-3 pt-3 pb-1 text-ui-subhead text-ink-2';
 
   return (
     <>
       {narrow && mobileOpen && (
         <div
           aria-hidden="true"
-          className={cn(overlayFade, 'absolute inset-0 z-20 bg-scrim')}
+          className={cn(overlayFade, 'absolute inset-0 z-nav bg-scrim')}
           onMouseDown={() => useMobileDrawer.getState().setDrawer(null)}
         />
       )}
@@ -250,8 +249,7 @@ export function WorkbenchExplorer({
         className={cn(
           // 三级背景层次（用户裁决，勿压平）：侧栏画布 --page → 目录树 --inset
           // 略深一档 → 内容区白(1.0)；树与白底之间靠色差分隔，不画边框线。
-          'flex min-h-0 shrink-0 flex-col overflow-hidden bg-inset transition-[width] duration-base ease-out motion-reduce:transition-none max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-drawer max-md:!w-70 max-md:max-w-[85vw] max-md:bg-surface max-md:shadow-overlay max-md:animate-drawer-left',
-          resizing && 'transition-none',
+          'flex min-h-0 shrink-0 flex-col overflow-hidden bg-page max-md:absolute max-md:inset-y-app-inset max-md:left-app-inset max-md:z-drawer max-md:w-sidebar max-md:max-w-sheet max-md:glass-thick max-md:rounded-panel max-md:animate-drawer-left',
           !visible && 'w-0 max-md:hidden',
         )}
         style={narrow || collapsed ? undefined : { width: effectiveWidth }}
@@ -276,12 +274,12 @@ export function WorkbenchExplorer({
               }}
               title={visible ? '收起目录' : '展开目录'}
             >
-              <PanelLeft strokeWidth={1.8} />
+              <PanelLeft />
             </IconButton>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="min-w-0 flex-1 truncate text-left text-xs font-medium text-ink-2 transition-colors duration-base hover:text-ink"
+                  className="min-w-0 flex-1 truncate text-left text-ui-subhead text-ink-2 transition-colors duration-base hover:text-ink"
                   onClick={() => useTreeState.getState().select(rootId)}
                   title={
                     remoteRoot ? undefined : projectId ? (root?.name ?? '项目与文件夹') : '资料'
@@ -502,7 +500,7 @@ export function WorkbenchExplorer({
         max={SIDEBAR_MAX_WIDTH}
         min={SIDEBAR_MIN_WIDTH}
         onChange={onChange}
-        onResizingChange={onResizingChange}
+
         value={width}
       />
       {portsForProject !== null && (

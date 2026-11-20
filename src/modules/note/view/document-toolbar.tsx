@@ -1,4 +1,9 @@
-import { ChevronRight, Code, FolderOpen, RefreshCw } from 'lucide-react';
+import {
+  ArrowPathIcon as RefreshCw,
+  ChevronRightIcon as ChevronRight,
+  CodeBracketIcon as Code,
+  FolderOpenIcon as FolderOpen,
+} from '@heroicons/react/24/outline';
 import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
 import { Spinner } from '../../../ui/spinner';
@@ -30,15 +35,15 @@ export function DocumentToolbar({
 }) {
   return (
     <div
-      className="flex min-w-0 shrink-0 items-center gap-2 px-3 py-1.5 text-xs"
+      className="flex min-w-0 shrink-0 items-center gap-2 px-3 py-1.5 text-ui-subhead"
       role="toolbar"
       aria-label="文件操作"
     >
-      <nav aria-label="文件路径" className="min-w-0 flex-1 text-ink-3" title={path.join(' / ')}>
+      <nav aria-label="文件路径" className="min-w-0 flex-1 text-ink-2" title={path.join(' / ')}>
         <ol className="flex min-w-0 items-center gap-1 overflow-hidden">
           {path.map((name, index) => (
             <li key={index} className="flex min-w-0 items-center gap-1 last:text-ink-2">
-              {index > 0 && <ChevronRight aria-hidden className="size-3 shrink-0" />}
+              {index > 0 && <ChevronRight aria-hidden className="size-4 shrink-0" />}
               <span
                 className="truncate"
                 aria-current={index === path.length - 1 ? 'page' : undefined}
@@ -50,7 +55,7 @@ export function DocumentToolbar({
         </ol>
       </nav>
       <span
-        className={cn('flex shrink-0 items-center gap-1 text-ink-3', failed && 'text-danger')}
+        className={cn('flex shrink-0 items-center gap-1 text-ink-2', failed && 'text-danger')}
         role="status"
         aria-live="polite"
       >

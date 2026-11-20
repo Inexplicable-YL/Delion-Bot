@@ -2,14 +2,14 @@ import { useState, type KeyboardEvent } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useDebounce } from 'use-debounce';
 import {
-  CircleCheckBig,
-  FileText,
-  FolderKanban,
-  MessageSquare,
-  Search,
-  Settings,
-  type LucideIcon,
-} from 'lucide-react';
+  ChatBubbleLeftIcon as MessageSquare,
+  CheckCircleIcon as CircleCheckBig,
+  Cog6ToothIcon as Settings,
+  DocumentTextIcon as FileText,
+  FolderIcon as FolderKanban,
+  MagnifyingGlassIcon as Search,
+} from '@heroicons/react/24/outline';
+import type { OutlineIcon } from '../../../ui/outline-icon';
 import { createClient } from '../../../core/protocol/contract';
 import { cn } from '../../../ui/cn';
 import { SEARCH_LIMIT, searchContract, type SearchHit, type SearchIcon } from '../contract';
@@ -26,7 +26,7 @@ import {
 
 const search = createClient(searchContract, window.delionBot?.bridge);
 
-const groupIcons: Record<SearchIcon, LucideIcon> = {
+const groupIcons: Record<SearchIcon, OutlineIcon> = {
   folder: FolderKanban,
   message: MessageSquare,
   file: FileText,
@@ -93,9 +93,9 @@ export function GlobalSearchDialog({
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="flex max-h-[calc(100dvh-var(--spacing)*8)] w-[calc(100%-var(--spacing)*8)] max-w-xl flex-col overflow-hidden p-0">
+      <DialogContent className="flex max-h-search-dialog max-w-xl flex-col overflow-hidden p-0">
         <div className="flex items-center gap-2.5 border-b px-4 py-2.5">
-          <Search aria-hidden="true" className="size-4 shrink-0 text-ink-3" strokeWidth={1.8} />
+          <Search aria-hidden="true" className="size-4 shrink-0 text-ink-2" />
           <DialogTitle className="sr-only">全局搜索</DialogTitle>
           <DialogDescription className="sr-only">
             搜索已同步到本机的项目、聊天、待办和设置入口。
@@ -106,7 +106,7 @@ export function GlobalSearchDialog({
             aria-controls={listId}
             aria-expanded={hasContent}
             aria-label="全局搜索"
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-ink-3"
+            className="min-w-0 flex-1 bg-transparent text-ui-body outline-none placeholder:text-ink-2"
             maxLength={200}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -118,7 +118,7 @@ export function GlobalSearchDialog({
             role="combobox"
             value={query}
           />
-          {busy ? <Spinner className="shrink-0 text-ink-3" /> : null}
+          {busy ? <Spinner className="shrink-0 text-ink-2" /> : null}
           <DialogClose aria-label="关闭搜索" />
         </div>
         <div className="h-80 min-h-0 overflow-y-auto p-2">
@@ -128,7 +128,10 @@ export function GlobalSearchDialog({
             </ErrorText>
           ) : null}
           {!hasContent && busy ? (
-            <div className="flex items-center gap-2 px-3 py-5 text-sm text-ink-3" role="status">
+            <div
+              className="flex items-center gap-2 px-3 py-5 text-ui-body text-ink-2"
+              role="status"
+            >
               <Spinner />
               正在获取本地已同步的数据…
             </div>
@@ -140,15 +143,15 @@ export function GlobalSearchDialog({
           ) : null}
           {hasContent ? (
             <div id={listId} role="listbox">
-              <p className="px-2.5 pb-1 pt-1.5 text-xs font-medium text-ink-3">
+              <p className="px-2.5 pb-1 pt-1.5 text-ui-subhead text-ink-2">
                 {isRecent ? '本地记录' : '搜索结果'}
               </p>
               {groups.map((group) => {
                 const Icon = groupIcons[group.icon];
                 return (
                   <section className="mt-1" key={group.id}>
-                    <h3 className="flex items-center gap-2 px-2.5 py-1 text-xs font-medium text-ink-3">
-                      <Icon aria-hidden="true" className="size-3.5" strokeWidth={1.8} />
+                    <h3 className="flex items-center gap-2 px-2.5 py-1 text-ui-subhead text-ink-2">
+                      <Icon aria-hidden="true" className="size-3.5" />
                       {group.truncated ? `${group.label}（最多 ${SEARCH_LIMIT} 条）` : group.label}
                     </h3>
                     {group.hits.map((hit) => {
@@ -170,12 +173,12 @@ export function GlobalSearchDialog({
                             aria-hidden="true"
                             className="grid size-7 shrink-0 place-items-center rounded-control bg-inset"
                           >
-                            <Icon className="size-4 text-ink-3" strokeWidth={1.8} />
+                            <Icon className="size-4 text-ink-2" />
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">{hit.title}</span>
+                            <span className="block truncate text-ui-headline">{hit.title}</span>
                             {hit.subtitle ? (
-                              <span className="mt-0.5 block truncate text-xs text-ink-3">
+                              <span className="mt-0.5 block truncate text-ui-subhead text-ink-2">
                                 {hit.subtitle}
                               </span>
                             ) : null}
@@ -187,14 +190,14 @@ export function GlobalSearchDialog({
                 );
               })}
               {error ? (
-                <p className="px-3 py-2 text-xs text-danger" role="status">
+                <p className="px-3 py-2 text-ui-subhead text-danger" role="status">
                   {error}
                 </p>
               ) : null}
             </div>
           ) : null}
         </div>
-        <div className="flex items-center gap-3 border-t px-4 py-1.5 text-xs text-ink-3">
+        <div className="flex items-center gap-3 border-t px-4 py-1.5 text-ui-subhead text-ink-2">
           <span>↑↓ 选择</span>
           <span>↵ 打开</span>
           <span className="ml-auto">Esc 关闭</span>

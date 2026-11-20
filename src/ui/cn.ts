@@ -6,7 +6,7 @@ import { extendTailwindMerge } from 'tailwind-merge';
 const twMerge = extendTailwindMerge({
   extend: {
     theme: {
-      radius: ['chip', 'control', 'card', 'window'],
+      radius: ['chip', 'control', 'card', 'panel', 'window'],
       shadow: [
         'hairline',
         'hairline-strong',
@@ -20,11 +20,13 @@ const twMerge = extendTailwindMerge({
         'raised',
         'overlay',
       ],
-      ease: ['out-strong'],
+      ease: ['out-strong', 'spring'],
     },
     classGroups: {
-      z: [{ z: ['drawer', 'scrim', 'overlay', 'takeover', 'toast'] }],
-      duration: [{ duration: ['fast', 'base', 'slow', 'slower'] }],
+      'font-size': [{ text: [(value: string) => value.startsWith('ui-')] }],
+      'font-weight': [{ font: ['medium', 'semibold'] }],
+      z: [{ z: ['drawer', 'scrim', 'overlay', 'takeover', 'nav', 'popover', 'toast', 'tooltip'] }],
+      duration: [{ duration: ['press', 'fast', 'base', 'slow', 'slower'] }],
     },
   },
 });

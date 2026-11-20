@@ -2,7 +2,11 @@
 // 数据按请求时点重算、会随工作区过期，因此提供手动刷新而不轮询；已查看文件仅在当前面板缓存，刷新后失效。
 import { useState, type ReactNode } from 'react';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
-import { GitCompare, RefreshCw, TriangleAlert } from 'lucide-react';
+import {
+  ArrowPathIcon as RefreshCw,
+  ArrowsRightLeftIcon as GitCompare,
+  ExclamationTriangleIcon as TriangleAlert,
+} from '@heroicons/react/24/outline';
 import type { FileChangeDetail } from '../../../../core/protocol/agent';
 import { chatClient } from '../client';
 import { DiffScroller, PatchDiffView } from './pierre-diff';
@@ -83,10 +87,10 @@ export function UncommittedReview({ sessionId }: { sessionId: string }) {
   const shell = (children: ReactNode) => (
     <section aria-label="工作区改动" className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
       <PanelHeader>
-        <GitCompare aria-hidden className="size-4 shrink-0 text-ink-3" />
-        <span className="shrink-0 text-sm font-medium">工作区改动</span>
+        <GitCompare aria-hidden className="size-4 shrink-0 text-ink-2" />
+        <span className="shrink-0 text-ui-headline">工作区改动</span>
         <span
-          className="min-w-0 truncate text-xs text-ink-3"
+          className="min-w-0 truncate text-ui-subhead text-ink-2"
           title={summary?.repositoryRoot ?? undefined}
         >
           {summary?.available ? `${files.length} 个文件` : ''}
@@ -104,7 +108,7 @@ export function UncommittedReview({ sessionId }: { sessionId: string }) {
       {summary && summary.warnings.length > 0 && (
         <div
           aria-label="读取警告"
-          className="max-h-32 shrink-0 overflow-auto border-b border-line px-3 py-2 text-xs leading-5 text-ink-3"
+          className="max-h-32 shrink-0 overflow-auto border-b border-line px-3 py-2 text-ui-subhead text-ink-2"
           role="status"
         >
           <p>部分改动未能完整读取：</p>
@@ -120,7 +124,7 @@ export function UncommittedReview({ sessionId }: { sessionId: string }) {
   if (changes.error && !busy)
     return shell(
       <Centered>
-        <TriangleAlert aria-hidden className="size-4 text-ink-3" />
+        <TriangleAlert aria-hidden className="size-4 text-ink-2" />
         {errorMessage(changes.error)}
       </Centered>,
     );
@@ -145,7 +149,7 @@ export function UncommittedReview({ sessionId }: { sessionId: string }) {
         {files.map((file) => (
           <button
             aria-current={selected === file.path ? 'true' : undefined}
-            className={`flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors duration-fast hover:bg-hover ${
+            className={`flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left text-ui-body transition-colors duration-fast hover:bg-hover ${
               selected === file.path ? 'bg-hover' : ''
             }`}
             key={file.path}
@@ -155,10 +159,10 @@ export function UncommittedReview({ sessionId }: { sessionId: string }) {
           >
             <FileIcon path={file.path} />
             <span className="shrink-0 truncate">{basenameOf(file.path)}</span>
-            <span className="min-w-0 flex-1 truncate text-xs text-ink-3">
+            <span className="min-w-0 flex-1 truncate text-ui-subhead text-ink-2">
               {dirnameOf(file.path)}
             </span>
-            <span className="shrink-0 text-xs text-ink-3">{STATUS_TEXT[file.status]}</span>
+            <span className="shrink-0 text-ui-subhead text-ink-2">{STATUS_TEXT[file.status]}</span>
           </button>
         ))}
       </aside>
@@ -168,10 +172,12 @@ export function UncommittedReview({ sessionId }: { sessionId: string }) {
         ) : detail ? (
           <>
             <div className="flex shrink-0 items-center gap-2 px-3 py-2">
-              <span className="text-sm font-medium">{basenameOf(detail.path)}</span>
-              <span className="shrink-0 text-xs text-ink-3">· {STATUS_TEXT[detail.status]}</span>
+              <span className="text-ui-headline">{basenameOf(detail.path)}</span>
+              <span className="shrink-0 text-ui-subhead text-ink-2">
+                · {STATUS_TEXT[detail.status]}
+              </span>
               {detail.note && (
-                <span className="min-w-0 truncate text-xs text-ink-3">{detail.note}</span>
+                <span className="min-w-0 truncate text-ui-subhead text-ink-2">{detail.note}</span>
               )}
             </div>
             {detail.patch ? (

@@ -38,7 +38,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center"
         role="alert"
       >
-        <p className="text-sm text-ink-3">{this.props.title ?? '此标签遇到错误'}</p>
+        <p className="text-ui-body text-ink-2">{this.props.title ?? '此标签遇到错误'}</p>
         <Button size="sm" variant="outline" onClick={this.retry}>
           重试
         </Button>

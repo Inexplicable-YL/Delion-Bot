@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { ArrowUturnLeftIcon as RotateCcw } from '@heroicons/react/24/outline';
 import { Button } from '../../../../ui/button';
 import { Kbd } from '../../../../ui/kbd';
 import {
@@ -128,7 +128,7 @@ export function ShortcutsSection() {
       />
       {error && <ErrorText>{error}</ErrorText>}
       {conflicts.length > 0 && (
-        <p className="text-xs text-warning" role="status">
+        <p className="text-ui-subhead text-warning" role="status">
           {conflicts
             .map((conflict) => {
               const labels = conflict.actionIds
@@ -151,7 +151,7 @@ export function ShortcutsSection() {
                 data-setting-id={`shortcut-${action.id}`}
                 key={action.id}
               >
-                <span className="min-w-0 truncate text-sm">{action.label}</span>
+                <span className="min-w-0 truncate text-ui-body">{action.label}</span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   <button
                     aria-label={`修改「${action.label}」的快捷键`}
@@ -164,7 +164,7 @@ export function ShortcutsSection() {
                     type="button"
                   >
                     {isRecording ? (
-                      <span className="text-xs text-ink-3">按下新的按键…</span>
+                      <span className="text-ui-subhead text-ink-2">按下新的按键…</span>
                     ) : accelerator ? (
                       <span className="flex items-center gap-1">
                         {acceleratorKeys(accelerator, platform, action.family).map((key) => (
@@ -172,7 +172,7 @@ export function ShortcutsSection() {
                         ))}
                       </span>
                     ) : (
-                      <span className="text-xs text-ink-3">未绑定</span>
+                      <span className="text-ui-subhead text-ink-2">未绑定</span>
                     )}
                   </button>
                   {accelerator !== action.defaultKeys ? (

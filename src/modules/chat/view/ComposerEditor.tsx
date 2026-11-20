@@ -466,7 +466,7 @@ export function ComposerEditor({
       {empty && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute select-none break-words text-ink-3"
+          className="pointer-events-none absolute select-none break-words text-ink-2"
           style={{
             fontSize: '0.875rem',
             left: SCROLLER_PADDING.x,

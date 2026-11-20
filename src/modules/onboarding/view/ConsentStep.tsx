@@ -111,19 +111,19 @@ export function ConsentStep({ canBackup, onAgree }: ConsentStepProps) {
   const hint = backupHint();
 
   return (
-    <div className="grid h-dvh grid-rows-[auto_1fr_auto] bui-light bg-surface text-ink">
+    <div className="grid h-dvh grid-rows-[auto_1fr_auto] bg-page text-ink">
       <OnboardingWindowBar />
 
       <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] justify-items-center gap-4 px-6 pt-8">
         <header className="grid w-full max-w-168 gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{current.title}</h1>
-          <p className="text-sm leading-relaxed text-ink-3">
+          <h1 className="text-ui-large-title">{current.title}</h1>
+          <p className="text-ui-body text-ink-2">
             第 {index + 1} 份，共 {documents.length} 份 · 阅读至底部后即可继续
           </p>
         </header>
         <div
           aria-label={`${current.title}正文`}
-          className="w-full max-w-168 min-h-0 overflow-y-auto overscroll-contain rounded-card border border-line bg-page px-5 py-4 text-sm leading-relaxed text-ink-2"
+          className="w-full max-w-168 min-h-0 overflow-y-auto overscroll-contain rounded-card border border-line bg-page px-5 py-4 text-ui-body text-ink-2"
           data-consent-text=""
           key={current.key}
           onScroll={(event) => {
@@ -142,7 +142,7 @@ export function ConsentStep({ canBackup, onAgree }: ConsentStepProps) {
 
       <div className="grid gap-3 px-6 pb-6 pt-5">
         {offersBackup ? (
-          <p className="mx-auto w-full max-w-168 text-sm leading-relaxed text-ink-3" role="status">
+          <p className="mx-auto w-full max-w-168 text-ui-body text-ink-2" role="status">
             {hint}
           </p>
         ) : null}

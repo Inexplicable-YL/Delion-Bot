@@ -1,4 +1,8 @@
-import { FileCode2, FileImage, FileText } from 'lucide-react';
+import {
+  DocumentIcon as FileCode2,
+  DocumentTextIcon as FileText,
+  PhotoIcon as FileImage,
+} from '@heroicons/react/24/outline';
 
 const imageExtensions = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
 const codeExtensions = new Set([
@@ -47,5 +51,5 @@ export function FileIcon({ path }: { path: string }) {
     : codeExtensions.has(extension)
       ? FileCode2
       : FileText;
-  return <Icon aria-hidden className="size-3.5 shrink-0 text-ink-3" />;
+  return <Icon aria-hidden className="size-3.5 shrink-0 text-ink-2" />;
 }

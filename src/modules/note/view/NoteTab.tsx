@@ -82,13 +82,13 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
 
   if (entryId === null)
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-sm text-ink-3">
+      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-ui-body text-ink-2">
         无效的笔记标签：{tabId}
       </div>
     );
   if (!draft)
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-sm text-ink-3">
+      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-ui-body text-ink-2">
         {error ? (
           <div role="alert" className="min-w-0">
             <p className="break-words">{error}</p>
@@ -107,7 +107,7 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
 
   if (draft.content.format !== 'markdown' && draft.content.format !== 'text')
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-ink-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-ui-body text-ink-2">
         <p>“{draft.content.title}”不是 UTF-8 文本，或超过 50 MB，无法在应用内打开。</p>
         <Button
           variant="secondary"
@@ -161,7 +161,10 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
         }}
       />
       {(error || draft.error) && (
-        <div role="alert" className="shrink-0 break-words border-b px-4 py-2 text-xs text-danger">
+        <div
+          role="alert"
+          className="shrink-0 break-words border-b px-4 py-2 text-ui-subhead text-danger"
+        >
           {error ?? draft.error}
           {error && (
             <button className="ml-3 underline" onClick={runReload}>
@@ -186,7 +189,7 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
         </div>
       )}
       {draft.content.truncated && (
-        <p className="shrink-0 border-b px-4 py-2 text-xs text-ink-3">
+        <p className="shrink-0 border-b px-4 py-2 text-ui-subhead text-ink-2">
           文件超过 1 MB，这里只读显示开头部分。要编辑完整内容请用外部编辑器打开。
         </p>
       )}

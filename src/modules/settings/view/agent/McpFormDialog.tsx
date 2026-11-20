@@ -13,7 +13,7 @@ import { errorMessage } from '../../../../core/protocol/contract';
 
 export type McpEditState = { mode: 'create' } | { mode: 'edit'; server: McpServerView } | null;
 
-const codeAreaClass = 'min-h-20 resize-y py-2 font-mono text-xs';
+const codeAreaClass = 'min-h-20 resize-y py-2 font-mono text-ui-subhead';
 const transports = ['stdio', 'http'] as const;
 const transportLabels = { stdio: '本地命令', http: '远程地址' };
 const secretHint = '值经系统钥匙串加密保存在本机，不会再显示在界面上。';
@@ -72,7 +72,7 @@ export function McpFormDialog({
 
   return (
     <Dialog onOpenChange={(open) => !open && !busy && onClose()} open>
-      <DialogContent scroll>
+      <DialogContent>
         <DialogTitle>{isEdit ? `编辑 ${editing.server.name}` : '添加 MCP 服务器'}</DialogTitle>
         <DialogDescription>
           {isEdit

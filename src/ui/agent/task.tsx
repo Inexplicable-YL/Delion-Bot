@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import type { OutlineIcon } from '../outline-icon';
 import { Button } from '../button';
 import { Card } from '../card';
 import { Collapse, CollapseChevron } from '../collapse';
@@ -15,7 +15,7 @@ export function TaskNotice({
   onOpenSession,
   children,
 }: {
-  icon: LucideIcon;
+  icon: OutlineIcon;
   title: string;
   failed?: boolean;
   label: string;
@@ -26,7 +26,7 @@ export function TaskNotice({
   const [open, setOpen] = useState(false);
   return (
     <Card className="my-3" variant="inset">
-      <div className="flex min-w-0 items-center gap-1.5 text-xs text-ink-3">
+      <div className="flex min-w-0 items-center gap-1.5 text-ui-subhead text-ink-2">
         <Icon aria-hidden className="size-3.5 shrink-0" strokeWidth={1.8} />
         <span className={`shrink-0 font-medium ${failed ? 'text-danger' : ''}`}>{title}</span>
         <span className="min-w-0 flex-1 truncate" title={label}>
@@ -65,17 +65,17 @@ export function SubagentCard({
   return (
     <div className="mb-1 mt-1 grid min-w-0 gap-1.5">
       {prompt && (
-        <p className="line-clamp-3 whitespace-pre-wrap break-words text-xs leading-5 text-ink-3">
+        <p className="line-clamp-3 whitespace-pre-wrap break-words text-ui-subhead text-ink-2">
           {prompt}
         </p>
       )}
       {reply && (
-        <div className="max-h-80 overflow-y-auto rounded-card border border-line px-3 py-2 text-sm leading-6">
+        <div className="max-h-80 overflow-y-auto rounded-card border border-line px-3 py-2 text-ui-body">
           {reply}
         </div>
       )}
       {footer && (
-        <div className="flex items-center gap-2 text-xs text-ink-3">
+        <div className="flex items-center gap-2 text-ui-subhead text-ink-2">
           <span>{footer.text}</span>
           <Button size="sm" variant="ghost" onClick={footer.onOpen}>
             打开子会话

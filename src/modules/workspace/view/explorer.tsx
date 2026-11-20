@@ -12,7 +12,11 @@ import {
   type CSSProperties,
 } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
-import { FileText, Folder, FolderKanban } from 'lucide-react';
+import {
+  DocumentTextIcon as FileText,
+  FolderIcon as Folder,
+  FolderIcon as FolderKanban,
+} from '@heroicons/react/24/outline';
 import { cn } from '../../../ui/cn';
 import { CollapseChevron } from '../../../ui/collapse';
 import { fileIconUrl } from './file-icons';
@@ -463,7 +467,7 @@ export function Explorer({
                 }
               }}
               className={cn(
-                'group isolate relative flex h-7 min-w-0 cursor-default items-center gap-1 rounded-chip pr-1 text-sm outline-none before:pointer-events-none before:absolute before:inset-y-0 before:left-(--highlight-left) before:right-0 before:-z-10 before:rounded-chip before:transition-colors focus-visible:ring-2 focus-visible:ring-accent',
+                'group isolate relative flex h-7 min-w-0 cursor-default items-center gap-1 rounded-chip pr-1 text-ui-body outline-none before:pointer-events-none before:absolute before:inset-y-0 before:left-(--highlight-left) before:right-0 before:-z-10 before:rounded-chip before:transition-colors focus-visible:ring-2 focus-visible:ring-accent',
                 selected === item.id
                   ? 'before:bg-selected font-medium text-ink'
                   : 'text-ink-2 hover:text-ink hover:before:bg-hover-strong',
@@ -504,18 +508,20 @@ export function Explorer({
                   <img alt="" className="mr-1 size-4 shrink-0" draggable={false} src={fileIcon} />
                 ) : (
                   <Icon
-                    className="mr-1 size-4 shrink-0 text-ink-3"
-                    strokeWidth={1.8}
+                    className="mr-1 size-4 shrink-0 text-ink-2"
+
                     style={accent}
                   />
                 ))}
               <span
-                className={cn('min-w-0 flex-1 truncate', item.gitIgnored && 'text-ink-3')}
+                className={cn('min-w-0 flex-1 truncate', item.gitIgnored && 'text-ink-2')}
                 title={item.title ?? item.name}
               >
                 {item.name}
               </span>
-              {item.badge && <span className="text-xs tabular-nums text-ink-3">{item.badge}</span>}
+              {item.badge && (
+                <span className="text-ui-subhead tabular-nums text-ink-2">{item.badge}</span>
+              )}
               {actions && (
                 <span
                   className="shrink-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100"
@@ -562,14 +568,14 @@ function PendingRow({ pending, level }: { pending: ExplorerPending; level: numbe
       style={{ paddingLeft: `calc(var(--spacing) * ${6 + (level - 1) * 4})` }}
     >
       <div className="flex min-w-0 items-center gap-1">
-        <Icon className="mr-1 size-4 shrink-0 text-ink-3" strokeWidth={1.8} />
+        <Icon className="mr-1 size-4 shrink-0 text-ink-2" />
         <input
           autoFocus
           aria-label={pending.kind === 'folder' ? '新文件夹名称' : '新文件名称'}
           aria-invalid={error !== null}
           aria-describedby={error ? 'explorer-pending-error' : undefined}
           className={cn(
-            'h-6 min-w-0 flex-1 rounded-chip border bg-surface px-1.5 text-sm text-ink outline-none',
+            'h-6 min-w-0 flex-1 rounded-chip border bg-surface px-1.5 text-ui-body text-ink outline-none',
             error ? 'border-danger focus:border-danger' : 'border-accent',
           )}
           spellCheck={false}

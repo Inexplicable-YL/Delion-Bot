@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Lock, SlidersHorizontal } from 'lucide-react';
+import {
+  AdjustmentsHorizontalIcon as SlidersHorizontal,
+  LockClosedIcon as Lock,
+} from '@heroicons/react/24/outline';
 import type { AgentCapabilityView } from '../../../../core/protocol/capabilities';
 import { Button } from '../../../../ui/button';
 import { Input } from '../../../../ui/input';
@@ -58,8 +61,8 @@ function SubagentLimit() {
       data-setting-id="capability-subagent-limit"
     >
       <div className="grid min-w-0 gap-0.5">
-        <span className="truncate text-sm font-medium">同时运行上限</span>
-        <span className="line-clamp-2 text-xs leading-relaxed text-ink-3">
+        <span className="truncate text-ui-headline">同时运行上限</span>
+        <span className="line-clamp-2 text-ui-subhead text-ink-2">
           全应用同时运行的子 Agent 数，超出时派发失败，不排队
         </span>
       </div>
@@ -116,12 +119,15 @@ export function CapabilitiesSection() {
     <div className="grid gap-10" data-setting-id="capabilities">
       <SectionHeader title="内置能力" />
       {!window.delionBot ? (
-        <p className="text-sm text-ink-3">内置能力配置仅在桌面端可用。</p>
+        <p className="text-ui-body text-ink-2">内置能力配置仅在桌面端可用。</p>
       ) : (
         <>
           {capabilities === undefined && !list.error ? (
             <SettingsGroup>
-              <p className="flex items-center gap-2 py-3.5 text-xs text-ink-3" role="status">
+              <p
+                className="flex items-center gap-2 py-3.5 text-ui-subhead text-ink-2"
+                role="status"
+              >
                 <Spinner />
                 正在读取能力清单…
               </p>
@@ -147,7 +153,7 @@ export function CapabilitiesSection() {
                             size="icon-sm"
                             onClick={() => setSearchOpen(true)}
                           >
-                            <SlidersHorizontal className="size-4" strokeWidth={1.8} />
+                            <SlidersHorizontal className="size-4" />
                           </Button>
                         )}
                         {toggleable.length > 1 && (
@@ -171,7 +177,7 @@ export function CapabilitiesSection() {
                     description={
                       lockedReason ? (
                         <span className="flex items-center gap-1.5">
-                          <Lock aria-hidden="true" className="size-3 shrink-0" />
+                          <Lock aria-hidden="true" className="size-4 shrink-0" />
                           常驻能力 · {lockedReason}
                         </span>
                       ) : undefined
@@ -188,18 +194,18 @@ export function CapabilitiesSection() {
                       >
                         <div className="grid min-w-0 gap-0.5">
                           <div className="flex min-w-0 items-baseline gap-2">
-                            <span className="truncate text-sm font-medium">{capability.label}</span>
-                            <span className="truncate font-mono text-xs text-ink-3">
+                            <span className="truncate text-ui-headline">{capability.label}</span>
+                            <span className="truncate font-mono text-ui-subhead text-ink-2">
                               {capability.name}
                             </span>
                           </div>
-                          <span className="line-clamp-2 text-xs leading-relaxed text-ink-3">
+                          <span className="line-clamp-2 text-ui-subhead text-ink-2">
                             {capability.description}
                           </span>
                         </div>
                         {capability.lockedReason ? (
-                          <span className="flex shrink-0 items-center gap-1 rounded-full bg-fill px-2 py-1 text-xs text-ink-3">
-                            <Lock aria-hidden="true" className="size-3" />
+                          <span className="flex shrink-0 items-center gap-1 rounded-full bg-fill px-2 py-1 text-ui-subhead text-ink-2">
+                            <Lock aria-hidden="true" className="size-4" />
                             常驻
                           </span>
                         ) : (

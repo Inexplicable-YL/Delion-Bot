@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { TodoItem } from '../contract';
-import { todoCompleted } from '../contract';
+import { todoCompleted, type TodoItem } from '../contract';
+import { CountBadge } from '../../../ui/count-badge';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/popover';
 import { cn } from '../../../ui/cn';
 import { dateKey, eventColorStyle, formatMonthDay, formatTime, weekDays } from './calendar';
@@ -13,72 +13,54 @@ function TodoChip({ item, onOpen }: { item: TodoItem; onOpen: (item: TodoItem) =
     <button
       type="button"
       aria-label={`打开 ${item.title}${time ? `，${time}` : ''}${done ? '，已完成' : ''}`}
-      className={cn(
-        'flex h-5 min-w-0 items-center gap-1 rounded px-1.5 text-left text-xs transition-opacity duration-fast hover:opacity-80 @max-[320px]:h-2 @max-[320px]:w-2 @max-[320px]:rounded-full @max-[320px]:overflow-hidden @max-[320px]:p-0',
-        done && 'opacity-60',
-      )}
+      className="flex min-h-control-xs w-full min-w-0 items-center gap-1.5 rounded-control px-2 text-left text-ui-caption hover:brightness-95 touch:min-h-control-lg"
       onClick={() => onOpen(item)}
       style={eventColorStyle(item.color ?? 'slate')}
-      title={`${item.title}${time ? ` · ${time}` : ''}`}
+      title={item.title}
     >
-      {time ? (
-        <span className="shrink-0 tabular-nums opacity-70 @max-[520px]:hidden">{time}</span>
-      ) : null}
-      <span className={cn('truncate font-medium', done && 'line-through')}>{item.title}</span>
+      {time && <span className="shrink-0 tabular-nums">{time}</span>}
+      <span className={cn('truncate', done && 'line-through')}>{item.title}</span>
     </button>
   );
 }
 
-function DayOverflow({
+function DayEntries({
   date,
   items,
+  compact = false,
   onOpen,
 }: {
   date: Date;
   items: readonly TodoItem[];
+  compact?: boolean;
   onOpen: (item: TodoItem) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className="flex h-5 items-center rounded-chip px-1.5 text-left text-xs text-ink-3 outline-none transition-colors duration-fast hover:bg-hover-strong hover:text-ink focus-visible:ring-3 focus-visible:ring-accent-tint">
-        +{items.length - 3}
-        <span className="@max-[320px]:hidden"> 更多</span>
+      <PopoverTrigger
+        aria-label={`${formatMonthDay(date)}，查看 ${items.length} 个待办`}
+        className={cn(
+          'flex min-h-control-xs items-center rounded-control text-ui-caption text-ink-2 hover:bg-hover touch:min-h-control-lg',
+          compact ? 'justify-center @md:hidden' : 'hidden px-2 @md:flex',
+        )}
+      >
+        {compact ? <CountBadge count={items.length} /> : `另有 ${items.length - 2} 项`}
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-60">
-        <p className="px-2.5 pb-1 pt-2 text-xs font-medium text-ink-3">{formatMonthDay(date)}</p>
-        <ul className="grid gap-0.5 p-1">
-          {items.map((item) => {
-            const done = todoCompleted(item.status);
-            return (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className={cn(
-                    'flex w-full min-w-0 items-start gap-1.5 rounded px-1.5 py-1 text-left text-xs transition-opacity hover:opacity-80',
-                    done && 'opacity-60',
-                  )}
-                  onClick={() => {
-                    setOpen(false);
-                    onOpen(item);
-                  }}
-                  style={eventColorStyle(item.color ?? 'slate')}
-                >
-                  <span className="shrink-0 tabular-nums opacity-70">
-                    {item.dueAt ? formatTime(new Date(item.dueAt)) : ''}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={cn('block truncate font-medium', done && 'line-through')}
-                      title={item.title}
-                    >
-                      {item.title}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
+      <PopoverContent align="center" className="w-64">
+        <p className="px-2.5 py-2 text-ui-headline">{formatMonthDay(date)}</p>
+        <ul className="grid gap-1 p-1">
+          {items.map((item) => (
+            <li key={item.id}>
+              <TodoChip
+                item={item}
+                onOpen={(item) => {
+                  setOpen(false);
+                  onOpen(item);
+                }}
+              />
+            </li>
+          ))}
         </ul>
       </PopoverContent>
     </Popover>
@@ -99,52 +81,56 @@ export function TodoCalendar({
   const todayKey = dateKey(new Date());
 
   return (
-    <section aria-label="待办日历" className="@container">
-      <div className="grid grid-cols-7 border-b">
+    <div className="@container">
+      <div className="grid grid-cols-7 border-b border-line bg-page/50">
         {weekDays.map((day) => (
-          <div className="px-2 py-2 text-center text-xs text-ink-3 @max-[320px]:px-1" key={day}>
+          <div className="py-2 text-center text-ui-subhead text-ink-2" key={day}>
             {day}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 overflow-hidden rounded-b-card">
         {days.map((date) => {
           const key = dateKey(date);
           const dayItems = grouped.get(key) ?? [];
-          const currentMonth =
-            date.getMonth() === month.getMonth() && date.getFullYear() === month.getFullYear();
+          const currentMonth = date.getMonth() === month.getMonth();
           const today = key === todayKey;
           return (
             <div
-              aria-label={`${date.getMonth() + 1}月${date.getDate()}日${
-                dayItems.length ? `，${dayItems.length} 个待办` : ''
-              }`}
               className={cn(
-                'flex min-h-24 flex-col border-b border-line p-1.5 text-left @max-[320px]:min-h-16 @max-[320px]:p-1',
-                !currentMonth && 'bg-inset text-ink-3',
+                'flex min-h-calendar-day-compact min-w-0 flex-col border-b border-e border-line p-1 text-left @md:min-h-calendar-day @md:p-2 [&:nth-child(7n)]:border-e-0 [&:nth-last-child(-n+7)]:border-b-0',
+                !currentMonth && 'bg-page/60 text-ink-2',
               )}
               key={key}
             >
-              <span
+              <time
+                aria-current={today ? 'date' : undefined}
                 className={cn(
-                  'mb-1 grid size-6 shrink-0 place-items-center rounded-full text-xs font-medium',
-                  today && 'bg-ink text-surface',
+                  'grid size-6 shrink-0 place-items-center self-center rounded-pill text-ui-subhead tabular-nums @md:self-start',
+                  today && 'bg-accent-tint text-accent-ink',
                 )}
+                dateTime={key}
+                title={formatMonthDay(date)}
               >
                 {date.getDate()}
-              </span>
-              <span className="grid min-w-0 gap-0.5">
-                {dayItems.slice(0, 3).map((item) => (
-                  <TodoChip item={item} key={item.id} onOpen={onOpenItem} />
-                ))}
-                {dayItems.length > 3 ? (
-                  <DayOverflow date={date} items={dayItems} onOpen={onOpenItem} />
-                ) : null}
-              </span>
+              </time>
+              {dayItems.length > 0 && (
+                <>
+                  <DayEntries compact date={date} items={dayItems} onOpen={onOpenItem} />
+                  <div className="mt-1 hidden min-w-0 gap-1 @md:grid">
+                    {dayItems.slice(0, 2).map((item) => (
+                      <TodoChip item={item} key={item.id} onOpen={onOpenItem} />
+                    ))}
+                    {dayItems.length > 2 && (
+                      <DayEntries date={date} items={dayItems} onOpen={onOpenItem} />
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           );
         })}
       </div>
-    </section>
+    </div>
   );
 }

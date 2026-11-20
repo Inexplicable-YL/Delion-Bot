@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Trash2 } from 'lucide-react';
+import { TrashIcon as Trash2 } from '@heroicons/react/24/outline';
 import { Button } from '../../../ui/button';
 import { formatBytes } from '../../../ui/format-bytes';
 import { SettingRow } from './SettingRow';
@@ -53,7 +53,7 @@ export function CacheUsage() {
         title={
           <span className="flex items-baseline gap-2">
             缓存占用{' '}
-            <span className="text-xs font-normal tabular-nums text-ink-3">
+            <span className="text-ui-subhead tabular-nums text-ink-2">
               {bytes === null ? '正在计算…' : (formatBytes(bytes) ?? '0 B')}
             </span>
           </span>

@@ -36,7 +36,7 @@ export function Slider({
       <SliderPrimitive.Thumb
         className={cn(
           'block size-3 rounded-full bg-on-accent shadow-thumb',
-          'outline-none transition-transform active:scale-[0.94]',
+          'outline-none transition-transform active:scale-(--press-scale)',
           'focus-visible:ring-2 focus-visible:ring-accent',
         )}
       />

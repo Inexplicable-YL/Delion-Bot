@@ -1,7 +1,7 @@
 // 设置 › 远程：已保存的 SSH 连接与实时通道状态；Delion Bot 不保存密码与密钥，凭据由 ssh 读取。
 import { useState, type ComponentType } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Cloud, Plus } from 'lucide-react';
+import { CloudIcon as Cloud, PlusIcon as Plus } from '@heroicons/react/24/outline';
 import type { RemoteConnection } from '../contract';
 import { Button } from '../../../ui/button';
 import { cn } from '../../../ui/cn';
@@ -60,8 +60,8 @@ export function RemoteSection({
       {connections !== null && connections.length === 0 && (
         <SettingsGroup>
           <div className="grid gap-1 py-3.5">
-            <span className="text-sm font-medium text-ink">还没有 SSH 连接</span>
-            <span className="text-xs leading-relaxed text-ink-3">
+            <span className="text-ui-headline text-ink">还没有 SSH 连接</span>
+            <span className="text-ui-subhead text-ink-2">
               点「新建连接」填一个目的地，或在新建远程项目时直接选 ~/.ssh/config 里的主机。
             </span>
           </div>
@@ -81,7 +81,7 @@ export function RemoteSection({
                       {target} · {connection.keyPath ?? 'ssh 默认'}
                     </span>
                     {channel?.state === 'unavailable' && (
-                      <span className="block [overflow-wrap:anywhere] text-danger" role="alert">
+                      <span className="block wrap-anywhere text-danger" role="alert">
                         {channel.reason}
                       </span>
                     )}
@@ -96,7 +96,7 @@ export function RemoteSection({
                   >
                     <Cloud
                       className="size-4"
-                      strokeWidth={1.8}
+
                       style={{ color: remoteAccent(connection.id, 'text') }}
                     />
                   </span>
@@ -105,7 +105,7 @@ export function RemoteSection({
                 title={connection.label}
               >
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className="flex items-center gap-1.5 text-xs text-ink-2">
+                  <span className="flex items-center gap-1.5 text-ui-subhead text-ink-2">
                     <span
                       aria-hidden="true"
                       className={cn('size-1.5 shrink-0 rounded-full', dot.className)}
@@ -120,7 +120,7 @@ export function RemoteSection({
                     新建项目
                   </Button>
                   <Button
-                    className="text-ink-3 hover:text-ink"
+                    className="text-ink-2 hover:text-ink"
                     onClick={() => setEditing({ connection })}
                     size="sm"
                     variant="ghost"

@@ -4,24 +4,27 @@ import type * as React from 'react';
 import { cn } from './cn';
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-control text-sm font-medium transition-[background-color,color,box-shadow,transform,opacity] duration-base ease-out active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "inline-flex shrink-0 select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-ui-button transition-[scale,opacity] duration-press ease-spring active:scale-(--press-scale) disabled:pointer-events-none disabled:opacity-50 touch:min-h-control-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: 'bg-ink text-surface shadow-inset-highlight hover:opacity-90',
-        destructive: 'bg-danger text-on-accent shadow-inset-highlight hover:brightness-95',
-        outline: 'bg-surface text-ink shadow-btn hover:bg-hover aria-expanded:bg-selected',
-        secondary: 'bg-fill text-ink hover:bg-line-strong',
+        default: 'bg-ink text-canvas hover:opacity-90',
+        accent: 'bg-accent-fill text-on-accent hover:brightness-95',
+        destructive: 'bg-danger text-on-danger hover:brightness-95',
+        outline: 'text-ink shadow-btn hover:bg-hover aria-expanded:bg-selected',
+        secondary: 'text-ink shadow-btn hover:bg-hover',
         ghost: 'text-ink-2 hover:bg-hover hover:text-ink aria-expanded:bg-hover',
+        glass:
+          'glass text-ink-2 hover:brightness-105 hover:text-ink aria-[current=page]:text-accent-ink',
         link: 'text-accent-ink underline-offset-4 hover:underline active:scale-100',
       },
       size: {
-        default: 'h-8 px-3 has-[>svg]:px-2.5',
-        sm: 'h-7 px-2.5 text-xs has-[>svg]:px-2',
-        lg: 'h-10 rounded-card px-4 text-sm has-[>svg]:px-3',
-        icon: 'size-8',
-        'icon-sm': 'size-7',
-        'icon-xs': "size-6 rounded-chip [&_svg:not([class*='size-'])]:size-3.5",
+        default: 'h-control-sm px-3 has-[>svg]:px-2.5',
+        sm: 'h-control-xs px-2.5 has-[>svg]:px-2',
+        lg: 'h-control-lg px-4 has-[>svg]:px-3',
+        icon: 'size-control-sm touch:min-w-control-lg',
+        'icon-sm': 'size-control-xs touch:min-w-control-lg',
+        'icon-xs': "size-control-xs touch:min-w-control-lg [&_svg:not([class*='size-'])]:size-4",
       },
     },
     defaultVariants: {

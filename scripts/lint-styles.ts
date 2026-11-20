@@ -1,4 +1,4 @@
-// 守住 ADR 0018 冻结的 token：禁用 token 体系之外的写法，并找出写了却不生成 CSS 的类名。
+// 校验 DESIGN.md 的产品样式约束和 Tailwind 类名。
 import { createRequire } from 'node:module';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -24,7 +24,12 @@ const rules: Record<string, RegExp> = {
   palette: new RegExp(`${prefix}[a-z]+-(?:${palette})(?:/\\d+)?(?![\\w-])`, 'g'),
   duration: new RegExp(`${prefix}duration-[1-9]\\d*(?![\\w-])`, 'g'),
   'z-global': new RegExp(`${prefix}-?z-(?:[3-9]\\d|\\d{3,}|\\[[^\\]]+\\])(?![\\w-])`, 'g'),
-  'font-size': new RegExp(`${prefix}text-(?:9|10|2xs|13|15|21|\\[\\d+px\\])(?![\\w-])`, 'g'),
+  'font-size': new RegExp(
+    `${prefix}text-(?:xs|sm|base|lg|xl|[2-9]xl|9|10|2xs|13|15|21|\\[\\d*\\.?\\d+(?:px|r?em)\\])(?![\\w-])`,
+    'g',
+  ),
+  'icon-set': /from ['"]lucide-react['"]/g,
+  'viewport-unit': /\b(?:h-screen|100vh)\b/g,
   arbitrary: new RegExp(
     `${prefix}(?:shadow|bg|text|border|ring|fill|stroke|outline)-\\[(?:#|var\\(|rgba?\\(|oklch\\(|0_|inset_|\\d+px\\])[^\\]\\s]*\\]?|${prefix}animate-\\[[^\\]\\s]+\\]`,
     'g',

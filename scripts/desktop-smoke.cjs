@@ -230,6 +230,7 @@ async function run(window) {
   assert.equal(window.isVisible(), false);
   app.emit('activate', {}, false);
   await wait(() => window.isVisible(), 'reopen after cancelled exit');
+  await js('window.onbeforeunload = null; void 0');
 
   console.log(
     'Desktop smoke passed: Mac titlebar safe area/zoom/font sizing, platform preload/menu, unsupported Mac conversion guard, focused-window close, close/reopen, cancelled note exit preserves live PTY; no login registration.',
