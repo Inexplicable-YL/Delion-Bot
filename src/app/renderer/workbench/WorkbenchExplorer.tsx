@@ -3,8 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ArchiveBoxIcon as Archive,
   ArrowUpTrayIcon as Upload,
-  ArrowsPointingInIcon as ChevronsDownUp,
-  Bars3BottomLeftIcon as PanelLeft,
+  ChevronDoubleLeftIcon as PanelLeftClose,
+  ChevronDoubleUpIcon as ChevronsDownUp,
   DocumentArrowUpIcon as FileInput,
   DocumentPlusIcon as FilePlus2,
   FolderPlusIcon as FolderPlus,
@@ -274,7 +274,7 @@ export function WorkbenchExplorer({
               }}
               title={visible ? '收起目录' : '展开目录'}
             >
-              <PanelLeft />
+              <PanelLeftClose />
             </IconButton>
             <Tooltip>
               <TooltipTrigger asChild>

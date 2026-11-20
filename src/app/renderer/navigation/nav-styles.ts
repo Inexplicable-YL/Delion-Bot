@@ -17,5 +17,10 @@ export const navSubRow = (active: boolean) =>
 
 export const navSectionTitle = 'px-2 pb-1 text-ui-subhead text-ink-3';
 
+// 行内操作平时不占位，标题可用整行宽度；悬停、聚焦或菜单打开时才挤进行尾。
 export const rowActions =
-  'pointer-events-none flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-base group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-state=open]]:pointer-events-auto has-[[data-state=open]]:opacity-100 max-md:pointer-events-auto max-md:opacity-100 touch:pointer-events-auto touch:opacity-100';
+  'hidden shrink-0 items-center gap-0.5 group-hover:flex group-focus-within:flex has-[[data-state=open]]:flex max-md:flex touch:flex';
+
+/** 行尾状态标记：与行内操作互斥，操作出现时让位。 */
+export const rowStatus =
+  'group-hover:hidden group-focus-within:hidden group-has-[[data-state=open]]:hidden max-md:hidden touch:hidden';

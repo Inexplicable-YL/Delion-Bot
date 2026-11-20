@@ -9,7 +9,6 @@ import {
   type ReactNode,
   type KeyboardEvent,
   type DragEvent,
-  type CSSProperties,
 } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
 import {
@@ -216,6 +215,10 @@ export function Explorer({
     }
   });
   const parentOf = useMemo(() => new Map(items.map((item) => [item.id, item.parentId])), [items]);
+  const projectIds = useMemo(
+    () => new Set(items.filter((item) => item.project).map((item) => item.id)),
+    [items],
+  );
   const trailOf = (id: string | null): string[] => {
     const chain: string[] = [];
     for (let current = id; current; current = parentOf.get(current) ?? null) chain.unshift(current);
@@ -467,51 +470,46 @@ export function Explorer({
                 }
               }}
               className={cn(
-                'group isolate relative flex h-7 min-w-0 cursor-default items-center gap-1 rounded-chip pr-1 text-ui-body outline-none before:pointer-events-none before:absolute before:inset-y-0 before:left-(--highlight-left) before:right-0 before:-z-10 before:rounded-chip before:transition-colors focus-visible:ring-2 focus-visible:ring-accent',
+                'group isolate relative flex h-7 min-w-0 cursor-default items-center gap-1.5 rounded-chip pr-1 text-ui-body outline-none before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:bottom-px before:-z-10 before:rounded-chip before:transition-colors focus-visible:ring-2 focus-visible:ring-accent',
                 selected === item.id
-                  ? 'before:bg-selected font-medium text-ink'
-                  : 'text-ink-2 hover:text-ink hover:before:bg-hover-strong',
+                  ? 'before:bg-selected text-ink'
+                  : 'text-ink-2 hover:text-ink hover:before:bg-hover',
                 dropRegion && 'rounded-none bg-accent-tint text-ink',
               )}
-              style={
-                {
-                  paddingLeft: `calc(var(--spacing) * ${2 + (level - 1) * 4})`,
-                  '--highlight-left': `calc(var(--spacing) * ${(branch ? 2 : 6) + (level - 1) * 4})`,
-                } as CSSProperties
-              }
+              style={{ paddingLeft: `calc(var(--spacing) * ${2 + (level - 1) * 4})` }}
             >
-              {Array.from({ length: level - 1 }, (_, guide) => (
-                <span
-                  key={guide}
-                  aria-hidden
-                  className={cn(
-                    'absolute inset-y-0 w-px -translate-x-1/2',
-                    selectedTrail.has(ancestors[guide] ?? '') ? 'bg-line-strong' : 'bg-line',
-                  )}
-                  style={{ left: `calc(var(--spacing) * ${4 + guide * 4})` }}
-                />
-              ))}
-              <button
-                type="button"
-                aria-label={`${open.has(item.id) ? '收起' : '展开'} ${item.name}`}
-                tabIndex={-1}
-                className={cn('grid size-4 shrink-0 place-items-center', !branch && 'invisible')}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onExpand(item.id, !open.has(item.id));
-                }}
-              >
-                <CollapseChevron open={open.has(item.id)} />
-              </button>
+              {Array.from({ length: level - 1 }, (_, guide) =>
+                projectIds.has(ancestors[guide] ?? '') ? null : (
+                  <span
+                    key={guide}
+                    aria-hidden
+                    className={cn(
+                      'absolute inset-y-0 w-px -translate-x-1/2',
+                      selectedTrail.has(ancestors[guide] ?? '') ? 'bg-line-strong' : 'bg-line',
+                    )}
+                    style={{ left: `calc(var(--spacing) * ${4 + guide * 4})` }}
+                  />
+                ),
+              )}
+              {branch && (
+                <button
+                  type="button"
+                  aria-label={`${open.has(item.id) ? '收起' : '展开'} ${item.name}`}
+                  tabIndex={-1}
+                  className="grid size-4 shrink-0 place-items-center"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onExpand(item.id, !open.has(item.id));
+                  }}
+                >
+                  <CollapseChevron open={open.has(item.id)} />
+                </button>
+              )}
               {showIcon &&
                 (fileIcon ? (
-                  <img alt="" className="mr-1 size-4 shrink-0" draggable={false} src={fileIcon} />
+                  <img alt="" className="size-4 shrink-0" draggable={false} src={fileIcon} />
                 ) : (
-                  <Icon
-                    className="mr-1 size-4 shrink-0 text-ink-2"
-
-                    style={accent}
-                  />
+                  <Icon className="size-4 shrink-0 text-ink-2" style={accent} />
                 ))}
               <span
                 className={cn('min-w-0 flex-1 truncate', item.gitIgnored && 'text-ink-2')}
@@ -565,10 +563,10 @@ function PendingRow({ pending, level }: { pending: ExplorerPending; level: numbe
   return (
     <div
       className="relative grid min-w-0 gap-0.5 py-0.5 pr-1"
-      style={{ paddingLeft: `calc(var(--spacing) * ${6 + (level - 1) * 4})` }}
+      style={{ paddingLeft: `calc(var(--spacing) * ${2 + (level - 1) * 4})` }}
     >
-      <div className="flex min-w-0 items-center gap-1">
-        <Icon className="mr-1 size-4 shrink-0 text-ink-2" />
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Icon className="size-4 shrink-0 text-ink-2" />
         <input
           autoFocus
           aria-label={pending.kind === 'folder' ? '新文件夹名称' : '新文件名称'}
@@ -599,7 +597,7 @@ function PendingRow({ pending, level }: { pending: ExplorerPending; level: numbe
         />
       </div>
       {error && (
-        <ErrorText className="ml-5" id="explorer-pending-error">
+        <ErrorText className="ml-5.5" id="explorer-pending-error">
           {error}
         </ErrorText>
       )}

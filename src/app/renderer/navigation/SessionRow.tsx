@@ -13,7 +13,7 @@ import type { RunStatus } from '../../../core/protocol/agent';
 import { cn } from '../../../ui/cn';
 import { useSessionRunStatus, updateSession } from '../../../modules/chat/view';
 import { showToast } from '../../../ui/toast';
-import { navSubRow, rowActions } from './nav-styles';
+import { navSubRow, rowActions, rowStatus } from './nav-styles';
 import { IconButton } from '../../../ui/icon-button';
 import { errorMessage } from '../../../core/protocol/contract';
 
@@ -95,7 +95,9 @@ export function SessionRow({
             <span className={cn('min-w-0 flex-1 truncate text-ui-body', active && 'font-medium')}>
               {title}
             </span>
-            {session.pinned && <Pin className="size-4 shrink-0 text-ink-2" aria-label="已置顶" />}
+            {session.pinned && (
+              <Pin className={cn('size-4 shrink-0 text-ink-2', rowStatus)} aria-label="已置顶" />
+            )}
           </button>
         </HoverCardTrigger>
         <HoverCardContent align="start" className="max-w-80" side="right" sideOffset={8}>

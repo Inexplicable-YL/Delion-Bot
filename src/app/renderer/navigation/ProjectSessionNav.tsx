@@ -174,7 +174,7 @@ export function ProjectSessionNav({
       </button>
     );
     return (
-      <div key={key} className="min-w-0">
+      <div key={key} className="grid min-w-0 gap-px">
         <div className={cn(navRow(rowActive), 'group pr-1 pl-1.5')}>
           <button
             aria-expanded={expanded}
