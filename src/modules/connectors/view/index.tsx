@@ -1,38 +1,34 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Blocks } from 'lucide-react';
 import { defineView } from '../../../app/module';
-import { createClient, errorMessage } from '../../../core/protocol/contract';
+import { errorMessage } from '../../../core/protocol/contract';
 import { Button } from '../../../ui/button';
 import { Input } from '../../../ui/input';
 import { ErrorText } from '../../../ui/alert';
 import { McpTab, SettingsGroup, SectionHeader, SettingRow } from '../../settings/view';
-import { apps, connectorsContract, toolkit } from '../contract';
-const client = createClient(connectorsContract, window.delionBot?.bridge);
+import { apps, toolkit } from '../contract';
+import { ConnectorAppIcon } from './ConnectorAppIcons';
+import { connectorsClient as client, useConnectorAccounts } from './use-connector-accounts';
+
+export { ConnectorAppIcons } from './ConnectorAppIcons';
 function Connectors() {
   const cache = useQueryClient();
   const [key, setKey] = useState('');
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [waiting, setWaiting] = useState<{ slug: string; until: number } | null>(null);
-  const configured = useQuery({
-    queryKey: ['connectors', 'configured'],
-    queryFn: () => client.configured(),
-  });
-  const accounts = useQuery({
-    queryKey: ['connectors', 'accounts'],
-    queryFn: () => client.accounts(),
-    enabled: configured.data === true,
-    refetchOnWindowFocus: 'always',
-    refetchInterval: (q) =>
-      waiting &&
-      Date.now() < waiting.until &&
-      !q.state.data?.some((a) => a.toolkit.slug === waiting.slug && a.status === 'ACTIVE')
-        ? 5000
-        : false,
+  const { configured, accounts } = useConnectorAccounts(waiting);
+  const setup = useMutation({
+    mutationFn: () => client.setup(key),
+    onSuccess: async () => {
+      setKey('');
+      setEditing(false);
+      await cache.invalidateQueries({ queryKey: ['connectors'] });
+    },
   });
   const action = useMutation({ mutationFn: (run: () => Promise<void>) => run() });
-  const busy = action.isPending;
+  const busy = action.isPending || setup.isPending;
   const failure = action.error ?? configured.error ?? accounts.error;
   return (
     <main className="min-w-0 flex-1 overflow-y-auto bg-surface">
@@ -41,18 +37,13 @@ function Connectors() {
         {configured.data !== undefined && (!configured.data || editing) ? (
           <SettingsGroup
             title="连接 Composio"
-            description="在 Composio 的 Settings → API Keys 获取项目密钥。完成一次配置后，即可连接下方应用。"
+            description="在 Composio 的 Project Settings → API Keys 获取项目密钥。"
           >
             <form
               className="grid gap-3 py-3"
               onSubmit={(e) => {
                 e.preventDefault();
-                action.mutate(async () => {
-                  await client.setup(key);
-                  setKey('');
-                  setEditing(false);
-                  await cache.invalidateQueries({ queryKey: ['connectors'] });
-                });
+                if (!busy && key.trim()) setup.mutate();
               }}
             >
               <a
@@ -66,16 +57,45 @@ function Connectors() {
               <Input
                 type="password"
                 aria-label="Composio 项目密钥"
+                aria-invalid={setup.isError || undefined}
+                aria-describedby={setup.isError ? 'composio-setup-error' : undefined}
+                autoComplete="off"
                 placeholder="粘贴项目 API Key"
                 value={key}
-                onChange={(e) => setKey(e.target.value)}
+                disabled={setup.isPending}
+                onChange={(e) => {
+                  setKey(e.target.value);
+                  if (setup.isError) setup.reset();
+                }}
               />
+              {setup.error && (
+                <ErrorText id="composio-setup-error" size="sm">
+                  {errorMessage(setup.error)}
+                </ErrorText>
+              )}
+              <details className="text-xs text-ink-3">
+                <summary className="cursor-pointer">受限项目密钥需要哪些权限？</summary>
+                <ul className="grid gap-1 py-2">
+                  <li>Session management · Write only</li>
+                  <li>Session tool execution · Write only</li>
+                  <li>Connected accounts · Read and write</li>
+                </ul>
+              </details>
               <div>
                 <Button disabled={busy || !key.trim()} type="submit">
-                  {busy ? '正在验证…' : '验证并保存'}
+                  {setup.isPending ? '正在验证…' : '验证并保存'}
                 </Button>{' '}
                 {editing && (
-                  <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={setup.isPending}
+                    onClick={() => {
+                      setKey('');
+                      setup.reset();
+                      setEditing(false);
+                    }}
+                  >
                     取消
                   </Button>
                 )}
@@ -91,7 +111,12 @@ function Connectors() {
             {toolkit.options.map((slug) => {
               const items = accounts.data?.filter((a) => a.toolkit.slug === slug) ?? [];
               return (
-                <SettingRow settingId={slug} key={slug} title={apps[slug]}>
+                <SettingRow
+                  settingId={slug}
+                  key={slug}
+                  title={apps[slug]}
+                  leading={<ConnectorAppIcon slug={slug} />}
+                >
                   <div className="flex flex-wrap items-center gap-2">
                     {items.map((a) => (
                       <span key={a.id} className="inline-flex items-center gap-2 text-sm">
@@ -180,5 +205,7 @@ function Connectors() {
   );
 }
 export const connectorsView = defineView({
-  pages: { connectors: { component: Connectors, nav: { label: '连接器', icon: Blocks } } },
+  pages: {
+    connectors: { component: Connectors, nav: { label: '连接器', icon: Blocks } },
+  },
 });

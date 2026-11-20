@@ -50,7 +50,8 @@ import {
   DropdownMenuTrigger,
 } from '../../../ui/dropdown-menu';
 import { drawerFromLeft, fadeIn, overlayFade } from '../../../ui/motion';
-import { navIcon, navRow } from '../navigation/nav-styles';
+import { navRow } from '../navigation/nav-styles';
+import { ConnectorAppIcons } from '../../../modules/connectors/view';
 import { UpdateBadge } from '../../../modules/update/view';
 import { navEntries, useVisibleNavEntries } from '../navigation/entries';
 import { pageHasDrawer } from '../../views';
@@ -238,6 +239,7 @@ export function AppShell({
 
   const navHidden = narrow ? !navDrawerOpen : sidebarCollapsed;
   const visibleEntries = useVisibleNavEntries();
+  const connectorEntry = visibleEntries.find((entry) => entry.id === 'connectors');
   const sourcesActive = view === 'workbench' && projectId === null && !activeTabIsChat;
 
   const openProjectDirectory = (target: 'vscode' | 'explorer') => {
@@ -691,18 +693,33 @@ export function AppShell({
             sessionsByProject={sessionsByProject}
             sourcesActive={sourcesActive}
           />
-          <div className="grid shrink-0 gap-0.5 pt-2">
-            <button
+          <div className="flex shrink-0 items-center gap-1.5 pt-2">
+            <IconButton
               aria-current={view === 'settings' ? 'page' : undefined}
-              className={navRow(view === 'settings')}
+              aria-label="设置"
+              className="rounded-full bg-inset"
               onClick={() => navigate('settings')}
-              type="button"
+              size="lg"
+              title="设置"
             >
-              <Settings className={navIcon(view === 'settings')} strokeWidth={1.8} />
-              <span className={cn('truncate', labelFade, sidebarCollapsed && 'opacity-0')}>
-                设置
-              </span>
-            </button>
+              <Settings strokeWidth={1.8} />
+            </IconButton>
+            {connectorEntry && (
+              <button
+                aria-current={view === 'connectors' ? 'page' : undefined}
+                aria-label={connectorEntry.label}
+                className={cn(
+                  navRow(view === 'connectors'),
+                  'flex-1 justify-between',
+                  view !== 'connectors' && 'bg-inset',
+                )}
+                onClick={() => navigate({ page: 'connectors' })}
+                type="button"
+              >
+                <span className="truncate">{connectorEntry.label}</span>
+                <ConnectorAppIcons />
+              </button>
+            )}
           </div>
         </div>
         <div

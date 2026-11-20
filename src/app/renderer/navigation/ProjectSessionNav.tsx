@@ -104,7 +104,7 @@ export function ProjectSessionNav({
   collapsed?: boolean;
 }) {
   const entries = useWorkspaceStore((s) => s.workspace.entries);
-  const visibleEntries = useVisibleNavEntries();
+  const visibleEntries = useVisibleNavEntries().filter((entry) => entry.id !== 'connectors');
   const openProjects = useTreeState((s) => s.openProjects);
   const toggleProject = useTreeState((s) => s.toggleProject);
   const fullSessionLists = useTreeState((s) => s.fullSessionLists);
