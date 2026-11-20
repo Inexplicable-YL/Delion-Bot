@@ -10,7 +10,6 @@ const invoke = vi.hoisted(() => {
   } as unknown as NonNullable<typeof window.delionBot>;
   return invoke;
 });
-import { registerComposeSave } from '../../../../src/modules/mail/view';
 import { useNoteDrafts } from '../../../../src/modules/note/view';
 import { runUpdateAction, useUpdateState } from '../../../../src/modules/update/view';
 import { chatImageToken } from '../../../../src/core/protocol/chat-input';
@@ -71,18 +70,6 @@ it('保存所有文件草稿和邮件、写入聊天与布局后才安装', asyn
       return true;
     },
   });
-  releases.push(
-    registerComposeSave(async () => {
-      order.push('mail1');
-      return true;
-    }),
-  );
-  releases.push(
-    registerComposeSave(async () => {
-      order.push('mail2');
-      return true;
-    }),
-  );
   useWorkbenchLayout.setState({ ready: true });
   install = vi.fn(async () => {
     expect(useUpdateState.getState().preparingInstall).toBe(true);
@@ -94,14 +81,13 @@ it('保存所有文件草稿和邮件、写入聊天与布局后才安装', asyn
   });
   saveLayout = async () => order.push('layout');
   expect(await runUpdateAction('install')).toBe(true);
-  expect(order).toEqual(['a', 'b', 'mail1', 'mail2', 'layout', 'install']);
+  expect(order).toEqual(['a', 'b', 'layout', 'install']);
   expect(useUpdateState.getState().preparingInstall).toBe(false);
 });
 
-it.each(['mail', 'layout', 'storage', 'attachment', 'image', 'run'])(
+it.each(['layout', 'storage', 'attachment', 'image', 'run'])(
   '%s 未能安全保存时不安装，并解除编辑锁',
   async (failure) => {
-    if (failure === 'mail') releases.push(registerComposeSave(async () => false));
     if (failure === 'layout') {
       useWorkbenchLayout.setState({ ready: true });
       saveLayout = async () => {

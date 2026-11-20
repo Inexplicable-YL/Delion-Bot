@@ -1,16 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { workspaceFilePath } from '../../../../src/modules/workspace/main/api';
-import {
-  copyResourceToProject,
-  openResourceFile,
-} from '../../../../src/modules/workspace/main/resources';
+import { copyResourceToProject } from '../../../../src/modules/workspace/main/resources';
 import { provideTestHostPorts } from '../../../core/host-mock';
-import { hostPorts } from '../../../../src/core/ports';
 import { workspaceResourceResolver } from '../../../../src/modules/workspace/main/read-resource';
-import {
-  attachmentResourceResolver,
-  mailResourceResolver,
-} from '../../../../src/modules/mail/main/resources';
 import { registerResourceResolver } from '../../../../src/core/capabilities/resources';
 
 vi.mock('../../../../src/modules/preview', () => ({
@@ -19,10 +11,6 @@ vi.mock('../../../../src/modules/preview', () => ({
   documentPython: () => 'component/python.exe',
 }));
 vi.mock('node:fs/promises', () => ({ mkdtemp: vi.fn(), rm: vi.fn() }));
-vi.mock('../../../../src/modules/mail/main/api', () => ({
-  readMailMessage: vi.fn(),
-  saveMailAttachment: vi.fn(),
-}));
 vi.mock('../../../../src/modules/workspace/main/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../../src/modules/workspace/main/api')>()),
   importWorkspaceFiles: vi.fn(),
@@ -30,13 +18,10 @@ vi.mock('../../../../src/modules/workspace/main/api', async (importOriginal) => 
 }));
 
 registerResourceResolver('workspace', workspaceResourceResolver);
-registerResourceResolver('mail', mailResourceResolver);
-registerResourceResolver('attachment', attachmentResourceResolver);
 
 const parentId = 'a03d4e01-ae55-4168-8572-ef88cb9f2e10';
 afterEach(() => vi.resetAllMocks());
 provideTestHostPorts({ paths: { temp: () => 'temp' } });
-const open = () => vi.mocked(hostPorts().desktop.open);
 
 describe('copyResourceToProject', () => {
   it('rejects raw paths before accessing a resource', async () => {
@@ -47,14 +32,5 @@ describe('copyResourceToProject', () => {
       }),
     ).rejects.toThrow();
     expect(workspaceFilePath).not.toHaveBeenCalled();
-  });
-});
-
-describe('openResourceFile', () => {
-  it('不支持的引用类型（如邮件附件）直接拒绝', async () => {
-    await expect(openResourceFile({ type: 'attachment', messageId: 3, part: '1' })).rejects.toThrow(
-      '仅支持资料文件与我的资料条目',
-    );
-    expect(open()).not.toHaveBeenCalled();
   });
 });

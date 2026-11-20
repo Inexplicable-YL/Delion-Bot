@@ -26,42 +26,17 @@ function snoozeUntil(kind: '30m' | '1h' | 'tomorrow'): string {
 export function SystemNotifications() {
   const queryClient = useQueryClient();
   // 未读到当前状态（data 为 undefined）时开关保持禁用，避免闪烁出错误的默认值。
-  const mailQuery = useQuery({
-    queryKey: ['settings', 'mailNotifications'],
-    queryFn: () => settingsClient.mailNotifications(),
-    enabled: Boolean(window.delionBot),
-  });
   const taskQuery = useQuery({
     queryKey: ['settings', 'taskNotifications'],
     queryFn: () => settingsClient.taskNotifications(),
     enabled: Boolean(window.delionBot),
   });
-  const mail = mailQuery.data;
   const task = taskQuery.data;
-  const loadError = mailQuery.error ?? taskQuery.error;
+  const loadError = taskQuery.error;
   const snoozedUntil = useNotificationState().data?.snoozedUntil ?? null;
   const [busy, setBusy] = useState(false);
 
   // 浏览器预览没有 preload，只维护选择态；桌面端经主进程持久化。
-  const toggleMail = async (next: boolean) => {
-    if (busy) return;
-    setBusy(true);
-    const previous = mail;
-    queryClient.setQueryData(['settings', 'mailNotifications'], next);
-    const save = async () => {
-      queryClient.setQueryData(
-        ['settings', 'mailNotifications'],
-        window.delionBot ? await settingsClient.setMailNotifications(next) : next,
-      );
-    };
-    try {
-      await save();
-    } catch (cause) {
-      queryClient.setQueryData(['settings', 'mailNotifications'], previous);
-      showToast({ variant: 'error', title: '保存失败', description: errorMessage(cause) });
-    }
-    setBusy(false);
-  };
 
   const toggleTask = async (key: 'completed' | 'failed', next: boolean) => {
     if (busy || task === undefined) return;
@@ -108,14 +83,6 @@ export function SystemNotifications() {
         settingId="system-notifications"
         title="系统通知"
       >
-        <SettingRow settingId="mail-notifications" title="邮件提醒">
-          <Switch
-            checked={mail ?? true}
-            disabled={mail === undefined || busy}
-            label="邮件提醒"
-            onChange={(next) => void toggleMail(next)}
-          />
-        </SettingRow>
         <SettingRow settingId="notify-run-failed" title="任务失败时提醒">
           <Switch
             checked={task?.failed ?? true}

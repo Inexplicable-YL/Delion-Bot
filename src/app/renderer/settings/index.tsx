@@ -28,7 +28,6 @@ export function SettingsPage(props: {
     <SettingsView
       {...props}
       navEntries={<NavEntriesGroup />}
-      navigate={navigate}
       onSectionChange={openSettings}
       section={section}
       shellSections={{

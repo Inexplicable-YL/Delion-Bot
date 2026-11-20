@@ -11,12 +11,12 @@ import type {
   ViewDefinition,
 } from './module';
 import type { ResourceRef } from '../modules/workspace/contract';
-import { mailView } from '../modules/mail/view';
+import { connectorsView } from '../modules/connectors/view';
 import { notificationsView } from '../modules/notifications/view';
 import { todoView } from '../modules/todo/view';
 import { updateView } from '../modules/update/view';
 
-const moduleViews = [mailView, todoView];
+const moduleViews = [connectorsView, todoView];
 
 export const views: ViewDefinition[] = [
   ...moduleViews,

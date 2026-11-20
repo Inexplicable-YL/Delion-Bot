@@ -107,7 +107,7 @@ export async function withResourceFile<T>(
   source = resourceRefSchema.parse(source);
   const resolver = resourceResolver(source.type);
   if (resolver.path) return consume(await resolver.path(source));
-  if (!resolver.withFile) throw new Error('请选择项目文件或邮件附件');
+  if (!resolver.withFile) throw new Error('请选择项目文件');
   return resolver.withFile(source, consume);
 }
 
@@ -122,7 +122,6 @@ export async function copyResourceToProject(input: unknown) {
   });
 }
 
-/** 邮件附件落在临时目录，启动竞态下会被清理，所以只放行有持久文件的资源。 */
 export async function openResourceFile(ref: ResourceRef): Promise<void> {
   const parsed = resourceRefSchema.parse(ref);
   const { path } = resourceResolver(parsed.type);

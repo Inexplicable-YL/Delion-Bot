@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { sanitizeHtml } from '../../../../src/modules/mail/view/sanitize-html';
+import { sanitizeHtml } from '../../../../src/modules/preview/view/sanitize-html';
 
 const body = (html: string) =>
   new DOMParser().parseFromString(sanitizeHtml(html, 'https://example.com/', 14), 'text/html').body;

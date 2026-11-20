@@ -53,8 +53,6 @@ export default defineConfig({
         'typebox',
         'better-sqlite3',
         'node-pty',
-        'imapflow',
-        'nodemailer',
         ...builtinModules,
         /^node:/,
       ],

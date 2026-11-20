@@ -28,8 +28,7 @@ function progressText(progress: OfficeExportProgress | null, opening = false): s
   return `正在写入 PDF（${size}）…`;
 }
 
-const exportKey = (ref: ResourceRef) =>
-  'id' in ref ? `${ref.type}:${ref.id}` : `${ref.type}:${ref.messageId}:${ref.part}`;
+const exportKey = (ref: ResourceRef) => ref.id;
 
 interface OfficeExportRun {
   progress: OfficeExportProgress | null;

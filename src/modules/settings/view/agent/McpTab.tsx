@@ -80,7 +80,7 @@ export function McpTab() {
   if (!window.delionBot) {
     return (
       <div className="grid gap-10">
-        <SectionHeader title="MCP" />
+        <SectionHeader title="自定义 MCP" />
         <p className="text-sm text-ink-3">MCP 管理仅在桌面端可用。</p>
       </div>
     );
@@ -95,7 +95,7 @@ export function McpTab() {
             添加服务器
           </Button>
         }
-        title="MCP"
+        title="自定义 MCP"
       />
       {servers?.length === 0 && (
         <SettingsGroup>

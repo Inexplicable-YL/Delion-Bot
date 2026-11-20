@@ -65,9 +65,9 @@ describe('keybinding overrides', () => {
 
   it('drops unknown action ids and invalid accelerators inside stored JSON', () => {
     insert(
-      `INSERT INTO workspace_settings VALUES ('keybindings', '{"not-an-action":"Mod+K","zoom-in":"Nope","open-mail":"Mod+2","close-tab":null}')`,
+      `INSERT INTO workspace_settings VALUES ('keybindings', '{"not-an-action":"Mod+K","zoom-in":"Nope","open-connectors":"Mod+2","close-tab":null}')`,
     );
-    expect(getKeybindingOverrides()).toEqual({ 'open-mail': 'Mod+2', 'close-tab': null });
+    expect(getKeybindingOverrides()).toEqual({ 'open-connectors': 'Mod+2', 'close-tab': null });
   });
 
   it('rejects unknown action ids and invalid accelerators instead of persisting them', () => {

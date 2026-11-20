@@ -1,5 +1,4 @@
 // 安装更新前的工作区保存：登记给 update 模块的 beforeInstall，任何一步失败都不安装。
-import { saveComposers } from '../../../modules/mail/view';
 import { useNoteDrafts } from '../../../modules/note/view';
 import { saveChatDrafts, runBadge, useRuns } from '../../../modules/chat/view';
 import { saveWorkbenchLayout } from '../workbench/layout-store';
@@ -15,7 +14,6 @@ export async function saveWorkspace(): Promise<void> {
     if (!(await useNoteDrafts.getState().save(key)))
       throw new Error('有笔记未能保存，请处理后再安装更新。');
   }
-  if (!(await saveComposers())) throw new Error('邮件草稿未能保存或正在发送，请处理后再安装更新。');
   if (!(await saveWorkbenchLayout())) throw new Error('工作台布局未能保存，请重试。');
   if (
     Object.values(useNoteDrafts.getState().drafts).some(

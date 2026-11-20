@@ -1,6 +1,6 @@
 // Skills 的发现、加载与注入由 Pi 完成；这里负责写入 Delion Bot 内置 skill、给设置页列出可见 skill、维护禁用名单。
 // 设置页按来处分组：内置、本机目录、每个本地项目；项目的按 SKILL.md 路径开关。
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { SkillOrigin, SkillView } from '../protocol/capabilities';
@@ -24,6 +24,7 @@ let builtinEnsured = false;
 export function ensureBuiltinSkills(): void {
   if (builtinEnsured) return;
   builtinEnsured = true;
+  rmSync(join(builtinSkillsDirectory(), 'mail', SKILL_ENTRY_FILE), { force: true });
   for (const skill of builtinSkills())
     for (const file of skill.files) {
       const path = join(builtinSkillsDirectory(), skill.name, file.path);

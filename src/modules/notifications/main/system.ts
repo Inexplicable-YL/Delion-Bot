@@ -4,8 +4,6 @@ import { notificationsContract, type NotificationTarget } from '../contract';
 let armed = false;
 
 export const NOTIFICATIONS_SNOOZE_KEY = 'notifications-snoozed-until';
-// '0' 关闭（只停桌面弹窗，应用内通知列表不受影响），缺省视为开启；设置页读写同一个键。
-const MAIL_NOTIFICATIONS_KEY = 'mail-notifications';
 
 /** 启动首轮刷新完成后调用；此前收集到的存量通知作为基线，不弹系统通知。 */
 export function armSystemNotifications(): void {
@@ -26,13 +24,13 @@ function snoozed(): boolean {
   return !Number.isNaN(until) && until > Date.now();
 }
 
-export function showMailNotice(
+export function showSystemNotice(
   id: string,
   title: string,
   body: string,
   target: NotificationTarget,
 ): void {
-  if (!armed || snoozed() || setting(MAIL_NOTIFICATIONS_KEY) === '0') return;
+  if (!armed || snoozed()) return;
   hostPorts().notifier.show(title, body, () => emit(notificationsContract, 'open', { id, target }));
 }
 

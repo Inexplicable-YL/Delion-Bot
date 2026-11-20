@@ -6,7 +6,7 @@ export type ShortcutActionId =
   | 'import-files'
   | 'global-search'
   | 'open-home'
-  | 'open-mail'
+  | 'open-connectors'
   | 'open-settings'
   | 'zoom-in'
   | 'zoom-out'
@@ -48,7 +48,7 @@ export const shortcutActions: readonly ShortcutAction[] = [
   },
   { id: 'global-search', scope: 'global', group: '文件', label: '全局搜索', defaultKeys: 'Mod+K' },
   { id: 'open-home', scope: 'global', group: '导航', label: '首页', defaultKeys: 'Mod+1' },
-  { id: 'open-mail', scope: 'global', group: '导航', label: '邮箱', defaultKeys: 'Mod+2' },
+  { id: 'open-connectors', scope: 'global', group: '导航', label: '连接器', defaultKeys: 'Mod+2' },
   { id: 'open-settings', scope: 'global', group: '导航', label: '设置', defaultKeys: 'Mod+,' },
   { id: 'zoom-in', scope: 'global', group: '视图', label: '放大', defaultKeys: 'Mod+=' },
   { id: 'zoom-out', scope: 'global', group: '视图', label: '缩小', defaultKeys: 'Mod+-' },

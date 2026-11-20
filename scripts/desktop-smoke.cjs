@@ -231,18 +231,7 @@ async function run(window) {
   app.emit('activate', {}, false);
   await wait(() => window.isVisible(), 'reopen after cancelled exit');
 
-  await js(
-    "window.delionBot.bridge.subscribe('mail:requestClose', quitting => { window.mailQuitRequested = quitting; }); window.delionBot.bridge.invoke('mail:setComposeActive', true)",
-  );
-  app.quit();
-  await wait(() => js('window.mailQuitRequested === true'), 'mail receives quit request');
-  await checkRuntime('AFTER_MAIL_CANCEL');
-  window.close();
-  assert.equal(window.isVisible(), false);
-  await js(
-    "window.onbeforeunload = null; window.delionBot.bridge.invoke('mail:setComposeActive', false)",
-  );
   console.log(
-    'Desktop smoke passed: Mac titlebar safe area/zoom/font sizing, platform preload/menu, unsupported Mac conversion guard, focused-window close, close/reopen, cancelled note/mail exit preserves live PTY; no login registration.',
+    'Desktop smoke passed: Mac titlebar safe area/zoom/font sizing, platform preload/menu, unsupported Mac conversion guard, focused-window close, close/reopen, cancelled note exit preserves live PTY; no login registration.',
   );
 }

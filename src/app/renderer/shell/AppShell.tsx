@@ -296,8 +296,8 @@ export function AppShell({
       case 'open-home':
         navigate('home');
         break;
-      case 'open-mail':
-        navigate({ page: 'mail' });
+      case 'open-connectors':
+        navigate({ page: 'connectors' });
         break;
       case 'open-settings':
         navigate('settings');

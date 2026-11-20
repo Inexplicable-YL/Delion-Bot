@@ -19,17 +19,9 @@ export const workspaceEntryIdSchema = z
     { message: '请选择工作区文件路径或有效的条目' },
   );
 
-export const resourceRefSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('workspace'), id: workspaceEntryIdSchema }).strict(),
-  z.object({ type: z.literal('mail'), id: z.number().int().positive().safe() }).strict(),
-  z
-    .object({
-      type: z.literal('attachment'),
-      messageId: z.number().int().positive().safe(),
-      part: z.string().regex(/^\d+(?:\.\d+)*$/),
-    })
-    .strict(),
-]);
+export const resourceRefSchema = z
+  .object({ type: z.literal('workspace'), id: workspaceEntryIdSchema })
+  .strict();
 
 export type ResourceRef = z.infer<typeof resourceRefSchema>;
 

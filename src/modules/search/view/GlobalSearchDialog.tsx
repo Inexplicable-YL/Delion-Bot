@@ -5,7 +5,6 @@ import {
   CircleCheckBig,
   FileText,
   FolderKanban,
-  Mail,
   MessageSquare,
   Search,
   Settings,
@@ -30,7 +29,6 @@ const search = createClient(searchContract, window.delionBot?.bridge);
 const groupIcons: Record<SearchIcon, LucideIcon> = {
   folder: FolderKanban,
   message: MessageSquare,
-  mail: Mail,
   file: FileText,
   check: CircleCheckBig,
   settings: Settings,
@@ -100,7 +98,7 @@ export function GlobalSearchDialog({
           <Search aria-hidden="true" className="size-4 shrink-0 text-ink-3" strokeWidth={1.8} />
           <DialogTitle className="sr-only">全局搜索</DialogTitle>
           <DialogDescription className="sr-only">
-            搜索已同步到本机的项目、聊天、邮件、待办和设置入口。
+            搜索已同步到本机的项目、聊天、待办和设置入口。
           </DialogDescription>
           <input
             aria-activedescendant={selectedIndex >= 0 ? optionId(selectedIndex) : undefined}
@@ -116,7 +114,7 @@ export function GlobalSearchDialog({
             }}
             onCompositionEnd={(event) => setTerm(event.currentTarget.value)}
             onKeyDown={handleKeyDown}
-            placeholder="搜索项目、聊天、邮件或待办…"
+            placeholder="搜索项目、聊天或待办…"
             role="combobox"
             value={query}
           />

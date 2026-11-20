@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { renderMailHtml } from './mail-html-display';
+import { renderPreviewHtml } from './preview-html';
 
 /**
  * 清洗 HTML 正文供沙箱 iframe 使用。rootSize：iframe 不继承外层 rem，需注入才随字号缩放；
@@ -31,5 +31,5 @@ export function sanitizeHtml(
   csp.content =
     "default-src 'none'; style-src 'unsafe-inline'; img-src data: https: http:; script-src 'none'; form-action 'none'";
   doc.head.prepend(csp);
-  return renderMailHtml(doc, true, rootSize, htmlScrollY);
+  return renderPreviewHtml(doc, true, rootSize, htmlScrollY);
 }

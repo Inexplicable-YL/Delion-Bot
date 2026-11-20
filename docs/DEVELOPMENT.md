@@ -66,7 +66,7 @@
 
 ### 2.3 skills
 
-内置 Skills（mail、todo、document-reading）由各模块注册，由应用写入 `~/.delion-bot/skills` 并交给 Pi。
+内置 Skills（todo、document-reading）由各模块注册，由应用写入 `~/.delion-bot/skills` 并交给 Pi。
 
 设置 › Skills 按来源分三组：内置、本机、每个本地项目。**开关的粒度不一样**——全局 skill 按名称记禁用，项目里的按 `SKILL.md` 绝对路径记，因为同名的可以共存且互不牵连。
 

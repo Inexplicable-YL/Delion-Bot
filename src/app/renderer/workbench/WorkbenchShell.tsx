@@ -43,7 +43,6 @@ import { ancestorChainOf, useTreeState } from '../navigation/store';
 import { useLocalReferences, useRemoteReferences } from '../navigation/remote-references';
 import { documentTabId, useNavigationStore } from '../navigation/view';
 import { showToast } from '../../../ui/toast';
-import { MailDraftDialog } from '../../../modules/mail/view';
 import { currentContainerOf, WorkbenchExplorer } from './WorkbenchExplorer';
 import { openTarget } from './open-target';
 import { ErrorText } from '../../../ui/alert';
@@ -187,7 +186,6 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
 
   const chatSource: ChatTabSource = {
     referenceSource,
-    mailDialog: MailDraftDialog,
     navigate: (target) => useNavigationStore.getState().navigate(target),
     workbench: {
       open: (tab, options) => openTarget(tab, options),

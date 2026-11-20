@@ -1,18 +1,16 @@
 import type { ReactNode } from 'react';
-import type { Navigate, ViewDefinition } from '../../../app/module';
+import type { ViewDefinition } from '../../../app/module';
 import { AboutSection } from './AboutSection';
 import { AppearanceSection } from './AppearanceSection';
 import { CapabilitiesSection } from './agent/CapabilitiesSection';
 import { CommandsSection } from './agent/CommandsSection';
 import { GeneralSection } from './GeneralSection';
 import { LlmSection } from './agent/LlmSection';
-import { McpSection } from './agent/McpSection';
 import { NotificationsSection } from './NotificationsSection';
 import { PrivacySection } from './PrivacySection';
 import { SkillsSection } from './agent/SkillsSection';
 import { StorageSection } from './StorageSection';
 import { TermsSection } from './TermsSection';
-import { ConnectionsSection } from './ConnectionsSection';
 import { SettingsNav, type SettingsSectionId } from './SettingsNav';
 import type { ThemePreference, ZoomPreference } from '../contract';
 
@@ -20,7 +18,6 @@ type SettingsViewProps = {
   section: SettingsSectionId;
   onSectionChange: (section: SettingsSectionId) => void;
   views: ViewDefinition[];
-  navigate: Navigate;
   shellSections: Partial<Record<SettingsSectionId, ReactNode>>;
   navEntries: ReactNode;
   fontSize: number;
@@ -35,7 +32,6 @@ export function SettingsView({
   section,
   onSectionChange,
   views,
-  navigate,
   shellSections,
   navEntries,
   fontSize,
@@ -64,12 +60,10 @@ export function SettingsView({
           {section === 'notifications' && <NotificationsSection />}
           {section === 'storage' && <StorageSection views={views} />}
           {shellSections[section]}
-          {section === 'connections' && <ConnectionsSection navigate={navigate} views={views} />}
           {section === 'providers' && <LlmSection />}
           {section === 'capabilities' && <CapabilitiesSection />}
           {section === 'commands' && <CommandsSection />}
           {section === 'skills' && <SkillsSection />}
-          {section === 'mcp' && <McpSection />}
           {section === 'about' && <AboutSection />}
           {section === 'privacy' && <PrivacySection />}
           {section === 'terms' && <TermsSection />}

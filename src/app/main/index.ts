@@ -27,8 +27,6 @@ import { closeRemoteWatch } from '../../core/remote/watch';
 import { registerSearchProvider } from '../../modules/search';
 import { registerModuleIpc } from './ipc';
 import { modules } from '../modules';
-import { hasMailComposer } from '../../modules/mail';
-import { mailContract } from '../../modules/mail/contract';
 import {
   closeDomainBridge,
   gcChatMedia,
@@ -37,7 +35,7 @@ import {
   registerAgentIpc,
   shutdownSessions,
 } from './agent-ipc';
-import { emit, provideHostPorts } from '../../core/ports';
+import { provideHostPorts } from '../../core/ports';
 import { electronPorts } from './host-electron';
 import {
   applyTheme,
@@ -266,17 +264,13 @@ async function createWindow(): Promise<void> {
   window.webContents.on('will-prevent-unload', (event) => {
     const wasQuitting = quitting;
     quitting = false;
-    if (hasMailComposer()) {
-      emit(mailContract, 'requestClose', wasQuitting);
-      return;
-    }
     const choice = dialog.showMessageBoxSync(window, {
       type: 'warning',
       buttons: ['抛弃并退出', '继续编辑'],
       defaultId: 1,
       cancelId: 1,
       title: '仍有未保存的内容',
-      message: '有未保存的笔记或未发送的邮件，确定抛弃并退出 Delion Bot 吗？',
+      message: '有未保存的笔记，确定抛弃并退出 Delion Bot 吗？',
     });
     if (choice === 0) {
       quitting = wasQuitting;

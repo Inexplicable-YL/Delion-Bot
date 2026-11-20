@@ -14,7 +14,6 @@ import { dirname, join } from 'node:path';
 import { provideHostPorts } from '../src/core/ports';
 import { electronPorts } from '../src/app/main/host-electron';
 import { closeDatabase, getDatabase } from '../src/app/main/database';
-import { mailModule, prepareEmail } from '../src/modules/mail';
 import {
   createWorkspaceEntry,
   getWorkspaceState,
@@ -30,6 +29,7 @@ import { registerModuleIpc } from '../src/app/main/ipc';
 import { notificationsModule } from '../src/modules/notifications';
 import { previewModule } from '../src/modules/preview';
 import { remotesModule } from '../src/modules/remotes';
+import { connectorsModule } from '../src/modules/connectors';
 import { settingsModule } from '../src/modules/settings';
 import { updateModule } from '../src/modules/update';
 import { registerAgentIpc } from '../src/app/main/agent-ipc';
@@ -47,7 +47,32 @@ globalThis.fetch = async (input) => {
 app
   .whenReady()
   .then(async () => {
-    provideHostPorts(electronPorts);
+    let gmailConnected = false;
+    provideHostPorts({
+      ...electronPorts,
+      network: {
+        async fetch(url, init) {
+          const path = new URL(url).pathname;
+          if (!url.startsWith('https://backend.composio.dev/'))
+            return electronPorts.network.fetch(url, init);
+          if (path.endsWith('/tool_router/session'))
+            return Response.json({ session_id: 'smoke', mcp: { url: 'https://example.com/mcp' } });
+          if (path.endsWith('/session/smoke/link'))
+            return Response.json({ redirect_url: 'https://example.com/authorize' });
+          if (path.endsWith('/connected_accounts'))
+            return Response.json({
+              items: gmailConnected
+                ? [{ id: 'gmail-smoke', toolkit: { slug: 'gmail' }, status: 'ACTIVE' }]
+                : [],
+            });
+          if (path.endsWith('/connected_accounts/gmail-smoke') && init?.method === 'DELETE') {
+            gmailConnected = false;
+            return new Response(null, { status: 204 });
+          }
+          throw new Error('Unexpected connector request ' + path);
+        },
+      },
+    });
     const db = getDatabase();
     db.prepare("INSERT OR REPLACE INTO workspace_settings VALUES ('directory', ?)").run(
       join(profile, 'notes'),
@@ -179,8 +204,8 @@ app
       workspaceModule,
       remotesModule,
       notificationsModule,
-      mailModule,
       settingsModule,
+      connectorsModule,
       updateModule,
     ]);
     const win = new BrowserWindow({
@@ -231,23 +256,9 @@ app
       (await invoke(`return await window.delionBot.bridge.invoke('llm:list');`))[0].enabled,
       false,
     );
-    const email = prepareEmail({
-      to: ['recipient@example.com'],
-      subject: '报告草稿',
-      text: '请查看附件',
-      attachments: [{ type: 'workspace', id: moved.id }],
-    });
-    assert.equal(email.sent, false);
-    const prepared = await invoke(
-      `return await window.delionBot.bridge.invoke('mail:openDraft', ${JSON.stringify(email.draftId)});`,
-    );
-    assert.equal(prepared.subject, '报告草稿');
-    assert.equal(prepared.text, '请查看附件');
-    assert.equal(prepared.files.length, 1);
-    assert.equal(prepared.files[0].size, Buffer.byteLength('# 恢复测试'));
-    assert.equal('path' in prepared.files[0], false);
-    await invoke(
-      `await window.delionBot.bridge.invoke('mail:releaseComposeFiles', ${JSON.stringify(prepared.files.map((file: { id: string }) => file.id))});`,
+    assert.equal(
+      await invoke(`return await window.delionBot.bridge.invoke('connectors:configured');`),
+      false,
     );
     await invoke(`await document.fonts.ready;`);
     assert.equal(
@@ -264,6 +275,41 @@ app
     await invoke(
       `await window.delionBot.bridge.invoke('workspace:remove', ${JSON.stringify(moveTo)});`,
     );
+    await invoke(`const link = Array.from(document.querySelectorAll('#main-nav button')).find(button => button.textContent.trim() === '连接器' || button.getAttribute('aria-label') === '连接器');
+      if (!link) throw new Error('缺少连接器导航');
+      link.click();
+      for (let i=0;i<50 && !document.querySelector('input[aria-label="Composio 项目密钥"]');i++) await new Promise(r=>setTimeout(r,100));
+      if (!document.querySelector('input[aria-label="Composio 项目密钥"]')) throw new Error('缺少连接器配置入口');`);
+    for (const width of [600, 900, 1280, 1920]) {
+      win.setContentSize(width, 800);
+      assert.equal(
+        await invoke(`await new Promise(requestAnimationFrame);
+        const pane=document.querySelector('input[aria-label="Composio 项目密钥"]').closest('main');
+        return pane.scrollWidth <= pane.clientWidth;`),
+        true,
+      );
+    }
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      assert.equal(url, 'https://example.com/authorize');
+      gmailConnected = true;
+      return { action: 'deny' };
+    });
+    await invoke(`const input=document.querySelector('input[aria-label="Composio 项目密钥"]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'smoke-key');
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+      input.form.requestSubmit();
+      const row=document.querySelector('[data-setting-id="gmail"]');
+      for(let i=0;i<60 && row.querySelector('button').disabled;i++) await new Promise(r=>setTimeout(r,100));
+      row.querySelector('button').click();
+      for(let i=0;i<80 && !row.textContent.includes('已连接');i++) await new Promise(r=>setTimeout(r,100));
+      if(!row.textContent.includes('已连接')) throw new Error('Gmail 授权后未显示账户');
+      const disconnect=row.querySelector('button');
+      disconnect.click();
+      await new Promise(requestAnimationFrame);
+      row.querySelector('button').click();
+      for(let i=0;i<50 && row.textContent.includes('已连接');i++) await new Promise(r=>setTimeout(r,100));
+      if(row.textContent.includes('已连接')) throw new Error('断开后仍显示账户');`);
+    assert.equal(gmailConnected, false);
     assert(existsSync(path));
     closeDatabase();
     assert.deepEqual(
@@ -276,7 +322,7 @@ app
     win.destroy();
     closeDatabase();
     console.log(
-      'Workspace smoke passed: local PDF range reads, folder conversion/moves, note conflict protection, persistent workbench layout, model provider configuration and mail draft attachments.',
+      'Workspace smoke passed: local PDF range reads, folder conversion/moves, note conflict protection, persistent workbench layout, model provider configuration and connector setup.',
     );
     app.quit();
   })

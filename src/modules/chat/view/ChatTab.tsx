@@ -13,7 +13,6 @@ import { ChatThread } from './ChatThread';
 import {
   NoReferenceEntries,
   useChatTabSource,
-  type MailDraftDialog,
   type ReferenceEntry,
   type ReferenceSource,
 } from './chat-source';
@@ -54,7 +53,6 @@ export function ChatTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
       key={sessionId}
       active={sessionId}
       home={groupId === 'home'}
-      mailDialog={source.mailDialog}
       onSaveNote={source.onSaveNote}
       projectId={projectId}
       referenceSource={referenceSource}
@@ -143,14 +141,12 @@ function ChatSessionView({
   projectId,
   referenceSource,
   home,
-  mailDialog,
   onSaveNote,
 }: {
   active: string;
   projectId: string | null;
   referenceSource?: ReferenceSource;
   home: boolean;
-  mailDialog?: MailDraftDialog;
   onSaveNote?: (text: string) => void;
 }) {
   const { navigate, workbench } = useChatTabSource();
@@ -283,7 +279,6 @@ function ChatSessionView({
       {conversation ? (
         <ChatThread
           chat={chat}
-          mailDialog={mailDialog}
           onEditLast={subagent ? undefined : editLast}
           onFork={subagent ? undefined : fork}
           onSidechat={subagent ? undefined : sidechatFromQuote}

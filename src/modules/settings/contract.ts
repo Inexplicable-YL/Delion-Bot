@@ -28,12 +28,10 @@ export type SettingsSectionId =
   | 'shortcuts'
   | 'notifications'
   | 'storage'
-  | 'connections'
   | 'providers'
   | 'capabilities'
   | 'commands'
   | 'skills'
-  | 'mcp'
   | 'workspace'
   | 'remotes'
   | 'archived'
@@ -47,12 +45,10 @@ export const settingsSectionLabels: Record<SettingsSectionId, string> = {
   shortcuts: '快捷键',
   notifications: '通知',
   storage: '存储',
-  connections: '凭据',
   providers: '模型服务',
   capabilities: '内置能力',
   commands: '自定义指令',
   skills: 'Skills',
-  mcp: 'MCP',
   workspace: '工作区',
   remotes: '远程',
   archived: '已归档对话',
@@ -99,9 +95,6 @@ export const settingsContract = defineContract('settings', {
   setFontSize: { input: z.number(), output: z.number() },
   openAtLogin: { input: z.undefined(), output: z.boolean() },
   setOpenAtLogin: { input: z.boolean(), output: z.boolean() },
-  /** 邮件的系统提醒开关；关闭只停桌面通知，应用内列表不受影响。 */
-  mailNotifications: { input: z.undefined(), output: z.boolean() },
-  setMailNotifications: { input: z.boolean(), output: z.boolean() },
   taskNotifications: { input: z.undefined(), output: z.custom<TaskNotificationPrefs>() },
   setTaskNotifications: {
     input: taskNotificationsSchema,

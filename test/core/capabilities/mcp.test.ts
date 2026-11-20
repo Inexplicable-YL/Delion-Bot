@@ -70,7 +70,7 @@ describe('MCP 连接与工具发现', () => {
       toolCount: 3,
       error: null,
     });
-    const definitions = mcpToolDefinitions();
+    const definitions = await mcpToolDefinitions();
     expect(definitions.map(({ function: fn }) => fn.name).sort()).toEqual([
       'mcp_echo_srv_die',
       'mcp_echo_srv_echo',
@@ -102,7 +102,7 @@ describe('MCP 连接与工具发现', () => {
       expect(current).toMatchObject({ status: 'error', toolCount: null });
       expect(current.error).toContain('连接已断开');
     });
-    expect(mcpToolDefinitions()).toHaveLength(0);
+    expect(await mcpToolDefinitions()).toHaveLength(0);
     await expect(executeMcpTool('mcp_echo_srv_echo', { message: 'x' })).resolves.toMatchObject({
       ok: false,
       error: { code: 'NOT_CONFIGURED', message: expect.stringContaining('当前不可用') },
@@ -116,7 +116,7 @@ describe('MCP 连接与工具发现', () => {
     await addMcpServer({ ...echoConfig, name: 'a', env: { DELION_TOOL_NAME: 'b_echo' } });
     const views = await addMcpServer({ ...echoConfig, name: 'a-b' });
     expect(views.find((view) => view.name === 'a-b')!.error).toContain('已跳过');
-    expect(mcpToolDefinitions()).toHaveLength(5);
+    expect(await mcpToolDefinitions()).toHaveLength(5);
     await expect(executeMcpTool('mcp_a_b_echo', { message: '你好' })).resolves.toMatchObject({
       ok: true,
       result: { text: 'echo:你好' },
@@ -140,7 +140,7 @@ describe('MCP 配置管理与持久化', () => {
     );
     expect(disabled[0]).toMatchObject({ enabled: false, status: 'disconnected', toolCount: null });
     expect(storedConfigs()[0]).toMatchObject({ args: [echoServer], env: {} });
-    expect(mcpToolDefinitions()).toHaveLength(0);
+    expect(await mcpToolDefinitions()).toHaveLength(0);
     await expect(executeMcpTool('mcp_echo_srv_echo', { message: 'x' })).resolves.toMatchObject({
       ok: false,
       error: { code: 'NOT_CONFIGURED', message: expect.stringContaining('echo-srv') },

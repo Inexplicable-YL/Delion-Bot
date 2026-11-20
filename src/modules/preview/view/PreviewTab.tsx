@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '../../../ui/button';
 import { Card } from '../../../ui/card';
 import { useRootFontSize } from '../../../ui/root-font-size';
-import { sanitizeHtml } from '../../mail/view';
+import { sanitizeHtml } from './sanitize-html';
 import { showToast } from '../../../ui/toast';
 import type { TabId } from '../../workspace/contract';
 import { CodeViewer } from './CodeViewer';

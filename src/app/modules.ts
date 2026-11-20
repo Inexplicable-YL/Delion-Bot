@@ -1,7 +1,7 @@
 // 模块清单：主进程据此注册各模块的 IPC 与后台任务。
 import type { ModuleDefinition } from './module';
 import { chatModule } from '../modules/chat';
-import { mailModule } from '../modules/mail';
+import { connectorsModule } from '../modules/connectors';
 import { notificationsModule } from '../modules/notifications';
 import { onboardingModule } from '../modules/onboarding';
 import { previewModule } from '../modules/preview';
@@ -19,7 +19,7 @@ export const modules: ModuleDefinition[] = [
   remotesModule,
   terminalModule,
   chatModule,
-  mailModule,
+  connectorsModule,
   settingsModule,
   updateModule,
   onboardingModule,

@@ -1,7 +1,7 @@
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, join } from 'node:path';
 import { afterAll, beforeEach, expect, it, vi } from 'vitest';
 
 const profile = vi.hoisted(() => ({ root: '' }));
@@ -21,13 +21,6 @@ vi.mock('../../../../src/modules/workspace/main/api', async (importOriginal) => 
     throw new Error('GUI preview must not be called');
   }),
 }));
-vi.mock('../../../../src/modules/mail/main/api', () => ({
-  readMailMessage: vi.fn(async () => ({ attachments: [{ part: '1', filename: '报名.xlsx' }] })),
-  saveMailAttachment: vi.fn(async (_id: number, _part: string, path: string) =>
-    writeFile(path, 'attachment bytes'),
-  ),
-  mailAttachment: vi.fn(() => ({ attachment: { filename: '报名.xlsx' } })),
-}));
 import {
   prepareDocumentResource,
   releaseDocumentResource,
@@ -38,10 +31,6 @@ import {
   workspaceFilePath,
 } from '../../../../src/modules/workspace/main/api';
 import {
-  attachmentResourceResolver,
-  mailResourceResolver,
-} from '../../../../src/modules/mail/main/resources';
-import {
   resourceDomain,
   workspaceResourceResolver,
 } from '../../../../src/modules/workspace/main/read-resource';
@@ -50,19 +39,9 @@ import { assertDocumentDependency } from '../../../../src/modules/preview';
 
 const readResourceTool = resourceDomain.commands.read_resource;
 registerResourceResolver('workspace', workspaceResourceResolver);
-registerResourceResolver('mail', mailResourceResolver);
-registerResourceResolver('attachment', attachmentResourceResolver);
 
 beforeEach(() => vi.clearAllMocks());
 afterAll(() => rm(profile.root, { recursive: true, force: true }));
-
-it('keeps an attachment copy alive until the skill explicitly releases its job', async () => {
-  const job = await prepareDocumentResource({ type: 'attachment', messageId: 1, part: '1' });
-  expect(await readFile(job.input, 'utf8')).toBe('attachment bytes');
-  expect(job.output).toBe(join(dirname(job.input), 'output'));
-  await releaseDocumentResource(job.jobId);
-  expect(existsSync(dirname(job.input))).toBe(false);
-});
 
 it('reads a snapshot and never removes the original workspace document', async () => {
   const source = join(profile.root, 'original.pdf');

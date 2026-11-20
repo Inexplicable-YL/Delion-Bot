@@ -66,7 +66,7 @@ import { errorMessage } from '../../../core/protocol/contract';
 
 const builtinCommands = [
   { name: '待办', prompt: '帮我查看还未完成的个人待办', hint: '查询个人待办' },
-  { name: '邮件', prompt: '帮我查找最近的未读邮件', hint: '已缓存的邮件' },
+  { name: '邮件', prompt: '帮我查找最近的未读邮件', hint: '通过邮箱连接器' },
   { name: '资料', prompt: '帮我在项目中查找相关文件', hint: '搜索并读取资料' },
   { name: '整理', prompt: '帮我把引用资料里的要点整理成一份笔记', hint: '生成并保存笔记' },
 ];

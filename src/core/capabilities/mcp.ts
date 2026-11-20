@@ -145,8 +145,16 @@ function connectError(sdk: McpSdk, error: unknown): string {
   return errorMessage(error);
 }
 
-function syncFromConfigs(): void {
+let managedConfig: () => McpServerConfig | null = () => null;
+
+export function provideManagedMcp(config: () => McpServerConfig | null): void {
+  managedConfig = config;
+}
+
+function syncFromConfigs(): string | undefined {
   const configs = readMcpConfigs();
+  const managed = managedConfig();
+  if (managed) configs.push(managed);
   for (const [id, entry] of servers)
     if (!configs.some((config) => config.id === id)) {
       void closeConnection(entry);
@@ -166,6 +174,7 @@ function syncFromConfigs(): void {
         connecting: null,
       });
   }
+  return managed?.id;
 }
 
 function dropAdoptedTools(entry: ManagedServer): void {
@@ -295,9 +304,13 @@ function findServer(id: string): ManagedServer {
   return entry;
 }
 
-export function mcpToolDefinitions(): DynamicToolDefinition[] {
+export async function mcpToolDefinitions(): Promise<DynamicToolDefinition[]> {
   try {
-    syncFromConfigs();
+    const managedId = syncFromConfigs();
+    if (managedId) {
+      const entry = findServer(managedId);
+      if (entry.status !== 'connected') await connectServer(entry);
+    }
   } catch {
     // 配置解不开时不阻断会话：设置页会给出原因
     return [];
@@ -410,8 +423,11 @@ export async function executeMcpTool(
 }
 
 export function listMcpServers(): McpServerView[] {
-  syncFromConfigs();
-  return [...servers.values()].map(serverView).sort((a, b) => a.name.localeCompare(b.name));
+  const managedId = syncFromConfigs();
+  return [...servers.values()]
+    .filter((entry) => entry.config.id !== managedId)
+    .map(serverView)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function addMcpServer(input: McpServerInput): Promise<McpServerView[]> {

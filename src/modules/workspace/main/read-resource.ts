@@ -9,7 +9,6 @@ import { freshness, offset, tool, toolError } from '../../../core/capabilities/d
 /** 业务层中文错误消息 → 统一错误码（消息保持原文）；未识别的错误原样抛出。 */
 function refineReadError(error: unknown): unknown {
   const message = error instanceof Error ? error.message : '';
-  if (message.includes('邮箱未配置')) return toolError('NOT_CONFIGURED', message);
   if (message.includes('不存在') || message.includes('尚未同步'))
     return toolError('NOT_FOUND', message);
   return error;
@@ -68,7 +67,7 @@ export function readDocument(
 }
 
 const readResourceTool = tool(
-  '读取项目文本、笔记和邮件正文，支持字符分页。图片直接附图，二进制文档和附件返回 document-reading skill 的读取指引。',
+  '读取项目文本和笔记，支持字符分页。图片直接附图，二进制文档和附件返回 document-reading skill 的读取指引。',
   z
     .object({
       ref: resourceRefSchema,
@@ -95,6 +94,6 @@ export const workspaceResourceResolver: ResourceResolver<
 
 export const resourceDomain = {
   name: 'resource',
-  description: '读取项目文件、笔记和邮件正文',
+  description: '读取项目文件和笔记',
   commands: { read_resource: readResourceTool },
 } satisfies CommandDomain;

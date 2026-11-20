@@ -103,7 +103,7 @@ export function agentEnvironment() {
           ),
           customTools: [
             ...webTools,
-            ...mcpTools(),
+            ...(await mcpTools()),
             ...sessionTools(projectId),
             ...(await remoteTools(cwd, remoteBackend(target))),
           ],
@@ -128,7 +128,7 @@ export function agentEnvironment() {
         globalSkillDirs: [...globalSkillDirectories(), join(piAgentDir(), 'skills')],
         disabledSkills: effectiveDisabledSkills(),
         disabledTools: [...readDisabledTools()],
-        customTools: [...webTools, ...mcpTools(), ...sessionTools(projectId)],
+        customTools: [...webTools, ...(await mcpTools()), ...sessionTools(projectId)],
         disabledSkillPaths,
       };
     },
@@ -179,8 +179,8 @@ const webTools: ToolDefinition[] = [
   },
 ];
 
-function mcpTools(): ToolDefinition[] {
-  return mcpToolDefinitions().map(({ function: definition }) => ({
+async function mcpTools(): Promise<ToolDefinition[]> {
+  return (await mcpToolDefinitions()).map(({ function: definition }) => ({
     name: definition.name,
     label: definition.name,
     description: definition.description,
