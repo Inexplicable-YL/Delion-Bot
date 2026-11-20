@@ -1,0 +1,287 @@
+import { app, BrowserWindow, ipcMain, net } from 'electron';
+import assert from 'node:assert/strict';
+import {
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  renameSync,
+  truncateSync,
+} from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { provideHostPorts } from '../src/core/ports';
+import { electronPorts } from '../src/app/main/host-electron';
+import { closeDatabase, getDatabase } from '../src/app/main/database';
+import { mailModule, prepareEmail } from '../src/modules/mail';
+import {
+  createWorkspaceEntry,
+  getWorkspaceState,
+  importWorkspaceFiles,
+  readWorkspaceEntry,
+  registerPreviewProtocol,
+  registerPreviewScheme,
+  saveWorkspaceNote,
+  updateWorkspaceEntry,
+  workspaceModule,
+} from '../src/modules/workspace';
+import { registerModuleIpc } from '../src/app/main/ipc';
+import { notificationsModule } from '../src/modules/notifications';
+import { previewModule } from '../src/modules/preview';
+import { remotesModule } from '../src/modules/remotes';
+import { settingsModule } from '../src/modules/settings';
+import { updateModule } from '../src/modules/update';
+import { registerAgentIpc } from '../src/app/main/agent-ipc';
+
+const profile = mkdtempSync(join(tmpdir(), 'delion-workspace-test-'));
+app.setPath('userData', profile);
+registerPreviewScheme();
+const pdf = new TextEncoder().encode('%PDF-1.4\nfixture');
+globalThis.fetch = async (input) => {
+  const url = new URL(String(input));
+  assert.equal(url.href, 'https://models.example.com/api/v1/models');
+  return Response.json({ data: [{ id: 'qwen' }, { id: 'minimax' }] });
+};
+
+app
+  .whenReady()
+  .then(async () => {
+    provideHostPorts(electronPorts);
+    const db = getDatabase();
+    db.prepare("INSERT OR REPLACE INTO workspace_settings VALUES ('directory', ?)").run(
+      join(profile, 'notes'),
+    );
+    const largePdfId = randomUUID();
+    const largePdfPath = join(profile, 'large-fixture.pdf');
+    const largePdfSize = 256 * 1024 * 1024;
+    writeFileSync(largePdfPath, pdf);
+    truncateSync(largePdfPath, largePdfSize);
+    db.prepare(
+      'INSERT INTO workspace_entries (id, name, kind, local_path, updated_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(largePdfId, 'large-fixture.pdf', 'file', largePdfPath, new Date().toISOString());
+    const largePdf = await readWorkspaceEntry(largePdfId);
+    assert.equal(largePdf.format, 'pdf');
+    assert.equal(largePdf.bytes, undefined);
+    registerPreviewProtocol();
+    const largePreviewRange = await net.fetch(largePdf.previewUrl!, {
+      headers: { Range: 'bytes=0-4' },
+    });
+    assert.equal(largePreviewRange.status, 206);
+    assert.equal(largePreviewRange.headers.get('content-range'), `bytes 0-4/${largePdfSize}`);
+    assert.equal(await largePreviewRange.text(), '%PDF-');
+
+    const folder = createWorkspaceEntry({ name: '主题资料', kind: 'folder', parentId: null });
+    const child = createWorkspaceEntry({ name: '参考', kind: 'folder', parentId: folder.id });
+    const outsideFile = join(profile, '外部文件.txt');
+    writeFileSync(outsideFile, '原文件');
+    const [imported] = importWorkspaceFiles(child.id, [outsideFile]);
+    assert.equal(readFileSync(outsideFile, 'utf8'), '原文件');
+    assert.equal(
+      readFileSync(join(profile, 'notes', 'workspace', '主题资料', '参考', '外部文件.txt'), 'utf8'),
+      '原文件',
+    );
+    assert.equal((await readWorkspaceEntry(imported!.id)).text, '原文件');
+    const promoted = updateWorkspaceEntry(folder.id, { kind: 'project' });
+    assert.equal(
+      getWorkspaceState().entries.find((entry) => entry.id === promoted.id)?.kind,
+      'project',
+    );
+    assert.throws(() => updateWorkspaceEntry(folder.id, { parentId: child.id }), /子文件夹/);
+    const note = createWorkspaceEntry({
+      name: '笔记.md',
+      kind: 'file',
+      parentId: child.id,
+      text: '# 初稿',
+    });
+    const other = createWorkspaceEntry({ name: '独立项目', kind: 'project', parentId: null });
+    const opened = await readWorkspaceEntry(note.id);
+    const revision = saveWorkspaceNote(note.id, '# 恢复测试', opened.revision!);
+    // 路径笔记不落 workspace_notes 行：文件路径即条目 id。
+    let path = note.id;
+    assert.equal(path, join(profile, 'notes', 'workspace', '主题资料', '参考', '笔记.md'));
+    assert.throws(
+      () => createWorkspaceEntry({ name: '笔记.md', kind: 'file', parentId: child.id }),
+      /已存在/,
+    );
+    const duplicateNote = createWorkspaceEntry({
+      name: '笔记 (2).md',
+      kind: 'file',
+      parentId: child.id,
+      text: '独立副本',
+    });
+    assert.equal((await readWorkspaceEntry(duplicateNote.id)).text, '独立副本');
+    assert(existsSync(join(profile, 'notes', 'workspace', '主题资料', '参考', '笔记 (2).md')));
+    writeFileSync(path, '# 外部编辑');
+    assert.throws(() => saveWorkspaceNote(note.id, '# 不覆盖', revision), /外部修改/);
+    assert.equal(readFileSync(path, 'utf8'), '# 外部编辑');
+    const disk = await readWorkspaceEntry(note.id);
+    saveWorkspaceNote(note.id, '# 恢复测试', disk.revision!);
+    const moved = updateWorkspaceEntry(note.id, { parentId: folder.id, name: '记录.md' });
+    assert(!existsSync(path));
+    path = join(profile, 'notes', 'workspace', '主题资料', '记录.md');
+    assert.equal(readFileSync(path, 'utf8'), '# 恢复测试');
+    updateWorkspaceEntry(child.id, { name: '参考改名', parentId: other.id });
+    assert.equal(
+      readFileSync(
+        join(profile, 'notes', 'workspace', '独立项目', '参考改名', '笔记 (2).md'),
+        'utf8',
+      ),
+      '独立副本',
+    );
+    // Simulate a crash after the physical rename but before the database commit.
+    const moveFrom = join(profile, 'notes', 'workspace', '独立项目', '参考改名');
+    const moveTo = join(profile, 'notes', 'workspace', '独立项目', '恢复后的参考');
+    db.prepare("INSERT OR REPLACE INTO workspace_settings VALUES ('storage-move', ?)").run(
+      JSON.stringify({
+        from: moveFrom,
+        to: moveTo,
+        id: child.id,
+        name: '恢复后的参考',
+        parentId: other.id,
+        kind: 'folder',
+      }),
+    );
+    renameSync(moveFrom, moveTo);
+    closeDatabase();
+    getWorkspaceState();
+    assert(existsSync(join(moveTo, '笔记 (2).md')));
+    // 越出父目录的路径段直接拒绝；Windows 保留名仍按段替换成安全名字。
+    assert.throws(
+      () => createWorkspaceEntry({ name: '../CON', kind: 'file', parentId: folder.id }),
+      /路径段/,
+    );
+    const odd = createWorkspaceEntry({
+      name: 'CON',
+      kind: 'file',
+      parentId: folder.id,
+      text: '安全路径',
+    });
+    assert.equal((await readWorkspaceEntry(odd.id)).text, '安全路径');
+    assert(existsSync(join(profile, 'notes', 'workspace', '主题资料', '_CON')));
+    renameSync(path, `${path}.external`);
+    assert.throws(() => updateWorkspaceEntry(moved.id, { name: '不应生效.md' }));
+    // 目录树按磁盘扫描：文件被外部移走时不列出，重命名失败也不得在磁盘上留下新名字。
+    assert(!existsSync(join(dirname(path), '不应生效.md')));
+    renameSync(`${path}.external`, path);
+    createWorkspaceEntry({
+      name: '未选资料',
+      kind: 'file',
+      parentId: other.id,
+      text: '不应发送的资料',
+    });
+
+    registerAgentIpc();
+    previewModule.register?.();
+    workspaceModule.register?.();
+    ipcMain.handle('window:get-state', () => ({ maximized: false }));
+    registerModuleIpc([
+      workspaceModule,
+      remotesModule,
+      notificationsModule,
+      mailModule,
+      settingsModule,
+      updateModule,
+    ]);
+    const win = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        preload: join(process.cwd(), 'out/preload/index.cjs'),
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    await win.loadFile(join(process.cwd(), 'out/renderer/index.html'), {
+      query: { 'smoke-test': '1' },
+    });
+    const invoke = (body: string) =>
+      win.webContents.executeJavaScript(`(async () => { ${body} })()`);
+    const rendererRange = await invoke(`
+      const response = await fetch(${JSON.stringify(largePdf.previewUrl)}, { headers: { Range: 'bytes=0-4' } });
+      return { status: response.status, range: response.headers.get('content-range'), text: await response.text() };
+    `);
+    assert.equal(rendererRange.status, 206);
+    assert.equal(rendererRange.text, '%PDF-');
+    assert.match(rendererRange.range, /^bytes 0-4\//);
+    const layout = {
+      root: { type: 'group', id: 'g1', tabs: [`note:${moved.id}`], active: `note:${moved.id}` },
+      focus: 'g1',
+      maximized: null,
+    };
+    await invoke(
+      `await window.delionBot.bridge.invoke('workspace:saveLayout', { projectId: ${JSON.stringify(promoted.id)}, layout: ${JSON.stringify(layout)} });`,
+    );
+    const provider = await invoke(
+      `return await window.delionBot.bridge.invoke('llm:save', { name: '测试模型服务', baseUrl: 'https://models.example.com/api/v1', apiKey: 'test-model-key', models: ['qwen', 'deepseek-chat', 'minimax'] });`,
+    );
+    const providers = await invoke(`return await window.delionBot.bridge.invoke('llm:list');`);
+    assert.equal(providers.length, 1);
+    assert.equal(providers[0].enabled, true);
+    assert.equal('apiKey' in providers[0], false);
+    const verified = await invoke(
+      `return await window.delionBot.bridge.invoke('llm:verify', { id: ${JSON.stringify(providers[0].id)}, baseUrl: ${JSON.stringify(providers[0].baseUrl)} });`,
+    );
+    assert.equal(verified.ok, true, verified.message);
+    assert.deepEqual(verified.models, ['qwen', 'minimax']);
+    await invoke(
+      `await window.delionBot.bridge.invoke('llm:setEnabled', { id: ${JSON.stringify(provider.id)}, enabled: false });`,
+    );
+    assert.equal(
+      (await invoke(`return await window.delionBot.bridge.invoke('llm:list');`))[0].enabled,
+      false,
+    );
+    const email = prepareEmail({
+      to: ['recipient@example.com'],
+      subject: '报告草稿',
+      text: '请查看附件',
+      attachments: [{ type: 'workspace', id: moved.id }],
+    });
+    assert.equal(email.sent, false);
+    const prepared = await invoke(
+      `return await window.delionBot.bridge.invoke('mail:openDraft', ${JSON.stringify(email.draftId)});`,
+    );
+    assert.equal(prepared.subject, '报告草稿');
+    assert.equal(prepared.text, '请查看附件');
+    assert.equal(prepared.files.length, 1);
+    assert.equal(prepared.files[0].size, Buffer.byteLength('# 恢复测试'));
+    assert.equal('path' in prepared.files[0], false);
+    await invoke(
+      `await window.delionBot.bridge.invoke('mail:releaseComposeFiles', ${JSON.stringify(prepared.files.map((file: { id: string }) => file.id))});`,
+    );
+    await invoke(`await document.fonts.ready;`);
+    assert.equal(
+      await invoke(
+        `for (let i = 0; i < 50 && !document.querySelector('aside[aria-label="主导航"]'); i++) await new Promise((r) => setTimeout(r, 100));
+         return Boolean(document.querySelector('main') && document.querySelector('aside[aria-label="主导航"]'));`,
+      ),
+      true,
+    );
+    writeFileSync(
+      join(process.cwd(), '.tools', 'agent-home.png'),
+      (await win.webContents.capturePage()).toPNG(),
+    );
+    await invoke(
+      `await window.delionBot.bridge.invoke('workspace:remove', ${JSON.stringify(moveTo)});`,
+    );
+    assert(existsSync(path));
+    closeDatabase();
+    assert.deepEqual(
+      await invoke(
+        `return await window.delionBot.bridge.invoke('workspace:layout', ${JSON.stringify(promoted.id)});`,
+      ),
+      layout,
+    );
+    assert.equal((await readWorkspaceEntry(moved.id)).text, '# 恢复测试');
+    win.destroy();
+    closeDatabase();
+    console.log(
+      'Workspace smoke passed: local PDF range reads, folder conversion/moves, note conflict protection, persistent workbench layout, model provider configuration and mail draft attachments.',
+    );
+    app.quit();
+  })
+  .catch((error: unknown) => {
+    console.error(error);
+    closeDatabase();
+    app.exit(1);
+  });

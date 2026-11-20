@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "lib": ["ES2023"], "types": ["node"] },
+  "include": ["src/core/**/*.ts", "src/app/**/*.ts", "src/modules/**/*.ts", "vite.*.config.ts"],
+  "exclude": ["src/app/views.ts", "src/app/renderer/**", "src/modules/*/view/**"]
+}

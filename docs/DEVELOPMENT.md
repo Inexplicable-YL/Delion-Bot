@@ -1,0 +1,386 @@
+# Delion Bot 开发文档
+
+面向想构建、修改和发布 Delion Bot 的贡献者。本文是**唯一的**开发与架构文档。
+
+本文档不是详细的技术细节，而是为不同的开发场景提供一份尽可能准确的导航。
+
+如果你要更新此文档，请记住以下几个原则：
+
+- 代码能读出来的不写入文档，默认开发者可以通过阅读代码理解其实现思路
+- 涉及到常量，编码，清单的内容不写，它们已经出现在代码中
+- 那些可以写入此：读代码得不到的外部事实（第三方接口的实际行为、平台约束）、设计取舍的理由、以及尚未验收的状态。
+
+或者简单一句话，**此文档在常规情况下不需要更新，如果你想传递你的开发信息，请直接放进 commit log 中。**
+
+其他文档导航：
+
+- 使用者视角：[README.md](../README.md)
+- 协作方式：[CONTRIBUTING.md](../CONTRIBUTING.md)
+- 按版本分节的变更记录：[CHANGELOG.md](../CHANGELOG.md)
+- 日常编码约束：[AGENTS.md](../AGENTS.md)
+- 远端 helper 的协议与端点表：[helper/README.md](../helper/README.md)
+
+## 1. 产品与边界
+
+本地个人 Agent：内核是通用 agent，领域知识外置为 skills 与 `delion` 命令，工作台 GUI 是壳。
+
+- 单用户、单应用、单 package。正式分发仅 Windows x64；macOS（Apple Silicon）在适配中，详见 §16。
+- 无服务端，无账号系统。模型服务与检索 API 都由用户自己配置。
+- 不做的功能见 [what-we-not-do.md](what-we-not-do.md)。
+
+## 2. 分层架构
+
+建设顺序即依赖方向，自下而上。GUI 只消费同一套领域实现，不复制业务逻辑。
+
+### 2.1 内核＝Pi Coding Agent（冻结）
+
+`@earendil-works/pi-coding-agent` 的 `createAgentSession` 就是 agent 内核。会话树（JSONL）、多轮工具上下文、自动压缩、重试、`AGENTS.md` 上下文文件、skills 发现与渐进加载都由 Pi 承担，Delion Bot 不另写执行循环、上下文组装或压缩。
+
+工具来源分三类：Pi 内置（read / write / edit / bash / grep / find / ls）、Delion Bot 自写（web_search / web_fetch / session_search / session_read / task / task_output / task_stop，以及同名覆盖 bash 加上 background 参数）、MCP（stdio 与 Streamable HTTP 服务器，配置整份加密保存在 `mcp-servers.bin`）。read/write/edit/bash 常驻不可关。
+
+两个容易踩的目录事实：
+
+- **rg/fd 落在 `~/.pi/agent/bin`，不是 `userData/pi/bin`**。bin 只认 `PI_CODING_AGENT_DIR`，Delion Bot 不设置它。`userData/pi` 里隔离的是 auth、models、sessions 与 skills，bin 是唯一例外。
+- 搜索工具**随包分发**。Pi 自身的兜底是从 GitHub 直连下载，大陆大概率失败，所以 rg/fd 经 `extraResources` 进 `resources/bin`，启动时前插 PATH 直接命中（来源与升级见 [vendor/bin/README](../vendor/bin/README.md)）。
+
+`web_fetch` 用纯 JS `@mdream/js` 转 Markdown，不执行 JavaScript。PDF 按 MIME 或文件头识别，完整下载后交给 document-reading skill 解析——**不能把网页截断的字节当成完整 PDF**。`web_search` 由用户提供搜索服务，默认关闭；`web_fetch` 默认开启。
+
+### 2.1.1 轮次文件变化与 Git 审阅
+
+变更记录的做法是「轮前存基准、轮后比较并冻结」，不依赖 write/edit，所以 Bash 与脚本产物同样被记录。代价是并发修改（人工操作、其他会话）也会进结果，不保证归因为 Agent 独占。
+
+两条划分：
+
+- **项目会话**给差异审阅与增删行数；**随聊**只列文件与打开方式。两者共用后端快照，只是收窄展示与详情请求。
+- **冻结的轮次 diff 不依赖 Git**；「未提交改动」审阅才需要 Git，非仓库、缺 Git 与远程项目都不显示入口。
+
+同步子 Agent 的改动落在父会话这一轮里，照常进审阅；后台子 Agent 在两轮之间写的文件不进任何一轮，只能在「未提交改动」里看到。
+
+不变量：缺失记录必须展示为警告，不能伪装成「没有改动」；落盘失败通过完成事件上报，不覆盖模型原先的结果。
+
+### 2.2 delion 命令
+
+领域能力的 CLI 门面。应用生命周期内一个本机 HTTP 桥（`127.0.0.1` 随机端口 + Bearer token），经 Pi 的 `shellCommandPrefix` 注入 Agent 的 bash，终端不注入；`delion help` 列命令与 JSON Schema。
+
+命令域连同对应的内置 Skill 注册进 `core/capabilities` 的注册表，core 不认识具体业务（见 [ADR 0014](adr/0014-core-registries.md)）。系统提示按已启用的命令域生成，停用 Skill 后命令与说明一并消失。资源读取（`ResourceResolver`）与资料库这类共用工作目录的会话作用域（`SessionScope`）也按同样方式注册。
+
+### 2.3 skills
+
+内置 Skills（mail、todo、document-reading）由各模块注册，由应用写入 `~/.delion-bot/skills` 并交给 Pi。
+
+设置 › Skills 按来源分三组：内置、本机、每个本地项目。**开关的粒度不一样**——全局 skill 按名称记禁用，项目里的按 `SKILL.md` 绝对路径记，因为同名的可以共存且互不牵连。
+
+`document-reading` 是唯一带依赖的 skill：它需要一套独立的 Python 环境（Windows 用 Python.org embeddable，Mac 用 python-build-standalone，均为 3.12.10；uv 固定，压缩包固定 SHA256），装进 `userData/components`，不要求系统 Python、Homebrew 或管理员权限。依赖只接受 PyPI 官方 wheels 与锁定 hashes，**禁止源码构建，也禁止 Agent 自行安装**。没装组件时设置页仍列出它，但显示关闭且不注入 Pi。
+
+文档正文的读取交给外部 Python 脚本，主进程只负责取文件与工具路径，不解析 Office/PDF。输入副本与输出都在系统临时目录，用完显式释放，不写进用户项目。GUI 的 DOCX/XLSX/PPTX 预览是**另一条独立路径**，不复用这套。
+
+### 2.3.1 第三方能力
+
+第三方只经 Agent Skills 与 MCP 接入（见 [ADR 0002](adr/0002-pi-private-engine.md)、[ADR 0003](adr/0003-skills-and-mcp.md)）。会话的资源加载器关闭扩展、提示模板与主题，项目里的 `.pi/extensions`、`.pi/prompts` 与主题一律不加载。
+
+应用退出在 `before-quit` 拦一次，等后台任务收尾——**不能拦在 `will-quit`**，被拦下后 Electron 不再响应后续 `app.quit()`。
+
+### 2.4 GUI
+
+标签工作台（聊天 / 笔记 / 预览 / 审阅 / 终端），经 IPC 消费同一套领域实现。UI 组件集中在 `src/ui`（fork 自 beautiful-ui，不再跟随上游），被替代的自研 UI 必须清理。
+
+**标签规则**：所有「打开某样东西」的入口只决定打开什么、是否放到旁边；落在哪个组、是否预览只由 `workbench/open-target.ts` 决定，规则表写在该文件顶部并被测试逐条覆盖。要点：
+
+- 已打开的标签去它所在的组聚焦，否则落焦点组。会话、终端、审阅是单例。
+- 预览标签（VS Code 语义，组内至多一个）只用于**项目工作台**里的文件与资料，单击就地替换；编辑、双击、拖动、右键「保留」后转常驻。资料工作台与会话一律常驻。
+- 「在旁边打开」落到焦点组右侧相邻的组，没有就向右分出一个空组。
+
+**文件模型**：工作区只有 `folder / project / file / source` 四种条目，不区分「应用内笔记」与「外部文件」——笔记就是 `.md` 文件。格式判定只有一条规则且全线共用（本地工作区、远端、Agent 读取、聊天附件）：扩展名只用来挑专用查看器，其余按内容判定，**不维护文本扩展名白名单**。非 UTF-8 文本按二进制处理，防止按 UTF-8 读进来再写回把它写坏。
+
+**不改原状**是编辑器的核心承诺：不做格式化，Markdown 始终是原文（不经 AST 往返序列化），换行符跟随文件首个换行，BOM 原样保留，保存原地覆写以保住可执行位、硬链接与符号链接。保存前比对内容哈希，外部改过就拒绝并保留草稿。
+
+**通知边界**：瞬时动作的成功与失败走应用内浮窗；打开着的表单校验、持久态（连接红点、同步失败横幅、加载失败占位）与高频连续操作（终端）仍内联；后台自动动作失败只留日志，不打扰用户。
+
+### 2.5 设置页
+
+设置页只暴露具体、已实现的操作；renderer 不读取已存凭据或数据库。分区与分组的契约在 `modules/settings/contract.ts`，通道由各域自己注册，偏好落在 SQLite `workspace_settings`。
+
+几条跨分区的约定：
+
+- 状态用颜色点表达（绿＝连接 / 使用中，灰＝未连接）；页面主操作用主色按钮。常驻能力整组说明一次，行内用锁徽标替代禁用开关。
+- 条款页（隐私、使用）与引导的条款接受页共用 `components/legal-markdown.tsx`，正文是 `docs/terms.md` 与 `docs/privacy.md`，构建时内联，**三处不各抄一份**。改这个组件三处一起变。
+- 写条款要避开 `。**你` 这类「加粗以中文标点收尾、紧跟汉字」的写法：CommonMark 不把该 `**` 当作闭合，只会渲染出字面星号（GitHub 同样如此）。把收尾标点移到加粗之外即可。
+- 搜索服务配置只保留脱敏条目给选择器与列表，完整密钥仅编辑弹窗可取；密钥是导入时的静态副本，供应商换 Key 不跟随。
+
+**尺寸一律由 rem 派生**（字号设置会整体缩放文字、间距、图标与圆角）：禁止写死像素字号与宽高，换算基准固定 16。字号用 token，圆角用 `src/ui` 的 `rounded-*`。保留 px 的只有三类——边框/描边/阴影、媒体与容器查询断点、第三方 dist 内改不到的固定值；拖拽调宽的容器尺寸也是 px，因为它是用户用鼠标量出的画布尺寸。沙箱 iframe（邮件正文）是独立文档，rem 不继承外层，由 `lib/root-font-size.ts` 把根字号注进内层。
+
+颜色、阴影、圆角、层级与时长只用 `src/ui/tokens.css` 的 token，名字已冻结（[ADR 0018](adr/0018-design-token-freeze.md)），缺少时新增而不是借用别的用途的 token。`pnpm lint` 会拦下 token 之外的写法和写了却不生成 CSS 的类名。
+
+## 3. 会话与上下文
+
+- **项目＝目录**：项目是 `kind='project'` 的 workspace 条目，身份是条目 UUID，目录是其 `local_path`；可在工作区内新建，也可导入电脑上已有的文件夹（留在原处，重命名 / 移动真的动磁盘）。远程项目的 `local_path` 是远端 POSIX 路径。
+- **会话 cwd**：项目会话是该项目的目录，通用会话使用独立的私有目录。目录缺失时报错，**不静默换目录**。
+- **移除项目**：删除条目行并删除名下全部会话（含归档，JSONL 进回收站）；目录与文件不动，重新导入同一目录得到全新身份。项目上只有「归档会话」与「移除」两个动作，不设隐藏态。删除 SSH 连接时，名下远程项目按同一语义一并带走。
+- 会话的完整记录是 Pi JSONL，SQLite `sessions` 只是索引；renderer 看到的是 Pi 消息的投影。会话归属在创建时确定，不从当前工作台推断。
+- **会话层分四块**（`core/agent/session/`）：存储（SQLite 索引）、运行（Pi 实例与一轮执行）、投影（Pi 消息 → 界面，`<delion-meta>` 只在这里编解码）、命令（新建、分支、归档、换模型等）。后台任务与子 Agent 不引用会话，由运行层注入父会话的回调。
+- **上下文是 pull 模型**：@ 引用是会话 cwd 下文件的绝对路径，模型自主 read。引用以 token 内联在文本里，因此没有数量上限；附件是另一套 count（上限 5）。
+- **聊天文档附件**只传本地文件引用，由 document-reading skill 按需解析；二进制不按 UTF-8 注入提示词，不复制进项目。远端项目访问不到本机解析组件，发送文档附件会提示切换本机会话。
+- **会话命令**（`/compact`、`/reload`、`/name`、`/new`）由 Delion Bot 自己实现，Pi 的 slash command 只在它的终端界面里。自定义指令不许与会话命令同名。命令不是一轮对话，不写用户消息、不改标题、不记文件变化。
+- **插队**：运行中发送走 Pi 的 `steer()`，沿用本轮 turnId，改动按轮归属，改动卡片只挂在本轮最后一段回复上。Pi 已答完、Delion Bot 还在收尾时发来的消息，等收尾结束后作为新一轮。停止与撤回都先清空 Pi 的队列，未送达的消息回到输入框。运行中不接受 / 命令。
+- **一轮执行只有一个入口** `runTurn`：用户发送、插队收尾后的新一轮与后台任务唤醒都经过它，运行状态、改动快照与完成通知才不会漏。
+- **跨会话读取**读 Pi 当前分支的原文（跨越压缩点，不含被编辑重发放弃的分支），按轮返回用户消息与最终回复，省略工具与推理；只限当前项目内未归档的会话。`#` 引用同样是 pull：发送时只把 sessionId 写进 meta，由模型按需读取。
+- **子 Agent** 是独立的 Pi 会话（header 的 `parentSession` 指向父会话，`sessions.parent_id` 登记），不继承历史，工具与父会话相同但不能再派子 Agent。只有最终回复回到父会话上下文。子会话不进会话列表与搜索，随父会话归档、删除。全应用同时运行的子 Agent 有上限，超出直接报错，不排队。task 和其他可关的内置工具一样经 excludeTools 移出工具表，默认开启；关掉它不影响后台 bash。
+- **后台任务**（bash 与子 Agent）结束时经 `sendCustomMessage` 给父会话投一条通知，每个任务只投一次：父会话运行中插进本轮，空闲时开一轮。用户在面板上手动停止的只追加进记录、不唤醒；停止主对话不停后台任务。归档、删除会话与退出应用时全部结束、不投递，重启后不恢复。bash 输出完整写进 `userData/background-tasks` 下的日志，进程树由 Delion Bot 自己结束（Windows `taskkill /T`，其余平台进程组）；远程会话的后台 bash 是 helper 任务，退出应用时等取消送达后才关隧道。
+- 编辑重发在 Pi 会话树上分支，旧分支保留在 JSONL。
+- **会话导出**由主进程将当前 Pi 分支的核心对话和工具记录写成 `session.jsonl`，保留文件引用和回复评论，并与图片和上传附件一起保存为 ZIP。
+
+## 4. 远程项目
+
+把远端 Linux 主机上的目录登记为项目。**本地内核 + 远程执行**：内核、模型密钥、会话 JSONL、skills 与系统提示都在本地，只有工具执行、终端、目录读取与文件预览落到 SSH 远端。
+
+- **helper 是唯一通道**：工具调用、目录树、预览、上下文镜像、@ 候选与端口发现全部经远端 helper（`ssh -L` 隧道 + 远端 `127.0.0.1` 上的 HTTP），没有一次性 ssh 的退路。helper 是 Go 静态二进制，放在 `~/.delion-bot/helper/<版本>-<sha8>/`，在远端常驻；随包的 Linux rg 一并上传到 `~/.delion-bot/rg/<sha8>/`，远端没装 rg 也按 `.gitignore` 搜索。端点、任务与生命周期规则见 [helper/README.md](../helper/README.md)。只支持 Linux amd64/arm64；`$HOME` 禁止执行（noexec、只读挂载、SELinux）的服务器不支持，向导会给出分类过的原因并停在「连接」。
+- **依赖方向**：`remotes` 只暴露 `RemoteBackend`（文件操作、命令、搜索、后台命令），不认识 Pi 与 Agent；七个远程工具的 Pi 适配在 `core/agent/remote-tools`，由 lint 守住。
+- **ssh 的职责**收窄到引导 helper、连接自检、目录选择器首页的主目录解析与终端 `ssh -tt`。**System32 那份 OpenSSH 可能是旧版本**（Windows 本机实测 System32 为 9.5p2、Program Files 为 10.0p2），排障时先确认实际生效的是哪一个。
+- **任务接回**：命令以任务运行，按客户端生成的 id 去重，断线后按字节偏移续读输出并拿到真实退出码。断线期间超出缓冲的部分接不回来，工具输出里会补一行说明。取消必须显式调用——断开连接已经不会终止任务。
+- **路径归一化是最容易静默改错文件的点**：工具在调用 operations 前用宿主 `node:path` 解析参数，Windows 本机实测 `path.resolve('/home/u/proj','src/a.ts')` → `E:\home\u\proj\src\a.ts`。operations 只对 Windows 形态去盘符、转分隔符，原生 POSIX 路径不套用这些规则。
+- **本地不碰远端路径**：远程项目内禁新建 / 重命名 / 移动，目录不进本地扫描也不 `fs.watch`。远端条目 id 是「项目 id + 远端路径」，两台连接上的同路径目录不会混。
+- **认证**：Delion Bot 不存任何口令，密钥走 ssh 自身的 `~/.ssh/config` 与 agent，主机指纹不自动接受。
+- **ssh 一次调用一个子进程，没有多路复用**。并发握手太多时主机会直接断开，所以 `pnpm test:remote` 必须串行；App 侧日常调用都走 helper 的一条隧道，只有引导与重连才付 ssh 握手。
+- 同一 SSH 用户在每个远端节点、每个 helper 版本各有一个实例。重启与重连仍可复用该节点的实例。共享 HOME 的节点可共用可执行文件，运行状态各自保存。
+- **不做**：远端文件写回与编辑器内保存；远端 PPTX 内嵌预览；远程会话中的本机业务命令；JS 扩展宿主；远端 MCP 端口转发。
+
+## 5. 应用内更新
+
+Windows 与 macOS 共用一套：`electron-updater` + `electron-builder` 的 NSIS / DMG-ZIP，不自行实现版本比较、差分下载或安装器。其余平台直接返回 `unsupported`，不注册检查、不调用更新器。
+
+- 首版不配置更新源，安装包不会主动检查更新。
+- **进度 100% 只表示传输完成**，仍要等校验与安装准备，界面此时应显示「正在校验并准备安装」。总大小未知显示「—」，百分比向下取整，避免未完成时提前显示 100%。
+- `autoDownload` 与 `autoInstallOnAppQuit` 都为 false：用户手动下载，下载完后自己选「退出并安装」或「下次启动时提醒」。推迟后手动安装要先清除推迟标记。安装前保存笔记、聊天草稿、邮件草稿与工作台布局；运行中的 Agent、未发送附件或保存失败都要阻止安装并保留确认入口。
+- 安装调用 `quitAndInstall`，终端任务会结束且**不能恢复**。
+- 更新后首次启动的「更新内容」弹窗（`modules/update/view/`）以 `?raw` 内联 `CHANGELOG.md`，取每个已发布版本的条目，跨版本升级合并显示区间内各版本。首次安装只记录不弹，冒烟模式不弹。**没有额外的小节或标记**——条目本身就是弹窗内容，这也是 CHANGELOG 要保持简短的原因。
+- 尚未配置 Authenticode 签名。SHA-512 只验证文件与元数据一致，不能替代发布者签名。
+
+## 6. 安全边界
+
+诚实而非表演：给了 bash 就不设业务级守卫、无沙箱、无越权校验；skill 启停是引导层。
+
+- 数据保存在本机 SQLite，凭据经 Electron `safeStorage` 加密。
+- renderer 不接触文件系统、数据库与凭据，一切经受控 IPC 通信。
+- Agent 的 bash 与文件工具即本机权限，不设沙箱。这是已知取舍，不是待修复的漏洞，也不要描述成安全隔离。
+- Pi 的 auth / models / sessions / skills 放在 `userData/pi`，与用户的 `~/.pi` 隔离（bin 例外，见 §2.1）。模型密钥只在主进程内注册给 Pi 运行时，不写入 `auth.json`。
+- 应用启动**不读取仓库 `.env`**，凭据只能在应用内配置。
+
+## 7. 持久化
+
+模型推理档位只按模型保存；搜索结果直接携带会话的 `projectId`，不再推导旧入口身份。
+
+首版使用 SQLite schema 1，并在独立的应用数据目录创建数据库。不执行旧版迁移。
+
+模型选择属于会话：提供商只有启用/停用，没有全局「使用中」；新会话沿用最近发过消息的会话的模型，开始使用时写定。提供商分两类：内置厂商（`piProvider` 指向 Pi 目录中的厂商，模型只能从目录选）与自定义 OpenAI 兼容服务。
+
+笔记即磁盘文件，不进数据库。聊天标签以 `chat:{sessionId}` 绑定一个会话，新建和打开会话统一经过工作台导航；聊天组件不再保存另一份当前会话身份。
+
+## 8. 终端
+
+node-pty + xterm.js。本地终端跟随用户自己的 shell：Windows 优先 PowerShell 7（PATH 上或默认安装目录），没有时用系统自带的 Windows PowerShell 5.1；macOS 以登录模式启动用户的默认 shell（通常是 zsh），加载用户自己的配置。终端不注入 delion 命令桥。
+
+Agent 的 bash 工具与终端分开：固定用 bash，每条命令前拼上 delion 命令桥（`commandPrefix`）。macOS 用 `/bin/bash`，不执行登录 shell 来取环境；下面的 Git Bash 规则只用于 Windows 上的 Agent。
+
+- **Git Bash 探测顺序：系统 Git for Windows → 随包 MinGit**，都缺失说明安装包被破坏，Agent 报错提示安装 Git for Windows 后重启，**不回退 PowerShell**。
+- 随包 MinGit 由打包前脚本 `prepare-runtime.ts` 按写死的版本与 SHA256 下载校验，仓库不提交这份约 40MB 的产物。MinGit 只以 `sh.exe` 名义带 bash 本体，脚本要复制出 `bash.exe`——**argv[0] 决定 bash 是否走完整模式**。
+- 远程项目的终端是本地 `ssh -tt` 申请远端 PTY，可以让 ssh 自己问密码与指纹。
+
+## 9. 仓库组织
+
+单仓库、单 `package.json`（`pnpm-workspace.yaml` 只放 pnpm 设置，**不是** monorepo），三个进程的入口与外壳在 `src/app/{main,preload,renderer}/`，分别构建；Agent 内核在 `src/core`，界面组件在 `src/ui`，功能在 `src/modules`。远端 helper 是 `helper/` 的 Go 模块（只依赖标准库），预编译产物在 `vendor/`。
+
+目录清单见 [AGENTS.md](../AGENTS.md) 的文件树，那一份是权威。
+
+按层约定：
+
+- 模块的 IPC 由契约声明，`src/app/main/ipc.ts` 统一注册（见 §10.1）。模块的 Agent 命令域、文档读取器与资源解析器在各自的 `register()` 里登记。
+- core 不直接 import Electron：路径、钥匙串、通知、窗口广播、图片编解码、系统对话框、网络、数据库连接与项目查询都经 `src/core/ports.ts` 的 `HostPorts`，Electron 实现在 `src/app/main/host-electron.ts`，启动时 `provideHostPorts` 注入，测试由 vitest setupFile 默认注入。模块访问数据库、存储目录和主窗口同样经 `HostPorts`；模块的 `main/` 可以直接用 Electron。决策见 ADR [0013](adr/0013-host-ports.md)、[0016](adr/0016-core-host-boundary.md)。
+- Agent 内核在 `src/core`（`agent`、`capabilities`、`remote`），由 `tsconfig.core.json` 单独做类型检查，引用 core 之外的源码会报错；它的 IPC 注册在 `src/app/main/agent-ipc.ts`。core 用到、但不属于移动端协议的视图类型放在 `core/protocol` 的独立文件里（`llm`、`capabilities`、`remote`、`changes`），不进 JSON Schema，也不带版本。
+- TypeScript 测试放在根目录的 `test/` 下，目录结构与 `src/` 对应。core 的测试可以引用 main 的实现做集成夹具。Go 测试留在 `helper/` 的对应包内。
+- `scripts/` 全部为 TypeScript（Node 原生执行，仓库不再有 `.mjs`），纳入 `pnpm typecheck`。
+
+边界约定：界面代码不导入主进程代码、不访问凭据和数据库；不引入 Manager/Service/Factory 等抽象层级，出现真实重复前不做提取；打包白名单只含 `out/**/*`、`package.json` 与品牌图——文档、凭据与 `.tools/` 都不进安装包。
+
+### 9.1 模块结构示例
+
+全局搜索（`src/modules/search`）提供模块结构示例。设计理由见 ADR [0009](adr/0009-renderer-state.md)、[0011](adr/0011-module-contracts.md)、[0012](adr/0012-nav-targets.md)。
+
+1. **契约**：在 `contract.ts` 中用 `defineContract` 声明通道与入参 schema，返回值用 `z.custom<T>()` 只给类型。
+2. **主进程**：在 `index.ts` 中用 `defineModule` 和 `implement` 导出模块；实现放在 `main/`。别的模块需要提供数据时，在 `index.ts` 中开注册口。
+3. **登记**：模块加进 `app/modules.ts`，契约加进 `app/contracts.ts`，删除旧的 `ipcMain.handle`、preload 文件和 `DelionBotApi` 字段。
+4. **界面**：组件放在 `view/`，从 `view/index.ts` 导出。用 `createClient(contract, window.delionBot?.bridge)` 加 `useQuery` 取数，不写 Effect、requestId 和定时器。
+5. **跳转**：页面参数通过 `NavTargets` 接口合并登记。
+6. **测试**：主进程查询对着 `database.ts` 建出的真实表跑，不写影子 schema；UI 不写快照和样式断言。
+
+`ModuleDefinition` 除 `ipc` 外还有三个钩子：`register()` 在窗口创建前登记命令域、Skill 与各类注册口（冒烟测试同样调用）；`start()` 启动后台同步并返回停止函数；`openLink(url)` 让模块在应用内接管外部链接。
+
+模块通过公开入口注册命令、通知来源和搜索能力。
+
+Agent 协议（`core/protocol/agent.ts`）是另一种契约：桌面界面和移动端共用，只能新增，不兼容的改动要升 `AGENT_PROTOCOL_VERSION`。协议里的会话类型由 schema 推导。属于桌面便利功能的通道不进协议，仍是 `session:*`、`chat:*`。生成的 JSON Schema 提交在 `core/protocol/agent.schema.json`，协议一变测试就失败：只新增时用 `pnpm test -u` 更新，删改字段要先升版本。决策见 ADR [0004](adr/0004-agent-protocol.md)、[0015](adr/0015-agent-protocol-v1.md)。
+
+依赖边界由 oxlint 检查，报错信息里写明正确的引用方式。`view/` 只能引用 `core/protocol`、`app/module`、模块契约与 `src/ui`。renderer 的 Vite root 是 `src/app/renderer`，`src/` 下新增界面目录时要在 `globals.css` 加 `@source`，否则只在那里出现的类名不会生成。
+
+## 10. 工具链与启动
+
+| 工具    | 版本                               | 何时需要             |
+| ------- | ---------------------------------- | -------------------- |
+| Node.js | `.node-version`                    | 总是                 |
+| pnpm    | `package.json` 的 `packageManager` | 总是                 |
+| Go      | `go.mod` 声明 1.22，CI 固定 1.27.2 | 只在改远端 helper 时 |
+
+CI 从上述文件读取固定版本，本地推荐与 CI 一致；`engines` 声明兼容范围，`engineStrict` 拒绝范围之外的版本。仓库本机把工具装在被 Git 忽略的 `.tools/` 中，当前会话启用：
+
+```powershell
+. ./scripts/use-local-tools.ps1
+```
+
+Apple Silicon 则把校验后的官方 Node 解压到 `.tools/`，保留原目录名，并将其 `bin` 目录前插 PATH，版本取自 `.node-version`。
+
+- `allowBuilds` 里 `better-sqlite3: false`、`node-pty: true`——原生依赖用随包预编译产物，关闭源码重建。
+- `postinstall` 先下载 Electron 运行时，再执行 `fix-native-permissions.ts`：后者**仅在 Darwin** 上给 node-pty 的 `spawn-helper` 补可执行位（包内原为 0644，会导致 `posix_spawnp failed`）。只改了 postinstall 脚本时需显式重跑，增量 install 可能不重新执行。
+- `@earendil-works/*` 在 main 构建中保持 external、随 node_modules 打包进 asar；pi 系是纯 ESM，main 的 CJS 产物经动态 `import()` 加载。
+- 安装包体积：`dependencies` 只留主进程运行时要加载的包（electron-builder 会把它连闭包原样收进 asar），渲染层依赖放 devDependencies——放错边等于把 npm 目录再装一遍。
+- PDF.js 只是 renderer 的构建依赖；主进程不加载它，也不分发原生 canvas。
+
+**引导与条款门**：顺序是 Intro → 条款接受页 → 五步向导 → 能力拓展 → 完成动画。
+
+- **条款门对所有人成立**，只看有没有同意标记——否则「不同意并退出」再打开就绕过去了。
+- 是否需要配置向导只看当前的完成标记，不根据已有数据库或旧版引导痕迹推断。
+- 门禁读 localStorage（同步、启动就能判），留证追加写数据库（文档名、正文顶部的日期、应用版本与时间，后两项由主进程盖章）。写失败只记日志、不拦用户；记录只追加不改写，因此「同意的是哪一版」可回溯。
+- 「能力拓展」只是首次向导的最后一步，老用户不会再看到；新能力通过 release notes 告知。
+- 「导出本机数据」只给已经有本机数据的安装。数据库用 `VACUUM INTO` 取一致快照，其余文件是读取那一刻的样子；**符号链接一律跳过**——没有开发者模式时复刻链接直接 EPERM，会连累整个顶层条目一个文件都复制不出来。目标落在数据目录里面时直接拒绝。
+- 「缓存占用」统计 Chromium 缓存，链接一律不跟，清除前后各量一次（差值为负时夹到 0）。导出本机数据跳过同一份名单。
+
+改了 `helper/` 下的 Go 代码后执行 `pnpm build:helper --all` 重建两个架构并一并提交——只重建 amd64 会让仓库里的 arm64 停在旧版。
+
+## 11. 常用命令
+
+| 命令                                | 用途                                                              |
+| ----------------------------------- | ----------------------------------------------------------------- |
+| `pnpm dev`                          | 开发服务器 + 窗口，监听主进程 / preload 变更                      |
+| `pnpm typecheck`                    | 五组 tsconfig（core / main / preload / renderer / scripts）       |
+| `pnpm build`                        | 类型检查 + 三个入口生产构建                                       |
+| `pnpm build:bundle`                 | 仅三个入口生产构建，供已单独检查类型的 CI 任务使用                |
+| `pnpm lint`                         | oxlint（含依赖边界）+ `scripts/lint-styles.ts` 样式 token 检查    |
+| `pnpm check`                        | `format:check` + `lint` + `build` + `test`                        |
+| `pnpm test`                         | Vitest 单元测试（不含真机远程套件）                               |
+| `pnpm test:remote`                  | 真机远程回归：需 `DELION_REMOTE_HOST`，CI 不跑，必须串行          |
+| `pnpm smoke`                        | Electron 冒烟：SQLite、React 渲染、Pi runtime 与 preload 隔离     |
+| `pnpm smoke:runtime`                | 离线执行 Pi Bash/grep/find、真实 delion help 桥与平台工具定位     |
+| `pnpm smoke:desktop`                | 原生菜单、关闭/恢复、取消退出后终端仍存活                         |
+| `pnpm smoke:workspace`              | 工作区、模型配置与邮件草稿附件回归（macOS CI 运行）               |
+| `pnpm smoke:documents`              | Apple Silicon 文档组件真实安装与读取（显式联网、隔离数据）        |
+| `pnpm smoke:pdf`                    | PDF.js 阅读器                                                     |
+| `pnpm smoke:remote`                 | 真窗口远程冒烟：需 `DELION_REMOTE_HOST`，可选 `DELION_REMOTE_KEY` |
+| `pnpm build:helper`                 | 重建远端 helper 静态二进制（`--all` 含 arm64）                    |
+| `pnpm fetch:remote-rg`              | 下载上传给远端的 Linux rg 到 `.build/remote-rg`（不入库）         |
+| `pnpm package:dir` / `package:dist` | 未安装的可执行目录 / 当前平台安装产物                             |
+
+`pnpm smoke` 之外的冒烟脚本、打包后目录的 `--smoke-test`、终端与 agent 冒烟的具体跑法，直接看 `package.json` 的 `scripts`——那里是权威。冒烟使用独立测试目录与脱敏数据，除显式标注联网的（`agent-smoke`、`smoke:documents`）外不发送真实请求。
+
+## 12. 提交前检查
+
+```sh
+pnpm format:check
+pnpm lint
+pnpm build
+pnpm test
+```
+
+- 改动远端（`src/core/remote/`、`src/modules/remotes/`、`helper/`）时另用 `pnpm test:remote` 对真机跑一遍（先 `pnpm fetch:remote-rg`），那批用例默认套件与 CI 都会跳过。
+- 涉及构建、原生依赖或打包时另验证 `pnpm smoke` 与打包目录启动。
+- 用户能感知的变化写进 [CHANGELOG.md](../CHANGELOG.md)；面向使用者的功能概览更新 [README.md](../README.md)；架构、取舍与平台状态变化更新本文。
+- 单元测试只保留能挡住回归的用例：优先行为契约、边界与错误、安全、持久化/迁移、平台差异。不为字面默认值、setter/getter 往返、第三方库行为或纯 DOM 结构写用例；同一行为只留一处覆盖。
+- UI 测试断言状态、动作与副作用，不锁具体措辞；只有条款/同意、危险操作确认与可访问性名称保留原文。
+
+## 13. CI
+
+`ci.yml` 负责变更检测、任务编排与结果汇总，通过 `workflow_call` 调用按职能拆分的文件；`pr-labels.yml` 管标签，`release.yml` 管发布。没有定时回归。
+
+CI 在 PR 创建、提交更新、重新打开、编辑及推送到 `main` 时运行。
+
+| Workflow              | 职责                                           |
+| --------------------- | ---------------------------------------------- |
+| `quality.yml`         | 格式检查，按需执行 lint、类型检查与 actionlint |
+| `test.yml`            | Windows 应用构建与单元测试，上传 out 产物      |
+| `helper.yml`          | Go vet/test、双架构构建，供 CI 与 Release 共用 |
+| `desktop-windows.yml` | Windows 冒烟、目录包与安装包验证               |
+| `desktop-macos.yml`   | macOS 冒烟、目录包与安装包验证                 |
+
+- 分流按改动路径：纯文档不构建应用，workflow 改动额外跑 actionlint，应用源码与内置 Markdown 资源触发完整检查。精确规则以 `ci.yml` 的 filters 为准。
+- 类型检查由 quality 执行一次；Windows 与 macOS 用 `build:bundle` 构建并分别运行测试，Windows 打包复用 test 的 out 产物。本地 `build`、`check` 与打包命令仍包含类型检查。
+- 普通 CI 缓存 pnpm store，依赖安装仍使用 `--frozen-lockfile`；发布任务不使用依赖缓存。
+- helper 被选中时平台任务必须等它成功并下载当次产物；**不能因为 helper 合理跳过就跳过平台任务**。
+- `CI required` 始终汇总：被选中的必须成功，未选中的必须 skipped。入口不使用顶层路径过滤，否则文档 PR 的必需检查会一直 Pending。
+- 路径分流可能遗漏隐含的平台依赖——新增运行时入口或资源目录时同步更新 filters。
+- 真实 SSH 联调仍手动执行，不接入 CI。云端冒烟不能替代签名、公证与自动更新验收。
+
+## 14. 版本与发布
+
+向 `main` 提交 PR，合并前确认 `CI required` 通过。分支流程见[贡献指南](../CONTRIBUTING.md#分支与合并流程)。
+
+### 升版
+
+`pnpm version:patch` / `version:minor` / `version:major` / `version:bump <版本>` 只改 `package.json` 的版本，不建 commit / tag，也不推送。preload 在构建时内联版本号，升版后需重新构建。
+
+安装包会带几类 `extraResources`，升级它们时各自按对应 README 的步骤做，并在打包目录里实跑一次验证：`vendor/openssh`（`ssh.exe -V` 与一次真实连接）、helper（发布与 CI 都从本次源码重建，避免发布旧产物）、`vendor/bin`（`rg.exe --version`、`fd.exe --version`）、MinGit（换版本只改 `prepare-runtime.ts` 里那对成对常量）、远端 rg（版本与 SHA256 只在 `scripts/fetch-remote-rg.ts`，打包前下载，不入库）。
+
+### 发布
+
+推 `v*` tag 触发 `release.yml`：`prepare` 解析 tag 的 SHA 并校验，Windows 与 Mac 并行构建验证，**双方都成功才**上传到草稿 Release 并公开；任一平台失败或等待环境批准都会阻塞发布。含预发布后缀的版本自动标记 prerelease。
+
+发布保留两平台测试与产物验证，静态检查只在 Mac 的 `check` 中执行一次。`CI required` 会按路径跳过任务，因此不能用其成功结果替代全部发布检查。
+
+- tag 必须等于 `v` + `package.json` 版本。
+- 发版前把 `CHANGELOG.md` 的 `## Unreleased` 改成 `## <版本> - <发布日>`。更新内容弹窗只认 `## X.Y.Z - 日期` 分节，留在 `Unreleased` 下的条目会被静默跳过，弹窗不出现。
+- **重跑已有 tag**：上传用 `--clobber` 覆盖同名产物。正式分发后不要覆盖重建安装包；程序变更应升版发新 tag。
+- Mac 签名需要在 Environments 里建 `macos-release` 并配置 Developer ID 证书与 Apple 公证凭据。
+- Windows 测试签名需要设置 `SIGNPATH_PROJECT_SLUG` 仓库变量和本仓库的 SignPath 凭据。未配置时跳过测试签名。
+
+## 15. 平台基线
+
+| 平台    | 最低系统基线 | 架构  | 产物               | GitHub runner  |
+| ------- | ------------ | ----- | ------------------ | -------------- |
+| Windows | Windows 10   | x64   | NSIS `.exe` 安装包 | `windows-2022` |
+| macOS   | macOS 13.0   | arm64 | DMG / ZIP          | `macos-15`     |
+
+以上是构建基线，不代表最低系统实机兼容性已验收；runner 是构建环境，与最低运行系统不同。
+
+### 15.1 macOS 开发约定
+
+只支持 Apple Silicon，不适配 Intel，不构建 Universal。保持一个应用、一个 package、一套主干代码：业务逻辑、数据格式与 IPC 共用，平台差异优先留在现有的进程启动、路径与系统交互函数里，出现真实重复和多个调用方后再提取。
+
+几处平台差异记住结论即可，细节在代码里：
+
+- PPTX 在 Mac 只提供「用系统默认应用打开」，不接 Keynote 或转换器；Windows 保留 PowerPoint 转换。
+- VS Code 入口先查 PATH 的 `code`，再查应用包内的 CLI；未安装时明确提示。
+- 路径归属按**路径格式**判断，不按宿主系统：Windows 盘符与 UNC 兼容大小写及两种分隔符，POSIX 逐字匹配并保留文件名里的反斜杠，避免大小写敏感卷上的不同项目相互干扰。
+- 登录启动不使用 `openAsHidden`：Windows 传 `--hidden`，Mac 读 `wasOpenedAtLogin`。Mac 开关以系统实际状态为准，待批准也算未成功。
+- 快捷键的 `Mod` 在 Windows 为 Control、Mac 为 Command；Mac 的 Control 单独记为 `Ctrl`。系统菜单保留的组合（⌘Q、⌘H、⌘M 与原生编辑组合）有优先权，不建议录制为其他动作。
+
+### 15.2 跨平台取舍
+
+| 项目           | 当前处理                                                                   | 影响                                                                                         |
+| -------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 核心业务       | 单应用、同一主干与 IPC，功能共用                                           | 新增系统调用、路径假设、外部程序依赖仍需双平台回归                                           |
+| 窗口与退出     | Mac 原生按钮与导航共用一行；两端关闭都隐藏                                 | 只有真正退出才结束终端；Mac 经 Dock 唤回                                                     |
+| Shell 与环境   | 终端用用户的登录 shell；Agent 用 Mac 系统 Bash、SSH、Git，不执行登录 shell | 只写在 Zsh 初始化里的 SDK 环境终端可见、Agent 不一定可见；暂不随包引入另一套 Bash/GNU 工具链 |
+| PPTX 预览      | Mac 仅系统默认应用打开                                                     | Mac 不显示导出按钮，主进程提前拒绝转换                                                       |
+| Agent 文档读取 | 两端共用脚本与锁文件，安装器按平台选运行时                                 | 扫描件只输出页面图片，不宣称 OCR                                                             |
+| 分发与凭据     | 相同源码生成不同平台产物                                                   | 签名与公证已接入发布，Gatekeeper 首启与两版升级未验收                                        |
+
+**未验收**：Mac 的实际登录启动、系统级键位冲突、多显示器与动画表现；Windows 实机、真实 SSH 与 VS Code Remote-SSH 链路。模拟的平台分支测试不能替代实机回归。
+
+### 15.3 macOS 本地验证
+
+打包复用本机 Electron，不寻找签名身份、不发布：
+
+```sh
+pnpm build && pnpm smoke && pnpm smoke:runtime
+pnpm smoke:desktop && pnpm smoke:workspace
+CSC_IDENTITY_AUTO_DISCOVERY=false pnpm package:dist --mac --arm64 -c.electronDist=node_modules/electron/dist
+node scripts/verify-macos-package.ts dist/mac-arm64/Delion Bot.app
+dist/mac-arm64/Delion Bot.app/Contents/MacOS/Delion Bot --smoke-test
+```
+
+冒烟也可以传入 `app.asar` 路径，用开发 Electron 加载包内代码与资源；实际 `.app` 另用 `--smoke-test` 检查。**这些检查不代表正式签名应用、全部账号业务或全部模型调用已验收。**

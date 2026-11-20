@@ -1,0 +1,96 @@
+appId: io.delionbot.desktop
+productName: Delion Bot
+artifactName: 'Delion-Bot-${version}-${os}-${arch}.${ext}'
+icon: assets/DelionBot_white_bg.png
+asar: true
+publish: null
+directories:
+  output: dist
+files:
+  - out/main/**/*
+  - out/preload/**/*
+  - out/renderer/**/*
+  - package.json
+  - assets/DelionBot_white_bg.png
+  - assets/DelionBot_black_bg.png
+  # 渲染层依赖已移入 devDependencies，由 Vite 打进 out/；
+  # 下面只兜底排除依赖收集中漏进产物或带全平台 prebuild 的部分。
+  # esbuild 是 Vite 的构建期工具，electron-builder 的 pnpm 依赖收集会漏收它。
+  - '!node_modules/@esbuild/**'
+  # native prebuild 按当前发布矩阵（win x64 / mac arm64）只保留目标平台
+  - '!node_modules/better-sqlite3/prebuilds/darwin-x64.node'
+  - '!node_modules/better-sqlite3/prebuilds/linux*'
+  - '!node_modules/better-sqlite3/prebuilds/win32-arm64.node'
+  - '!node_modules/node-pty/prebuilds/darwin-x64'
+  - '!node_modules/node-pty/prebuilds/linux*'
+  - '!node_modules/node-pty/prebuilds/win32-arm64'
+# Chromium 自带 55 种语言包（约 49MB），产品只面向中英文
+electronLanguages:
+  - en-US
+  - zh-CN
+  - zh-TW
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - node_modules/node-pty/**/*
+  # 引导开场的可选视频；文件不存在时该行无副作用
+  - out/renderer/assets/*.mp4
+extraResources:
+  # 远端 helper 的静态二进制：Delion Bot 上传到远端后经 ssh -L 隧道访问（主进程按 resources/delion-helper 探测）
+  - from: vendor/delion-helper
+    to: delion-helper
+    filter:
+      - 'delion-helper-*'
+  # helper 优先使用的 Linux rg：打包前由 pnpm fetch:remote-rg 下载到 .build，仓库不提交
+  - from: .build/remote-rg
+    to: remote-rg
+    filter:
+      - 'rg-linux-*'
+      - '!*.version'
+  # 两端共用搜索工具的来源与许可证；可执行文件按平台选择。
+  - from: vendor/bin
+    to: bin
+    filter:
+      - 'LICENSE-*.txt'
+      - 'README.md'
+npmRebuild: false
+win:
+  extraResources:
+    - from: vendor/openssh
+      to: openssh
+      filter:
+        - 'ssh.exe'
+        - 'libcrypto.dll'
+        - 'LICENSE.txt'
+        - 'NOTICE.txt'
+        - 'README.md'
+    - from: .build/mingit
+      to: mingit
+    - from: vendor/bin
+      to: bin
+      filter:
+        - '*.exe'
+  target:
+    - target: nsis
+      arch:
+        - x64
+mac:
+  icon: out/main/icons/DelionBot_white_bg.png
+  category: public.app-category.productivity
+  target:
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
+  extraResources:
+    - from: 'vendor/bin/darwin-${arch}'
+      to: 'bin/darwin-${arch}'
+      filter:
+        - 'rg'
+        - 'fd'
+nsis:
+  include: build/installer.nsh
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  differentialPackage: false

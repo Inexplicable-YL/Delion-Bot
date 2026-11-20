@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "lib": ["ES2023"], "types": ["node"] },
+  "include": [
+    "scripts/build-helper.ts",
+    "scripts/ci-smoke.ts",
+    "scripts/dev.ts",
+    "scripts/document-runtime-smoke.ts",
+    "scripts/fix-native-permissions.ts",
+    "scripts/prepare-runtime.ts",
+    "scripts/refactor-metrics.ts",
+    "scripts/remote-smoke.ts",
+    "scripts/run-ts-smoke.ts",
+    "scripts/runtime-smoke.ts",
+    "scripts/verify-macos-package.ts",
+    "scripts/workspace-smoke.ts",
+    "src/app/main/modules.d.ts",
+    "src/modules/workspace/contract.ts"
+  ]
+}

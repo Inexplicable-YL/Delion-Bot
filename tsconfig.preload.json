@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "resolveJsonModule": true
+  },
+  "include": [
+    "src/app/preload/**/*.ts",
+    "src/core/protocol/**/*.ts",
+    "src/app/contracts.ts",
+    "src/modules/*/contract.ts"
+  ]
+}

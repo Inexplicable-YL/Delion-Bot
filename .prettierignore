@@ -1,0 +1,11 @@
+node_modules/
+.tools/
+out/
+dist/
+coverage/
+pnpm-lock.yaml
+.env*
+*.mobileconfig
+scripts/*.ps1
+# 由 test/core/protocol-schema.test.ts 生成
+src/core/protocol/agent.schema.json

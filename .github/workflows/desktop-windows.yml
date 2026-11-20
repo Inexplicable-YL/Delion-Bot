@@ -1,0 +1,97 @@
+name: Desktop windows validation
+
+on:
+  workflow_call:
+    outputs:
+      installer-artifact-id:
+        description: GitHub artifact containing the unsigned Windows installer
+        value: ${{ jobs.windows.outputs.installer-artifact-id }}
+    inputs:
+      upload-installer:
+        description: Upload the installer for a signing request
+        type: boolean
+        default: false
+      helper:
+        description: Download helper binaries built in this run
+        required: true
+        type: boolean
+      archives:
+        description: Build installers instead of directory packages
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Check win-x64
+    outputs:
+      installer-artifact-id: ${{ steps.upload-installer.outputs.artifact-id }}
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      DELION_REMOTE_HOST: ''
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v7
+        if: inputs.helper
+        with:
+          name: helper-linux-amd64
+          path: vendor/delion-helper
+      - uses: actions/download-artifact@v7
+        if: inputs.helper
+        with:
+          name: helper-linux-arm64
+          path: vendor/delion-helper
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v7
+        with:
+          name: windows-build
+          path: out
+      - name: Prepare bundled runtime
+        run: |
+          pnpm prepare:runtime
+          pnpm fetch:remote-rg
+      - name: Smoke test runtime
+        run: pnpm smoke:runtime
+      - name: Package application directory
+        if: ${{ !inputs.archives }}
+        run: pnpm exec electron-builder --dir --win --x64 --publish never
+      - name: Build Windows installer
+        if: inputs.archives
+        run: pnpm exec electron-builder --win --x64 --publish never
+      - name: Verify packaged helper
+        run: |
+          cmp vendor/delion-helper/delion-helper-linux-amd64 dist/win-unpacked/resources/delion-helper/delion-helper-linux-amd64
+          cmp vendor/delion-helper/delion-helper-linux-arm64 dist/win-unpacked/resources/delion-helper/delion-helper-linux-arm64
+          cmp .build/remote-rg/rg-linux-amd64 dist/win-unpacked/resources/remote-rg/rg-linux-amd64
+          cmp .build/remote-rg/rg-linux-arm64 dist/win-unpacked/resources/remote-rg/rg-linux-arm64
+      - name: Smoke test packaged app
+        env:
+          PACKAGED_EXECUTABLE: 'dist/win-unpacked/Delion Bot.exe'
+        run: '"$PACKAGED_EXECUTABLE" --smoke-test'
+      - name: Upload unsigned installer
+        if: inputs.upload-installer
+        id: upload-installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: unsigned-windows-installer
+          path: dist/Delion-Bot-*-win-x64.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
