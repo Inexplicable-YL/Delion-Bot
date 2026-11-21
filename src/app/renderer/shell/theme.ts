@@ -16,8 +16,20 @@ function clampFontSize(value: number): number {
 }
 
 function initialTheme(): ThemePreference {
+  if (window.delionBot) return 'system';
   const theme = localStorage.getItem(themeStorageKey);
   return theme === 'light' || theme === 'dark' ? theme : 'system';
+}
+
+function applyResolvedTheme(theme: ThemePreference, systemDark: boolean) {
+  const dark = theme === 'dark' || (theme === 'system' && systemDark);
+  const root = document.documentElement;
+  root.classList.toggle('dark', dark);
+  root.dataset.theme = dark ? 'dark' : 'light';
+}
+
+export function initializeTheme() {
+  applyResolvedTheme(initialTheme(), window.matchMedia('(prefers-color-scheme: dark)').matches);
 }
 
 function initialFontSize(): number {
@@ -44,19 +56,14 @@ export function useAppearance() {
 
   // 生效主题只由 .dark / .light 表达：跟随系统时按媒体查询解析，所有 token 走同一条路径。
   useEffect(() => {
-    const root = document.documentElement;
     const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const apply = () => {
-      const dark = theme === 'dark' || (theme === 'system' && media.matches);
-      root.classList.toggle('dark', dark);
-      root.dataset.theme = dark ? 'dark' : 'light';
-    };
+    const apply = () => applyResolvedTheme(theme, media.matches);
     apply();
-    localStorage.setItem(themeStorageKey, theme);
+    if (!enabled) localStorage.setItem(themeStorageKey, theme);
     if (theme !== 'system') return;
     media.addEventListener('change', apply);
     return () => media.removeEventListener('change', apply);
-  }, [theme]);
+  }, [theme, enabled]);
 
   // 浏览器预览没有主进程缩放，用 CSS zoom 降级；桌面端由主进程 setZoomFactor 生效。
   useEffect(() => {

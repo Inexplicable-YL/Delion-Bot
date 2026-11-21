@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  AtSymbolIcon as AtSign,
   CalendarDaysIcon,
   ChatBubbleLeftIcon as MessageSquare,
   ChevronDownIcon as ChevronDown,
@@ -13,14 +12,17 @@ import {
   InformationCircleIcon as Info,
   LinkIcon,
   ListBulletIcon,
-  PaperClipIcon as Paperclip,
 } from '@heroicons/react/24/outline';
 import { PlayIcon } from '@heroicons/react/24/solid';
-import { useConnectorAccounts } from '../../connectors/view';
+import {
+  useConnectorAccounts,
+  useConnectorCatalog,
+  type ConnectorApp,
+} from '../../connectors/view';
 import { cn } from '../../../ui/cn';
 import { Button } from '../../../ui/button';
 import type { ComposerContext } from './composer-context';
-import { NewChatMenu } from './NewChatMenu';
+import { ChatComposerMenu } from './ChatComposerMenu';
 import { ReplyCommentRail } from './reply-comment';
 import { formatDuration } from './ToolTimeline';
 import { openSubagent } from './tool-views';
@@ -41,7 +43,6 @@ import {
   PromptInputTrigger,
 } from '../../../ui/agent/prompt-input';
 import { QueuedMessages } from '../../../ui/agent/queued-messages';
-import { IconButton } from '../../../ui/icon-button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/popover';
 import { useChatTabSource } from './chat-source';
 import type {
@@ -62,6 +63,7 @@ import {
 } from '../../../core/protocol/chat-input';
 import type { ChatReference } from './use-chat';
 import { ComposerEditor, type ComposerEditorHandle } from './ComposerEditor';
+import { connectorPrompt } from './connector-tokens';
 import { releaseChatMedia, setChatMediaPreview } from './media';
 import {
   agentClient,
@@ -233,6 +235,9 @@ export function ChatComposer({
 }) {
   const { navigate } = useChatTabSource();
   const editorRef = useRef<ComposerEditorHandle | null>(null);
+  const promptRef = useRef<HTMLDivElement>(null);
+  const [wrapped, setWrapped] = useState(false);
+  const expanded = value.length > 0 && (wrapped || value.includes('\n'));
   const [menu, setMenu] = useState<MenuState>(null);
   const [index, setIndex] = useState(0);
   // 菜单 id 逐实例唯一：同页可同时挂多个会话的 composer。
@@ -261,21 +266,16 @@ export function ChatComposer({
     providers?.[0] ??
     null;
   const [effortPickerOpen, setEffortPickerOpen] = useState(false);
-  // 搜索服务选择器：选中态是持久数据，挂载即读（发送首轮会重挂 composer）；配置的增删改在设置弹窗。
-  const [searchPickerOpen, setSearchPickerOpen] = useState(false);
   const searchQuery = useQuery({
     queryKey: webSearchOptionsKey,
     queryFn: () => capabilitiesClient.listWebSearchOptions(),
-    enabled: Boolean(window.delionBot),
+    enabled: !sidechat && Boolean(window.delionBot),
   });
   const searchEntries = searchQuery.data?.entries ?? null;
   const searchSelectedId = searchQuery.data?.selectedId ?? null;
   const searchFailed = searchQuery.isError;
   const showAgentActions = hero && configured && !modelUnavailable && !hideAgentActions;
-  const { configured: connectorsConfigured, accounts } = useConnectorAccounts(
-    undefined,
-    showAgentActions,
-  );
+  const { configured: connectorsConfigured, accounts } = useConnectorAccounts();
   const [connectorOrder] = useState(() =>
     connectorActions
       .map((action) => ({ action, order: Math.random() }))
@@ -287,6 +287,14 @@ export function ChatComposer({
       ?.filter(({ status }) => status === 'ACTIVE')
       .map(({ toolkit }) => toolkit.slug),
   );
+  const connectorCatalog = useConnectorCatalog(
+    connectorsConfigured.data === true && connectedApps.size > 0,
+  );
+  const availableConnectors = connectorCatalog.data?.filter(({ slug }) => connectedApps.has(slug));
+  const connectorsFailed =
+    connectorsConfigured.isError || accounts.isError || connectorCatalog.isError;
+  const connectorsLoading =
+    connectorsConfigured.isFetching || accounts.isFetching || connectorCatalog.isFetching;
   const { data: capabilities } = useQuery({
     queryKey: ['capabilities', 'builtin'],
     queryFn: () => capabilitiesClient.listBuiltinCapabilities(),
@@ -331,6 +339,43 @@ export function ChatComposer({
     await queryClient.invalidateQueries({ queryKey: webSearchOptionsKey });
   };
   useEffect(() => onWebSearchChanged(() => void refreshSearch()), []);
+
+  useEffect(() => {
+    const prompt = promptRef.current;
+    const editor = prompt?.querySelector<HTMLElement>('.cm-content');
+    const toolbar = prompt?.querySelector<HTMLElement>('[data-slot="prompt-input-toolbar"]');
+    const add = prompt?.querySelector<HTMLElement>('[data-slot="composer-add"]');
+    if (!prompt || !editor || !toolbar || !add) return;
+
+    const lineContents = document.createRange();
+    const measure = () => {
+      const line = editor.querySelector<HTMLElement>('.cm-line');
+      if (!line || !prompt.clientWidth) return;
+      const { paddingLeft, paddingRight, columnGap } = getComputedStyle(prompt);
+      // 展开后仍按单行布局的宽度测量，避免文本在两种布局间反复换行。
+      const inlineWidth =
+        prompt.clientWidth -
+        parseFloat(paddingLeft) -
+        parseFloat(paddingRight) -
+        add.offsetWidth -
+        toolbar.offsetWidth -
+        2 * parseFloat(columnGap);
+      lineContents.selectNodeContents(line);
+      setWrapped(
+        line.getBoundingClientRect().height >
+          Math.ceil(parseFloat(getComputedStyle(line).lineHeight)) ||
+          lineContents.getBoundingClientRect().width > inlineWidth,
+      );
+    };
+    const contentObserver = new MutationObserver(measure);
+    contentObserver.observe(editor, { childList: true, subtree: true, characterData: true });
+    const sizeObserver = new ResizeObserver(measure);
+    for (const element of [prompt, editor, toolbar, add]) sizeObserver.observe(element);
+    return () => {
+      contentObserver.disconnect();
+      sizeObserver.disconnect();
+    };
+  }, []);
 
   const slashItems =
     menu?.kind === 'slash'
@@ -390,13 +435,21 @@ export function ChatComposer({
     }
     setMenu(null);
     setIndex(0);
+    editorRef.current?.focus();
   };
 
   const insertMention = () => {
     const caret = editorRef.current?.selectionStart() ?? value.length;
-    const prefix = hero && caret > 0 && !/\s/.test(value[caret - 1]!) ? ' ' : '';
+    const prefix = caret > 0 && !/\s/.test(value[caret - 1]!) ? ' ' : '';
     editorRef.current?.insertAt(caret, `${prefix}@`);
-    if (hero) editorRef.current?.focus();
+    editorRef.current?.focus();
+  };
+
+  const insertConnector = (app: ConnectorApp) => {
+    const caret = editorRef.current?.selectionStart() ?? value.length;
+    const prefix = caret > 0 && !/\s/.test(value[caret - 1]!) ? ' ' : '';
+    editorRef.current?.insertAt(caret, `${prefix}${connectorPrompt(app)} `);
+    editorRef.current?.focus();
   };
 
   const appendPrompt = (prompt: string) => {
@@ -515,24 +568,15 @@ export function ChatComposer({
     if (open) setFocusedId(null);
   };
 
-  const openSearchPicker = (open: boolean) => {
-    setSearchPickerOpen(open);
-    if (open) void refreshSearch();
-  };
-
   const selectSearchEntry = async (id: string | null) => {
     if (!window.delionBot) return;
     try {
       await capabilitiesClient.selectWebSearchEntry(id);
       void refreshSearch();
-      setSearchPickerOpen(false);
     } catch (cause) {
       setFileError(errorMessage(cause));
-      setSearchPickerOpen(false);
     }
   };
-
-  const selectedSearch = searchEntries?.find(({ id }) => id === searchSelectedId) ?? null;
 
   return (
     <div className="relative">
@@ -549,10 +593,11 @@ export function ChatComposer({
         />
       )}
       <PromptInput
-        className={hero ? 'flex flex-wrap items-center gap-2 px-2 py-2.5' : undefined}
+        ref={promptRef}
+        className="flex flex-wrap items-center gap-2 px-2 py-2.5"
         dragging={dragging}
         dropHint="松开以添加图片或附件"
-        material={hero ? 'glass' : 'solid'}
+        material="glass"
         onDragOver={(event) => {
           if (event.dataTransfer.types.includes('Files')) {
             event.preventDefault();
@@ -571,7 +616,7 @@ export function ChatComposer({
         }}
       >
         {(comments.length > 0 || attachments.length > 0) && (
-          <PromptInputAttachments className={hero ? 'min-w-0 basis-full p-2' : undefined}>
+          <PromptInputAttachments className="-order-2 min-w-0 basis-full p-2">
             {comments.length > 0 && (
               <ReplyCommentRail comments={comments} onChange={onCommentsChange} />
             )}
@@ -591,25 +636,14 @@ export function ChatComposer({
             )}
           </PromptInputAttachments>
         )}
-        {hero && (
-          <NewChatMenu
-            projectId={context?.projectId ?? null}
-            onSelectProject={onSelectProject}
-            projectSwitching={projectSwitching}
-            onReference={insertMention}
-            onSkill={(name) => appendPrompt(`请使用 ${name} 技能。`)}
-            onUpload={pickFiles}
-            searchEntries={searchEntries}
-            searchFailed={searchFailed}
-            searchSelectedId={searchSelectedId}
-            onRefreshSearch={() => void refreshSearch()}
-            onSelectSearch={(id) => void selectSearchEntry(id)}
-          />
-        )}
         <ComposerEditor
-          className={hero ? 'min-w-0 flex-1' : "@max-[220px]:[&_[aria-hidden='true']]:truncate"}
+          className={cn(
+            'min-w-0',
+            expanded
+              ? 'basis-full px-2 py-1'
+              : 'flex-1 @max-sm:basis-full @max-sm:px-2 @max-sm:py-1',
+          )}
           handleRef={editorRef}
-          hero={hero}
           menu={menuApi}
           menuAria={{
             activeId: menuOpen && index < items.length ? menuOptionId(index) : null,
@@ -623,90 +657,31 @@ export function ChatComposer({
           onSend={() => {
             if (canSend && !modelUnavailable) onSend();
           }}
-          placeholderText={
-            hero
-              ? '有什么可以帮你？'
-              : sidechat
-                ? '顺便问一句…  @ 引用文件'
-                : '回复…  @ 引用文件，/ 指令'
-          }
+          placeholderText={sidechat ? '顺便问一句…' : '有什么可以帮你？'}
           referenceOptions={referenceOptions}
+          connectorApps={connectorCatalog.data}
           value={value}
         />
-        <PromptInputToolbar className={hero ? 'min-w-0 justify-end @max-sm:basis-full' : undefined}>
-          {!hero && (
-            <>
-              <IconButton aria-label="添加图片或附件" onClick={pickFiles} title="添加图片或附件">
-                <Paperclip />
-              </IconButton>
-              <IconButton aria-label="引用资料" onClick={insertMention} title="引用资料（@）">
-                <AtSign />
-              </IconButton>
-            </>
-          )}
-          {!sidechat && !hero && (
-            <Popover onOpenChange={openSearchPicker} open={searchPickerOpen}>
-              <PopoverTrigger asChild>
-                <IconButton
-                  aria-label={
-                    selectedSearch ? `联网搜索：${selectedSearch.name}` : '联网搜索：未开启'
-                  }
-                  title={selectedSearch ? `联网搜索：${selectedSearch.name}` : '联网搜索：未开启'}
-                >
-                  <Globe className={selectedSearch ? 'text-success' : undefined} />
-                </IconButton>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-64" side="bottom">
-                {searchEntries === null ? (
-                  <p className="px-2 py-3 text-ui-subhead text-ink-2">
-                    {searchFailed ? '搜索配置加载失败' : '正在加载搜索配置…'}
-                  </p>
-                ) : searchEntries.length === 0 ? (
-                  <PromptInputSetup
-                    actionLabel="打开设置 › 内置能力"
-                    message="还没有搜索服务配置，可在设置 › 内置能力 的「网络」分组中添加。"
-                    onAction={() => {
-                      setSearchPickerOpen(false);
-                      navigate({ page: 'settings', section: 'capabilities' });
-                    }}
-                  />
-                ) : (
-                  <ul aria-label="联网搜索">
-                    <li>
-                      <PromptInputOption
-                        active={searchSelectedId === null}
-                        aria-checked={searchSelectedId === null}
-                        className="h-8 gap-2"
-                        onClick={() => void selectSearchEntry(null)}
-                        role="radio"
-                      >
-                        <span className="truncate">关闭</span>
-                        {searchSelectedId === null && <PromptInputOptionCheck />}
-                      </PromptInputOption>
-                    </li>
-                    {searchEntries.map((entry) => (
-                      <li key={entry.id}>
-                        <PromptInputOption
-                          active={entry.id === searchSelectedId}
-                          aria-checked={entry.id === searchSelectedId}
-                          className="h-8 gap-2"
-                          onClick={() => void selectSearchEntry(entry.id)}
-                          role="radio"
-                        >
-                          <span className="truncate">{entry.name}</span>
-                          {entry.provider === 'deepseek' && (
-                            <span className="shrink-0 text-ui-subhead text-ink-2">按次计费</span>
-                          )}
-                          {entry.id === searchSelectedId && <PromptInputOptionCheck />}
-                        </PromptInputOption>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </PopoverContent>
-            </Popover>
-          )}
-          <div className="flex-1" />
+        <ChatComposerMenu
+          className={expanded ? '' : '-order-1 @max-sm:order-none'}
+          allowProjectSwitch={hero}
+          projectId={context?.projectId ?? null}
+          onSelectProject={onSelectProject}
+          projectSwitching={projectSwitching}
+          connectors={availableConnectors}
+          connectorsFailed={connectorsFailed}
+          connectorsLoading={connectorsLoading}
+          onConnector={insertConnector}
+          onReference={insertMention}
+          onSkill={(name) => appendPrompt(`请使用 ${name} 技能。`)}
+          onUpload={pickFiles}
+          searchEntries={searchEntries}
+          searchFailed={searchFailed}
+          searchSelectedId={searchSelectedId}
+          onRefreshSearch={() => void refreshSearch()}
+          onSelectSearch={sidechat ? undefined : (id) => void selectSearchEntry(id)}
+        />
+        <PromptInputToolbar className="ml-auto min-w-0 shrink-0 justify-end">
           {tasks.length > 0 && onStopTask && (
             <BackgroundTasks
               formatElapsed={formatDuration}
@@ -725,7 +700,7 @@ export function ChatComposer({
                   aria-label="模型服务"
                   className={cn(
                     '@max-[220px]:px-1.5',
-                    hero && 'max-w-40',
+                    'max-w-40',
                     modelUnavailable && 'text-danger hover:text-danger',
                   )}
                   title={modelUnavailable ? `${model}（已停用或被移除，请另选模型）` : model}
@@ -898,7 +873,12 @@ export function ChatComposer({
         )}
       </PromptInput>
       {showAgentActions && agentActions.length > 0 && (
-        <div className="mt-app-gap grid gap-1">
+        <div
+          className={cn(
+            'mt-app-gap grid gap-1 pl-1',
+            (value.length > 0 || attachments.length > 0 || comments.length > 0) && 'invisible',
+          )}
+        >
           {agentActions.map(({ icon: Icon, label, prompt }) => (
             <Button
               className="group h-row-regular w-full justify-start gap-3 rounded-control px-3 text-ui-body focus-visible:bg-hover focus-visible:text-ink"

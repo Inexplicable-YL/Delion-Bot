@@ -3,21 +3,19 @@
 import { create } from 'zustand';
 import { Bars3BottomLeftIcon as PanelLeft } from '@heroicons/react/24/outline';
 import { usePreferences } from '../shell/preferences';
-import { useMobileDrawer } from '../shell/mobile-drawer';
+import { NARROW_WINDOW_QUERY, useMobileDrawer } from '../shell/mobile-drawer';
 import { IconButton } from '../../../ui/icon-button';
-
-const NARROW_QUERY = '(max-width: 767px)';
 
 type Store = {
   narrow: boolean;
 };
 
 export const useExplorerState = create<Store>(() => ({
-  narrow: typeof window !== 'undefined' && window.matchMedia(NARROW_QUERY).matches,
+  narrow: typeof window !== 'undefined' && window.matchMedia(NARROW_WINDOW_QUERY).matches,
 }));
 
 if (typeof window !== 'undefined') {
-  const media = window.matchMedia(NARROW_QUERY);
+  const media = window.matchMedia(NARROW_WINDOW_QUERY);
   media.addEventListener('change', () => {
     const narrow = media.matches;
     useExplorerState.setState({ narrow });

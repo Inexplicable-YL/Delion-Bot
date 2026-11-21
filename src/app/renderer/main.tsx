@@ -10,6 +10,7 @@ import { connectQueryEvents } from './shell/query-events';
 import { saveWorkspace } from './shell/save-workspace';
 import { useNavigationStore } from './navigation/view';
 import { useShortcuts } from './shell/shortcuts';
+import { initializeTheme } from './shell/theme';
 import { useWorkspaceStore } from '../../modules/workspace/view';
 import './styles/globals.css';
 
@@ -23,6 +24,7 @@ useUpdateState.setState({ beforeInstall: saveWorkspace });
 void useWorkspaceStore.getState().load();
 void useShortcuts.getState().load();
 
+initializeTheme();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary title="应用遇到错误">

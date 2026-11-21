@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import type { infer as Infer } from 'zod';
 import { createClient } from '../../../core/protocol/contract';
-import { connectorsContract, type account, type toolkit } from '../contract';
+import { connectorsContract, type account, type app, type toolkit } from '../contract';
 
 export const connectorsClient = createClient(connectorsContract, window.delionBot?.bridge);
+
+export type ConnectorApp = Infer<typeof app>;
 
 export type ConnectorAuthorization = {
   slug: Infer<typeof toolkit>;

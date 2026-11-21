@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { WorkspaceEntry, WorkspaceState } from '../../../../src/modules/workspace/contract';
 import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
 import { useNavigationStore } from '../../../../src/app/renderer/navigation/view';
+import { useMobileDrawer } from '../../../../src/app/renderer/shell/mobile-drawer';
 
 const project: WorkspaceEntry = {
   id: 'p1',
@@ -37,11 +38,20 @@ describe('导航历史', () => {
     expect(localStorage.getItem('delion.workspace.project')).toBe('p1');
   });
 
-  it('同视图切到通用池（资料）也记历史', () => {
+  it('同视图切换项目或资料时关闭抽屉并记录历史', () => {
     seed('workbench', 'p1');
+    useMobileDrawer.getState().setDrawer('explorer');
     useNavigationStore.getState().openProject('');
     expect(useNavigationStore.getState()).toMatchObject({ view: 'workbench', projectId: null });
+    expect(useMobileDrawer.getState().drawer).toBeNull();
 
+    useMobileDrawer.getState().setDrawer('nav');
+    useNavigationStore.getState().openProject('p1');
+    expect(useNavigationStore.getState()).toMatchObject({ view: 'workbench', projectId: 'p1' });
+    expect(useMobileDrawer.getState().drawer).toBeNull();
+
+    useNavigationStore.getState().goBack();
+    expect(useNavigationStore.getState()).toMatchObject({ view: 'workbench', projectId: null });
     useNavigationStore.getState().goBack();
     expect(useNavigationStore.getState()).toMatchObject({ view: 'workbench', projectId: 'p1' });
   });

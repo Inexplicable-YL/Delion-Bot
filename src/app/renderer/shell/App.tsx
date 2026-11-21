@@ -1,14 +1,8 @@
-// 应用根组件：launch 阶段（首启引导）、AppShell 壳与视图切换。
 import { useEffect, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { AppShell } from './AppShell';
 import { ErrorBoundary } from './ErrorBoundary';
-import {
-  CompletionOverlay,
-  OnboardingFlow,
-  isSmokeTest,
-  readOnboardingState,
-} from '../../../modules/onboarding/view';
+import { OnboardingFlow, isSmokeTest, readOnboardingState } from '../../../modules/onboarding/view';
 import { SettingsPage } from '../settings';
 import { ReleaseNotesDialog, UpdatePrompt } from '../../../modules/update/view';
 import { GlobalSearchDialog } from '../../../modules/search/view';
@@ -76,18 +70,13 @@ export default function App() {
   const [drawerSlot, setDrawerSlot] = useState<HTMLElement | null>(null);
   const mobileDrawer = useMobileDrawer((state) => state.drawer);
   const setMobileDrawer = useMobileDrawer((state) => state.setDrawer);
-  // 首次启动引导：flow 期间主界面不渲染；completion 时主界面已挂载、完成动画叠在其上渐隐。
-  // 读到引导状态前什么都不渲染，避免老用户闪过引导页。
   const onboarding = useQuery({
     queryKey: ['onboarding'],
     queryFn: readOnboardingState,
     enabled: !isSmokeTest,
   });
-  const [stage, setLaunchStage] = useState<'flow' | 'completion' | 'app'>();
-  const launchStage =
-    stage ??
-    (isSmokeTest || onboarding.data?.consented ? 'app' : onboarding.data ? 'flow' : undefined);
-  const appVisible = launchStage === 'app' || launchStage === 'completion';
+  const [wizardFinished, setWizardFinished] = useState(false);
+  const appVisible = isSmokeTest || wizardFinished || onboarding.data?.completed === true;
 
   const view = useNavigationStore((state) => state.view);
   const projectId = useNavigationStore((state) => state.projectId);
@@ -157,15 +146,10 @@ export default function App() {
     });
   }, []);
 
-  // 全局搜索入口交给 AppShell 的快捷键派发（Ctrl/⌘+K 可改键）；此处只守卫引导阶段：
-  // completion 遮罩期间打开会落在遮罩之下并抢占输入焦点。
   const openSearch = () => {
-    if (launchStage !== 'app') return;
     setMobileDrawer(null);
     setSearchOpen(true);
   };
-
-  const finishCompletion = () => setLaunchStage('app');
 
   const importFiles = () => {
     importFromDialog(view === 'workbench' ? useNavigationStore.getState().projectId : null);
@@ -178,6 +162,7 @@ export default function App() {
       void navigation.openProject('');
       return;
     }
+    setMobileDrawer(null);
     const layout = useWorkbenchLayout.getState();
     const docTab = walkGroups(layout.root)
       .flatMap((group) => group.tabs)
@@ -284,18 +269,12 @@ export default function App() {
           onSelect={openSearchResult}
         />
       )}
-      {launchStage === 'flow' && (
-        <OnboardingFlow
-          views={views}
-          completed={onboarding.data?.completed ?? false}
-          onConsentDone={() => setLaunchStage('app')}
-          onWizardDone={() => setLaunchStage('completion')}
-        />
+      {onboarding.data && !appVisible && (
+        <OnboardingFlow views={views} onWizardDone={() => setWizardFinished(true)} />
       )}
       {/* 下载完成的确认弹窗挂在应用层：下载在后台跑完时，用户可能已经离开设置页。 */}
       {appVisible && <UpdatePrompt />}
-      {launchStage === 'app' && !isSmokeTest && <ReleaseNotesDialog />}
-      {launchStage === 'completion' && <CompletionOverlay onFinished={finishCompletion} />}
+      {appVisible && !isSmokeTest && <ReleaseNotesDialog />}
     </>
   );
 }

@@ -23,6 +23,7 @@ const buttonVariants = cva(
         sm: 'h-control-xs px-2.5 has-[>svg]:px-2',
         lg: 'h-control-lg px-4 has-[>svg]:px-3',
         icon: 'size-control-sm touch:min-w-control-lg',
+        'icon-lg': "size-control-md touch:min-w-control-lg [&_svg:not([class*='size-'])]:size-5",
         'icon-sm': 'size-control-xs touch:min-w-control-lg',
         'icon-xs': "size-control-xs touch:min-w-control-lg [&_svg:not([class*='size-'])]:size-4",
       },

@@ -28,7 +28,7 @@ import { cn } from '../../../ui/cn';
 import { useMediaQuery } from '../../../ui/use-media-query';
 import type { NavTarget } from '../../module';
 import { useNavigationStore, type AppView, type ShellView } from '../navigation/view';
-import type { MobileDrawer } from './mobile-drawer';
+import { NARROW_WINDOW_QUERY, type MobileDrawer } from './mobile-drawer';
 import { useShortcuts } from './shortcuts';
 import {
   ProjectSessionNav,
@@ -195,7 +195,7 @@ export function AppShell({
   const sidebarCollapsed = usePreferences((state) => state.shellSidebarCollapsed);
   const projectOpenTarget = usePreferences((state) => state.projectOpenTarget);
   const setPreference = usePreferences((state) => state.setPreference);
-  const narrow = useMediaQuery('(width < 64rem)');
+  const narrow = useMediaQuery(NARROW_WINDOW_QUERY);
   const drawer = mobileDrawer ?? null;
   const navDrawerOpen = drawer === 'nav' || drawer === 'page';
   const [helpOpen, setHelpOpen] = useState(false);
@@ -633,15 +633,9 @@ export function AppShell({
                   onNewGeneralChat();
                   if (narrow) onMobileDrawerChange?.(null);
                 }}
-                onOpenProject={(id) => {
-                  onOpenProject(id);
-                  if (narrow) onMobileDrawerChange?.(null);
-                }}
+                onOpenProject={onOpenProject}
                 onOpenSession={onOpenSession}
-                onOpenSources={() => {
-                  onOpenSources();
-                  if (narrow) onMobileDrawerChange?.(null);
-                }}
+                onOpenSources={onOpenSources}
                 sessionsByProject={sessionsByProject}
                 sourcesActive={sourcesActive}
               />

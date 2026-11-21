@@ -53,11 +53,14 @@
   body {
     min-height: 100dvh;
     overflow: hidden;
-    background: var(--page);
     color: var(--ink);
     font-size: var(--text-ui-body);
     line-height: var(--text-ui-body--line-height);
     letter-spacing: var(--text-ui-body--letter-spacing);
+  }
+
+  html[data-theme] body {
+    background: var(--page);
   }
 
   svg[data-slot='icon'] {

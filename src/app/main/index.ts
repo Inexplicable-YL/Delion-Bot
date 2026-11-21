@@ -6,6 +6,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   shell,
   Tray,
 } from 'electron';
@@ -100,7 +101,6 @@ let tray: Tray | undefined;
 let mainWindow: BrowserWindow | undefined;
 let quitting = false;
 
-// 托盘「退出」与引导条款页的「不同意并退出」共用：置位后 close 处理器不再拦成隐藏。
 function quitApp() {
   quitting = true;
   app.quit();
@@ -216,6 +216,7 @@ async function createWindow(): Promise<void> {
     showMainWindow(mainWindow);
     return;
   }
+  const backgroundColor = () => (nativeTheme.shouldUseDarkColors ? '#121214' : '#f5f5f7');
   const window = new BrowserWindow({
     width: 1100,
     height: 760,
@@ -223,7 +224,7 @@ async function createWindow(): Promise<void> {
     // 容得下 @ 候选菜单向上展开（256px）+ composer + 头部。
     minHeight: 600,
     show: !smokeTest && !startHidden,
-    backgroundColor: '#f7f7f8',
+    backgroundColor: backgroundColor(),
     icon: nativeImage.createFromPath(
       join(app.getAppPath(), 'assets', `DelionBot_${savedIcon()}_bg.png`),
     ),
@@ -240,8 +241,11 @@ async function createWindow(): Promise<void> {
     },
   });
   mainWindow = window;
+  const updateBackground = () => window.setBackgroundColor(backgroundColor());
+  nativeTheme.on('updated', updateBackground);
   attachContextMenu(window.webContents);
   window.on('closed', () => {
+    nativeTheme.off('updated', updateBackground);
     mainWindow = undefined;
     closeAllTerminals();
   });

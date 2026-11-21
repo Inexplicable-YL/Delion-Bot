@@ -50,7 +50,12 @@ import { useViewportWidth } from '../../../ui/use-viewport-width';
 import { cn } from '../../../ui/cn';
 import { overlayFade } from '../../../ui/motion';
 import { IconButton } from '../../../ui/icon-button';
-import { localPathsOf, workspaceClient, useWorkspaceStore } from '../../../modules/workspace/view';
+import {
+  explorerDragType,
+  localPathsOf,
+  workspaceClient,
+  useWorkspaceStore,
+} from '../../../modules/workspace/view';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const SIDEBAR_MIN_WIDTH = 160;
@@ -115,6 +120,7 @@ export function WorkbenchExplorer({
   const viewportWidth = useViewportWidth();
   const drawerRef = useRef<HTMLElement>(null);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [draggingEntry, setDraggingEntry] = useState(false);
 
   useEffect(() => {
     if (!narrow || !mobileOpen) return;
@@ -150,10 +156,7 @@ export function WorkbenchExplorer({
   const keepDocument = (key: string) =>
     void useAppNavigation.getState().openDocument(key, { keep: true });
 
-  const openProject = (id: string) => {
-    void useAppNavigation.getState().openProject(id);
-    useMobileDrawer.getState().setDrawer(null);
-  };
+  const openProject = (id: string) => void useAppNavigation.getState().openProject(id);
 
   const move = (dragId: string, targetId: string | null) =>
     moveEntry(dragId, targetId, rootId, (target) => {
@@ -234,7 +237,7 @@ export function WorkbenchExplorer({
 
   return (
     <>
-      {narrow && mobileOpen && (
+      {narrow && mobileOpen && !draggingEntry && (
         <div
           aria-hidden="true"
           className={cn(overlayFade, 'absolute inset-0 z-nav bg-scrim')}
@@ -249,14 +252,21 @@ export function WorkbenchExplorer({
         className={cn(
           // 三级背景层次（用户裁决，勿压平）：侧栏画布 --page → 目录树 --inset
           // 略深一档 → 内容区白(1.0)；树与白底之间靠色差分隔，不画边框线。
-          'flex min-h-0 shrink-0 flex-col overflow-hidden bg-page max-md:absolute max-md:inset-y-app-inset max-md:left-app-inset max-md:z-drawer max-md:w-sidebar max-md:max-w-sheet max-md:glass-thick max-md:rounded-panel max-md:animate-drawer-left',
-          !visible && 'w-0 max-md:hidden',
+          'min-h-0 shrink-0 flex-col overflow-hidden bg-page',
+          narrow &&
+            'absolute inset-y-app-inset left-app-inset z-drawer w-sidebar max-w-sheet rounded-panel glass-thick animate-drawer-left',
+          narrow && !visible ? 'hidden' : 'flex',
+          !narrow && collapsed && 'w-0',
         )}
         style={narrow || collapsed ? undefined : { width: effectiveWidth }}
+        onDragStart={(event) => {
+          if (narrow && event.dataTransfer.types.includes(explorerDragType)) setDraggingEntry(true);
+        }}
+        onDragEnd={() => setDraggingEntry(false)}
       >
         <div
           className={cn(
-            'flex min-h-0 flex-1 flex-col transition-opacity duration-base motion-reduce:transition-none max-md:!w-full',
+            'flex min-h-0 flex-1 flex-col transition-opacity duration-base motion-reduce:transition-none',
             collapsed && !narrow && 'pointer-events-none opacity-0',
           )}
           style={narrow ? undefined : { width: effectiveWidth }}

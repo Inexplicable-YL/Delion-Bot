@@ -1,10 +1,6 @@
 import { Streamdown, type Components } from 'streamdown';
 import { Card } from '../../../ui/card';
 
-/**
- * 条款正文到界面的元素级映射，隐私页、使用条款页与首次启动接受页共用；行宽、字号、颜色由容器给。
- * 小节间距落在标题自己身上（Markdown 块是平级兄弟，容器给不了 grid 间距）；h1 与页面标题重复，不渲染。
- */
 const components: Components = {
   h1: () => null,
   h2: ({ children }) => <h2 className="mt-10 text-ui-title-3 text-ink first:mt-0">{children}</h2>,

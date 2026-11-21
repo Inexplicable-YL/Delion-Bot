@@ -127,7 +127,7 @@ function ChatComposerArea({
       showToast({ variant: 'error', title: '切换项目失败', description: errorMessage(cause) }),
   });
   return (
-    <div className={cn('mx-auto w-full max-w-reading shrink-0', !hero && 'px-app pb-app')}>
+    <div className="mx-auto w-full max-w-reading shrink-0">
       <ChatComposer
         hero={hero}
         hideAgentActions={hideAgentActions}
@@ -244,12 +244,12 @@ function ChatSessionView({
       project && chat && !conversation && projectSessionCount === 0 && window.delionBot,
     ),
   });
-  const setupLayout =
+  const showProjectSetup =
     project &&
     !conversation &&
-    !projectSessionCount &&
-    !archived?.some((item) => item.projectId === projectId);
-  const showProjectSetup = setupLayout && projectSessionCount === 0 && archived !== undefined;
+    projectSessionCount === 0 &&
+    archived !== undefined &&
+    !archived.some((item) => item.projectId === projectId);
 
   const saveConversation = async () => {
     if (!window.delionBot) return;
@@ -357,18 +357,13 @@ function ChatSessionView({
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-app py-app">
-          <div
-            className={cn(
-              'mx-auto grid w-full max-w-reading gap-6',
-              setupLayout ? 'mt-16 @max-sm:mt-8' : 'my-auto',
-            )}
-          >
+          <div className="mx-auto my-auto grid w-full max-w-reading shrink-0 gap-6">
             <h1 className="wrap-anywhere text-center text-ui-large-title text-ink">
               {projectId === null ? greeting : project?.name}
             </h1>
             {composer(true)}
-            {showProjectSetup && <ProjectSetup key={project.id} project={project} />}
             {modelSetup}
+            {showProjectSetup && <ProjectSetup key={project.id} project={project} />}
           </div>
         </div>
       )}
@@ -380,7 +375,7 @@ function ChatSessionView({
           </Button>
         </div>
       ) : (
-        conversation && composer(false)
+        conversation && <div className="shrink-0 px-app pb-app">{composer(false)}</div>
       )}
       {sidechatOpen &&
         withReferences((files) => (

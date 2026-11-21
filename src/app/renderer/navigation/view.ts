@@ -186,6 +186,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       const next = id || null;
       const fromWorkbench = get().view === 'workbench';
       if (!get().navigate('workbench')) return false;
+      useMobileDrawer.getState().setDrawer(null);
       if (get().projectId !== next) {
         // 同视图换项目时 navigate 因视图未变而早退、不压栈，这里补记来源，否则从项目面板切走
         // 就退不回来。来源项目已被删除（工作区自动回退通用池）时不记，避免后退跳回不存在的项目。

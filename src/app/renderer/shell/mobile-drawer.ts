@@ -1,6 +1,8 @@
 // 窄屏三种抽屉共用一个状态，保证同一时刻只开一个。
 import { create } from 'zustand';
 
+export const NARROW_WINDOW_QUERY = '(width < 64rem)';
+
 export type MobileDrawer = 'nav' | 'page' | 'explorer';
 
 export const useMobileDrawer = create<{

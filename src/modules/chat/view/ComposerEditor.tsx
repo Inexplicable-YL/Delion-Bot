@@ -26,12 +26,14 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import { cn } from '../../../ui/cn';
+import type { ConnectorApp } from '../../connectors/view';
 import { codeHighlightStyle, markdownHighlightStyle } from '../../preview/view';
 import { openLightbox } from '../../../ui/lightbox';
 import { matchChatImageTokens } from '../../../core/protocol/chat-input';
 import { getChatMediaPreview } from './media';
 import type { ChatReference } from './drafts';
 import { matchReferenceTokens } from './reference-tokens';
+import { matchConnectorPrompts } from './connector-tokens';
 
 /** 容器注入的菜单键盘协议：返回 True 表示已消费该按键。 */
 type ComposerMenuApi = {
@@ -126,9 +128,12 @@ const imagePlugin = ViewPlugin.fromClass(
 
 // @ 引用 token：文档文本就是「@相对路径」，这里只负责画出来——折叠成文件图标加文件名，
 // 并经 atomicRanges 让光标/退格把整段路径当整体。
-const setReferenceOptions = StateEffect.define<ChatReference[]>();
-const referenceField = StateField.define<ChatReference[]>({
-  create: () => [],
+type ReferenceOptions = { files: ChatReference[]; connectors: readonly ConnectorApp[] };
+
+const noConnectors: readonly ConnectorApp[] = [];
+const setReferenceOptions = StateEffect.define<ReferenceOptions>();
+const referenceField = StateField.define<ReferenceOptions>({
+  create: () => ({ files: [], connectors: noConnectors }),
   update: (value, tr) => {
     for (const effect of tr.effects) if (effect.is(setReferenceOptions)) return effect.value;
     return value;
@@ -164,26 +169,61 @@ class ReferenceIconWidget extends WidgetType {
   }
 }
 
+class ConnectorWidget extends WidgetType {
+  constructor(readonly app: ConnectorApp) {
+    super();
+  }
+
+  eq(other: ConnectorWidget) {
+    return (
+      this.app.slug === other.app.slug &&
+      this.app.name === other.app.name &&
+      this.app.logo === other.app.logo
+    );
+  }
+
+  toDOM() {
+    const chip = document.createElement('span');
+    chip.className =
+      'delion-connector-token me-1 inline-flex items-center gap-1 align-top font-semibold select-none';
+    chip.title = `${this.app.name} 连接器`;
+    chip.dataset.connectorName = this.app.name;
+    chip.setAttribute('role', 'img');
+    chip.setAttribute('aria-label', chip.title);
+    const image = document.createElement('img');
+    image.className = 'size-4.5 shrink-0 object-contain';
+    image.alt = '';
+    image.draggable = false;
+    image.src = this.app.logo;
+    chip.append(image);
+    return chip;
+  }
+}
+
 function referenceDecorations(view: EditorView): DecorationSet {
-  const options = view.state.field(referenceField, false) ?? [];
-  const builder = new RangeSetBuilder<Decoration>();
-  for (const token of matchReferenceTokens(view.state.doc.toString(), options)) {
+  const options = view.state.field(referenceField);
+  const source = view.state.doc.toString();
+  const ranges: Range<Decoration>[] = [];
+  for (const token of matchReferenceTokens(source, options.files)) {
     const { start, end, ref } = token;
     // 文本里仍是完整「@路径」，解析不受显示折叠影响；会话标题里的 / 不是目录，只折叠 #。
     const split = ref.session ? -1 : ref.title.lastIndexOf('/');
     const nameStart = start + 1 + (split < 0 ? 0 : split + 1);
-    builder.add(
-      start,
-      nameStart,
-      Decoration.replace({ widget: new ReferenceIconWidget(ref.title, ref.session) }),
-    );
-    builder.add(
-      nameStart,
-      end,
-      Decoration.mark({ attributes: { title: ref.title }, class: 'cm-ref-name' }),
+    ranges.push(
+      Decoration.replace({ widget: new ReferenceIconWidget(ref.title, ref.session) }).range(
+        start,
+        nameStart,
+      ),
+      Decoration.mark({ attributes: { title: ref.title }, class: 'cm-ref-name' }).range(
+        nameStart,
+        end,
+      ),
     );
   }
-  return builder.finish();
+  for (const { from, to, app } of matchConnectorPrompts(source, options.connectors)) {
+    ranges.push(Decoration.replace({ widget: new ConnectorWidget(app) }).range(from, to));
+  }
+  return Decoration.set(ranges, true);
 }
 
 const referencePlugin = ViewPlugin.fromClass(
@@ -206,22 +246,24 @@ const referencePlugin = ViewPlugin.fromClass(
   { decorations: (value) => value.decorations },
 );
 
-// 编辑区内边距：.cm-scroller 与占位符覆盖层共用，避免两处漂移。rem 随主题字号缩放。
-const SCROLLER_PADDING = { x: '1rem', top: '0.875rem' };
-
 const composerTheme = EditorView.theme({
-  '&': { fontSize: '0.875rem', backgroundColor: 'transparent' },
+  '&': { fontSize: 'inherit', backgroundColor: 'transparent' },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
     fontFamily: 'inherit',
-    lineHeight: '1.65',
+    lineHeight: 'inherit',
     overflowY: 'auto',
     maxHeight: 'min(14rem, 38vh)',
-    padding: `${SCROLLER_PADDING.top} ${SCROLLER_PADDING.x} 0.375rem`,
+    padding: '0',
   },
   // CM 默认的内边距会让光标/正文相对自绘占位符偏移，统一归零，共用同一原点。
   '.cm-content': { caretColor: 'inherit', padding: '0' },
   '.cm-line': { padding: '0' },
+  '.delion-connector-token::after': { content: 'attr(data-connector-name)' },
+  '.delion-connector-token::selection, .delion-connector-token img::selection': {
+    backgroundColor: 'transparent',
+    color: 'inherit',
+  },
   '.delion-chat-image': {
     position: 'relative',
     display: 'inline-flex',
@@ -276,11 +318,6 @@ const composerTheme = EditorView.theme({
   '.delion-ref-icon svg': { width: '1em', height: '1em' },
 });
 
-const heroTheme = EditorView.theme({
-  '&.cm-editor': { fontSize: 'inherit' },
-  '&.cm-editor .cm-scroller': { lineHeight: 'inherit', padding: '0' },
-});
-
 function filesFromTransfer(transfer: DataTransfer | null): File[] {
   if (!transfer) return [];
   const files: File[] = [];
@@ -302,10 +339,10 @@ export function ComposerEditor({
   menu,
   menuAria,
   placeholderText,
-  hero = false,
   handleRef,
   className,
   referenceOptions,
+  connectorApps = noConnectors,
 }: {
   value: string;
   onChange: (text: string) => void;
@@ -316,10 +353,10 @@ export function ComposerEditor({
   menu: ComposerMenuApi;
   menuAria?: { open: boolean; listId: string; activeId: string | null };
   placeholderText: string;
-  hero?: boolean;
   handleRef: RefObject<ComposerEditorHandle | null>;
   className?: string;
   referenceOptions: ChatReference[];
+  connectorApps?: readonly ConnectorApp[];
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -377,7 +414,6 @@ export function ComposerEditor({
           ),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           composerTheme,
-          hero ? heroTheme : [],
           syntaxHighlighting(codeHighlightStyle),
           syntaxHighlighting(markdownHighlightStyle),
           EditorView.contentAttributes.of({ 'aria-label': '发送给助手', spellcheck: 'false' }),
@@ -442,8 +478,10 @@ export function ComposerEditor({
     current.dispatch({ changes: { from: 0, to: current.state.doc.length, insert: value } });
   }, [value]);
   useEffect(() => {
-    view.current?.dispatch({ effects: setReferenceOptions.of(referenceOptions) });
-  }, [referenceOptions]);
+    view.current?.dispatch({
+      effects: setReferenceOptions.of({ files: referenceOptions, connectors: connectorApps }),
+    });
+  }, [referenceOptions, connectorApps]);
   // combobox 语义落在 CM 内容元素：属性 CM 不管理，命令式同步；
   // 拆成原始值做依赖，打字时不重复写 DOM。
   const menuAriaOpen = menuAria?.open ?? false;
@@ -463,32 +501,17 @@ export function ComposerEditor({
   // 与实际插入点不一致。
   const empty = value.length === 0;
   return (
-    <div
-      className={cn('relative', hero && 'text-ui-body touch:text-ui-input-touch', className)}
-      ref={host}
-    >
-      {empty && (
-        <div
-          aria-hidden="true"
-          className={cn(
-            'pointer-events-none absolute select-none text-ink-2',
-            hero ? 'inset-x-0 top-0 truncate' : 'break-words',
-          )}
-          style={
-            hero
-              ? undefined
-              : {
-                  fontSize: '0.875rem',
-                  left: SCROLLER_PADDING.x,
-                  lineHeight: '1.65',
-                  right: SCROLLER_PADDING.x,
-                  top: SCROLLER_PADDING.top,
-                }
-          }
-        >
-          {placeholderText}
-        </div>
-      )}
+    <div className={cn('text-ui-body touch:text-ui-input-touch', className)}>
+      <div className="relative" ref={host}>
+        {empty && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 select-none truncate text-ink-2"
+          >
+            {placeholderText}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

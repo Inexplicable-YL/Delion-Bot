@@ -159,7 +159,7 @@ it('运行中输入框有内容时按钮是发送（插队），清空后变回�
   expect(button().getAttribute('aria-label')).toBe('停止执行');
 });
 
-it('新对话只显示可用的 Agent 操作，点击时将任务追加到聊天草稿', async () => {
+it('新对话只建议可用的 Agent 操作，点击时将任务写入聊天草稿', async () => {
   const webSearchKey = ['capabilities', 'webSearchOptions'];
   const entries = [{ id: 'search-id', name: 'Search', provider: 'brave' }];
   queryClient.setQueryDefaults(['capabilities'], { staleTime: Infinity });
@@ -168,6 +168,10 @@ it('新对话只显示可用的 Agent 操作，点击时将任务追加到聊天
   queryClient.setQueryData(webSearchKey, { entries, selectedId: null });
   queryClient.setQueryDefaults(['connectors'], { staleTime: Infinity });
   queryClient.setQueryData(['connectors', 'configured'], true);
+  queryClient.setQueryData(
+    ['connectors', 'catalog'],
+    [{ slug: 'gmail', name: 'Gmail', logo: 'https://example.test/gmail.png' }],
+  );
   queryClient.setQueryData(
     ['connectors', 'accounts'],
     [
@@ -187,9 +191,9 @@ it('新对话只显示可用的 Agent 操作，点击时将任务追加到聊天
   await act(async () =>
     queryClient.setQueryData(webSearchKey, { entries, selectedId: 'search-id' }),
   );
-  typeText('已有草稿');
   act(() => action('搜索网络')!.click());
-  expect(host.querySelector('textarea')?.value).toBe('已有草稿\n\n请联网搜索：');
+  expect(host.querySelector('textarea')?.value).toBe('请联网搜索：');
+  typeText('');
 
   await act(async () =>
     queryClient.setQueryData(

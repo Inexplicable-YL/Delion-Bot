@@ -104,6 +104,7 @@ export function PromptInputToolbar({
 }) {
   return (
     <div
+      data-slot="prompt-input-toolbar"
       className={cn(
         'flex items-center gap-1',
         className ?? 'px-2.5 pb-2.5 pt-1 @max-[160px]:gap-0.5 @max-[160px]:px-1.5',
@@ -141,7 +142,7 @@ export function PromptInputSubmit({
   onStop: () => void;
 }) {
   return stoppable ? (
-    <Button aria-label="停止执行" onClick={onStop} title="停止执行" size="icon-sm">
+    <Button aria-label="停止执行" onClick={onStop} title="停止执行" size="icon-lg">
       <Square />
     </Button>
   ) : (
@@ -150,7 +151,7 @@ export function PromptInputSubmit({
       disabled={!sendable}
       onClick={onSend}
       title={sendTitle}
-      size="icon-sm"
+      size="icon-lg"
       variant={sendable ? 'accent' : 'secondary'}
     >
       <ArrowUp />

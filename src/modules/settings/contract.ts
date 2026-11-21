@@ -1,4 +1,3 @@
-// 设置契约：偏好、条款接受记录、导出本机数据与缓存清理。偏好的事实在主进程数据库。
 import { z } from 'zod';
 import { defineContract } from '../../core/protocol/contract';
 import { isAccelerator, isShortcutActionId, type KeybindingOverrides } from './keybindings';
@@ -57,8 +56,6 @@ export const settingsSectionLabels: Record<SettingsSectionId, string> = {
   terms: '使用条款',
 };
 
-export type ConsentDocument = 'terms' | 'privacy';
-
 export type BackupResult =
   /** skipped 是没复制成功的顶层条目名；原因不止被占用，所以只回报名字，不断言原因。 */
   | { status: 'exported'; path: string; skipped: string[] }
@@ -106,15 +103,6 @@ export const settingsContract = defineContract('settings', {
   resetKeybindings: { input: z.undefined(), output: z.custom<KeybindingOverrides>() },
   instruction: { input: z.undefined(), output: z.string() },
   setInstruction: { input: z.string(), output: z.string() },
-  /** 条款接受记录只追加；revision 是正文顶部的「最后更新」日期。 */
-  recordConsent: {
-    input: z.object({
-      document: z.enum(['terms', 'privacy']),
-      revision: z.string().min(1).max(64),
-    }),
-    output: z.void(),
-  },
-  /** 只在条款接受页使用：拒绝条款的用户也要能先把自己的数据拿走。 */
   exportData: { input: z.undefined(), output: z.custom<BackupResult>() },
   cacheSize: { input: z.undefined(), output: z.number() },
   clearCache: { input: z.undefined(), output: z.custom<CacheClearResult>() },
