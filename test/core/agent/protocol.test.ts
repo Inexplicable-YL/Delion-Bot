@@ -1,4 +1,3 @@
-// Agent 协议入口：版本不一致拒绝连接；提问的 # 引用原样送达会话（曾被入参校验剥掉）。
 import { expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({ askSession: vi.fn(async () => ({})) }));

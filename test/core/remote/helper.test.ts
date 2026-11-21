@@ -1,5 +1,3 @@
-// helper 通道的状态机与任务接回：用本机 HTTP 假扮远端 helper，「隧道」是一个可以随时杀掉的子进程。
-// 引导、上传、真隧道与真 helper 在 helper.remote.test.ts，由 pnpm test:remote 运行。
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -170,7 +168,6 @@ describe('通道状态机', () => {
     const session = await readyHelper(target);
     expect(await session.list('/p')).toHaveLength(1);
     cutTunnel();
-    // 隧道一断就发：请求可能撞上「还没察觉断开」或「正在重连」，两种都该等到新隧道而不是失败。
     expect(await helperSession(target).list('/p')).toHaveLength(1);
     await waitFor(() => connects === 2);
     expect(await session.list('/p')).toHaveLength(1);

@@ -13,16 +13,16 @@ import type { OutlineIcon } from '../../../ui/outline-icon';
 import { createClient } from '../../../core/protocol/contract';
 import { cn } from '../../../ui/cn';
 import { SEARCH_LIMIT, searchContract, type SearchHit, type SearchIcon } from '../contract';
-import { ErrorText } from '../../../ui/alert';
-import { EmptyState } from '../../../ui/empty-state';
-import { Spinner } from '../../../ui/spinner';
+import { ErrorText } from '../../../ui/Alert';
+import { EmptyState } from '../../../ui/EmptyState';
+import { Spinner } from '../../../ui/Spinner';
 import {
   Dialog,
   DialogContent,
   DialogTitle,
   DialogDescription,
   DialogClose,
-} from '../../../ui/dialog';
+} from '../../../ui/Dialog';
 
 const search = createClient(searchContract, window.delionBot?.bridge);
 
@@ -47,20 +47,16 @@ export function GlobalSearchDialog({
   onSelect: (hit: SearchHit) => void;
 }) {
   const [query, setQuery] = useState('');
-  // 输入法组合中的拼音只显示在输入框里，选词上屏后才成为搜索词。
   const [term, setTerm] = useState('');
-  // 主进程查询是同步的，防抖避免逐字查询。
   const [debouncedTerm] = useDebounce(term.trim(), 180);
   const results = useQuery({
     queryKey: ['search', debouncedTerm],
     queryFn: () => search.query(debouncedTerm),
     enabled: open,
-    // 新结果到达前保留旧结果，列表不会先闪成加载状态。
     placeholderData: keepPreviousData,
   });
   const groups = results.data ?? [];
   const hits = groups.flatMap((group) => group.hits);
-  // 选中项只对产生它的那批结果有效；新结果到达后回到第一项。
   const [selection, setSelection] = useState({ batch: -1, index: -1 });
   const selectedIndex =
     selection.batch === results.dataUpdatedAt ? selection.index : hits.length ? 0 : -1;

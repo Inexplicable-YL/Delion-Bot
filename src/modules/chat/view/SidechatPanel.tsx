@@ -1,5 +1,3 @@
-// 旁问面板：浮在会话视图右上角的临时对话，虚线边框与标题提示「关闭后不保留」，和主会话的标签、
-// 列表都区分开。草稿以 `sidechat:<主会话 id>` 为键（与会话草稿共用存储），附件在面板里各自暂存。
 import { useEffect, useEffectEvent, useState } from 'react';
 import {
   ArrowTopRightOnSquareIcon as SquareArrowOutUpRight,
@@ -17,15 +15,15 @@ import {
   chatFileKindOfFile,
 } from '../../../core/protocol/chat-input';
 import { agentClient } from './client';
-import { EmptyState } from '../../../ui/empty-state';
-import { IconButton } from '../../../ui/icon-button';
-import { showToast } from '../../../ui/toast';
+import { EmptyState } from '../../../ui/EmptyState';
+import { IconButton } from '../../../ui/IconButton';
+import { showToast } from '../../../ui/Toast';
 import { cn } from '../../../ui/cn';
-import { useChatTabSource } from './chat-source';
+import { useChatTabSource } from './ChatSource';
 import { useSessions } from './sessions';
 import { ChatComposer } from './ChatComposer';
 import { ChatThread } from './ChatThread';
-import type { ReferenceEntry, ReferenceSource } from './chat-source';
+import type { ReferenceEntry, ReferenceSource } from './ChatSource';
 import { emptyDraft, useChatDrafts } from './drafts';
 import { referenceContext } from './reference-tokens';
 import { releaseChatMedia } from './media';
@@ -64,7 +62,6 @@ export function SidechatPanel({
   );
   useEffect(() => () => releaseAttachments(), []);
 
-  // ChatThread 只认会话快照：借主会话的项目与 cwd，sessionId 留空（旁问没有改动记录与分支）。
   const thread: WorkspaceChat | null =
     view && parent
       ? {
@@ -115,7 +112,6 @@ export function SidechatPanel({
       );
     } catch (e) {
       setError(errorMessage(e));
-      // 旁问还没上屏就失败（附件读取、模型不可用）：恢复输入，免得重打。
       if (
         !useSidechats
           .getState()
@@ -204,7 +200,6 @@ export function SidechatPanel({
       {(motion === 'collapse' || motion === 'expand') && pill}
       <section
         aria-label="旁问"
-        // 固定高度：消息区是 flex-1 的滚动容器，只有 max-h 时它撑开而不滚动，长回复被裁掉。
         className={cn(
           'absolute right-3 top-12 z-drawer flex sidechat-height sidechat-width origin-top-right flex-col rounded-window border border-dashed border-line-strong bg-surface shadow-raised',
           motion === 'collapse' && 'pointer-events-none',

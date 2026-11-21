@@ -49,8 +49,11 @@ jobs:
               - 'vendor/bin/**'
               - '.github/workflows/quality.yml'
               - '.github/workflows/test.yml'
+              - '.editorconfig'
               - '.oxlintrc*'
               - 'oxlint.config.*'
+              - '.prettierignore'
+              - '.prettierrc*'
               - 'vitest*.config.*'
               - 'tsconfig*.json'
             common:

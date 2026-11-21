@@ -1,5 +1,3 @@
-/** 远端上下文镜像：Pi 的 skills 只认本地文件，故把远端 AGENTS.md 与 skills 落到本地，镜像路径由 remotePath 翻回远端。
- * AGENTS.md 不镜像，内容经 agentsFilesOverride 交给 Pi；同步只跑一次远端脚本，不监听远端变化。 */
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { hostPorts } from '../ports';
@@ -7,7 +5,6 @@ import { helperSession } from './helper';
 import { remoteBackend, setContextMirrors, writeRemoteFile } from './operations';
 import { shellQuote, type RemoteTarget } from './transport';
 
-/** Pi 认的上下文文件名，顺序即优先级（与 resource-loader 的候选一致）。 */
 const CONTEXT_FILE_NAMES = [
   'AGENTS.override.md',
   'AGENTS.md',
@@ -32,8 +29,6 @@ interface Record {
   content: Buffer;
 }
 
-/** 一次 ssh 取回全部内容：NUL 分隔的「路径 + base64 正文」记录，用标记分段。
- *  NUL 不会出现在路径与 base64 里，所以空文件也能正确解析。 */
 function mirrorScript(home: string, remoteDir: string, ancestors: string[]): string {
   const sections: string[] = [`printf '${HOME_MARK}\\0%s\\0' "$HOME"`];
 
@@ -100,7 +95,6 @@ function parseRecords(stdout: Buffer): {
       while (index + 1 < tokens.length && !tokens[index]!.startsWith('@@')) {
         agentsFiles.push({
           path: tokens[index]!,
-          // Pi 读本地文件时会去 BOM，这里保持一致，免得远端文件头多一个看不见的字符。
           content: Buffer.from(tokens[index + 1]!, 'base64')
             .toString('utf8')
             .replace(/^\uFEFF/, ''),
@@ -112,8 +106,6 @@ function parseRecords(stdout: Buffer): {
   return { home, skills, agentsFiles };
 }
 
-/** 镜像根：每个远端项目一份，路径稳定（同一项目的旧会话与新会话看到同一批镜像路径）。
- *  项目 id 可能是「远端条目 id」这类带 `/` `:` 的字符串，只留安全字符再当目录名。 */
 export function contextMirrorRoot(remoteId: string, projectId: string): string {
   const safe = projectId.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100);
   return join(hostPorts().paths.userData(), 'remote-context', remoteId, safe);
@@ -135,7 +127,6 @@ export interface RemoteContext {
   agentsFiles: { path: string; content: string }[];
 }
 
-/** 同步一个远端项目的上下文。失败不抛：缺少远端 skills/AGENTS.md 只是少了上下文，不该让会话打不开。 */
 export async function syncRemoteContext(input: {
   target: RemoteTarget;
   key: string;
@@ -190,14 +181,12 @@ export async function syncRemoteContext(input: {
   }
 }
 
-/** 本地技能目录里的文件（相对目录）：软链接不跟随，避免把仓库外的东西一起带走。 */
 function skillFiles(dir: string): string[] {
   return readdirSync(dir, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => relative(dir, join(entry.parentPath, entry.name)));
 }
 
-/** 把本地技能目录上传到远端项目的 .agents/skills/<名字>/；目标已存在且 overwrite=false 时抛「远端已存在：…」，由调用方先问用户。 */
 export async function uploadSkillToRemote(input: {
   target: RemoteTarget;
   skillDir: string;

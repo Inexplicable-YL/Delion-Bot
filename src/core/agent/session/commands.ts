@@ -37,7 +37,6 @@ export async function newSession(projectId: string | null): Promise<WorkspaceCha
   return snapshot(insertSession(projectId));
 }
 
-/** 从已完成回复分出新会话：同项目、模型与工作目录；分支前的每轮改动记录按会话 id 保存，不随分支复制。 */
 export async function forkSession(id: string, entryId: string): Promise<WorkspaceChat> {
   const meta = row(id);
   if (!meta.file || !existsSync(meta.file)) throw new Error('会话还没有可分支的记录');
@@ -71,7 +70,6 @@ export function updateSessionVisibility(
   storeVisibility(id, patch);
 }
 
-/** 工作目录随归属改变；Pi 实例绑定旧 cwd，空闲时丢弃，下一轮按新目录重建。已写出的文件不搬。 */
 export function moveSession(id: string, projectId: string | null) {
   const meta = row(id);
   if (meta.project_id === projectId) return;
@@ -118,7 +116,6 @@ function compactionError(error: unknown): string {
   return `压缩失败：${message}`;
 }
 
-/** 会话命令（/compact、/reload、/name）不是一轮对话：不写用户消息、不改标题、不记文件变化，所以不走 askSession。 */
 export async function runSessionCommand(
   id: string,
   name: MainSessionCommand,
@@ -144,12 +141,10 @@ export async function runSessionCommand(
     try {
       await entry.session.compact(args || undefined);
     } catch (error) {
-      // 用户在压缩中点了停止（cancelRun → abort）：不算失败。
       if (!/Compaction cancelled/i.test(error instanceof Error ? error.message : '')) {
         throw new Error(compactionError(error));
       }
     } finally {
-      // 压缩期间配置变了：invalidateSessions 只标了 stale，这里补上丢弃。
       if (entry.stale) disposeLive(id, entry);
     }
   }
@@ -157,7 +152,6 @@ export async function runSessionCommand(
   return snapshot(id);
 }
 
-/** 只改这个会话的模型：空闲实例就地切换；运行或压缩中的实例标 stale，本轮用原模型，结束后重建。 */
 export async function setSessionModel(
   id: string,
   providerId: string,

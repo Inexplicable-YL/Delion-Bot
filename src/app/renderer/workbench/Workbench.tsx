@@ -1,5 +1,3 @@
-// 工作台根：渲染项目布局（或最大化组/窄屏单列），承接布局类快捷键。
-// 布局载入由 WorkbenchShell 负责；home 不挂载本组件，预热后进入可避免首帧空白。
 import { type KeyboardEvent } from 'react';
 import type { KeybindingMap } from '../../../modules/settings/contract';
 import { digitFromEvent, matchShortcut } from '../../../modules/settings/contract';
@@ -26,7 +24,6 @@ export function Workbench({
     const action = matchShortcut(bindings, event.nativeEvent, 'workbench', mac ? 'mac' : 'other');
     if (!action) return;
     if (target?.closest('[role="dialog"]')) return;
-    // Mac 的关标签组合即使焦点在编辑器/终端中也生效；Control 继续交给编辑器与 shell。
     const macCloseTab = mac && action === 'close-tab' && event.metaKey;
     if (!macCloseTab && target?.closest('input, textarea, .cm-editor, [contenteditable="true"]'))
       return;

@@ -17,15 +17,15 @@ import {
   type ConnectorApp,
 } from '../../connectors/view';
 import { cn } from '../../../ui/cn';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import type { ComposerContext } from './composer-context';
 import { ChatComposerMenu } from './ChatComposerMenu';
 import { ChatModelPicker } from './ChatModelPicker';
-import { ReplyCommentRail } from './reply-comment';
+import { ReplyCommentRail } from './ReplyComment';
 import { formatDuration } from './ToolTimeline';
-import { openSubagent } from './tool-views';
-import { BackgroundTasks } from '../../../ui/agent/background-tasks';
-import { ContextIndicator } from '../../../ui/agent/context-indicator';
+import { openSubagent } from './ToolViews';
+import { BackgroundTasks } from '../../../ui/agent/BackgroundTasks';
+import { ContextIndicator } from '../../../ui/agent/ContextIndicator';
 import {
   PromptInput,
   PromptInputAttachments,
@@ -35,9 +35,9 @@ import {
   PromptInputNotice,
   PromptInputSubmit,
   PromptInputToolbar,
-} from '../../../ui/agent/prompt-input';
-import { QueuedMessages } from '../../../ui/agent/queued-messages';
-import { useChatTabSource } from './chat-source';
+} from '../../../ui/agent/PromptInput';
+import { QueuedMessages } from '../../../ui/agent/QueuedMessages';
+import { useChatTabSource } from './ChatSource';
 import type {
   BackgroundTaskView,
   ChatComment,
@@ -117,7 +117,6 @@ const connectorActions = [
 
 type MenuState = { kind: 'slash' | 'mention' | 'session'; query: string; start: number } | null;
 
-/** 检测光标前的 /、@ 或 # 触发词；单独输入也打开候选（空查询）。「# 」是 Markdown 标题，不触发。 */
 function detectMenu(text: string, caret: number): MenuState {
   const before = text.slice(0, caret);
   const slash = /(?:^|\s)\/([^\s]{0,30})$/.exec(before);
@@ -136,8 +135,6 @@ function formatSize(size: number): string {
   return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
-/** 本会话累计缓存命中率 = cacheRead / (输入 + cacheRead)。main 没给出缓存字段（提供商不上报
- *  缓存）或分母为 0 时显示 —：写成 0% 会把「没有数据」说成「一次都没命中」。 */
 export function cacheHitRateText(usage: ContextUsageView): string {
   const { inputTokens, cachedTokens } = usage;
   if (inputTokens === undefined || cachedTokens === undefined) return '—';
@@ -182,12 +179,10 @@ export function ChatComposer({
   tasks = [],
   onStopTask,
 }: {
-  /** 运行中插队、还没送达的消息；非空时显示在输入框上方，可整体撤回。 */
   queued?: string[];
   onWithdrawQueued?: () => void;
   tasks?: BackgroundTaskView[];
   onStopTask?: (taskId: string) => void;
-  /** 旁问输入框：模型与思考强度沿用主会话、联网搜索是全局开关，这三个选择器都不显示。 */
   sidechat?: boolean;
   context?: ComposerContext | null;
   onSelectProject?: (projectId: string | null) => void;
@@ -203,10 +198,8 @@ export function ChatComposer({
   configured: boolean;
   providerId?: string | null;
   model: string;
-  /** 会话的模型已停用或被移除：禁止发送，提示另选。 */
   modelUnavailable?: boolean;
   onModelSelect: (provider: LlmProviderView, model: string) => void;
-  /** 当前推理强度档位；未配置时为 null，显示 default 并提供设置入口。 */
   effort: string | null;
   effortLevels: string[];
   onEffortSelect: (level: string) => void;
@@ -227,7 +220,6 @@ export function ChatComposer({
   const expanded = value.length > 0 && (wrapped || value.includes('\n'));
   const [menu, setMenu] = useState<MenuState>(null);
   const [index, setIndex] = useState(0);
-  // 菜单 id 逐实例唯一：同页可同时挂多个会话的 composer。
   const menuListId = `${useId()}-list`;
   const menuOptionId = (position: number) => `${menuListId}-option-${position}`;
   const [dragging, setDragging] = useState(false);
@@ -304,7 +296,6 @@ export function ChatComposer({
   ]
     .filter(({ available }) => available)
     .slice(0, 3);
-  // 先取消在途读取：首次读取还没回来时，失效不会重读，旧响应会盖掉新配置。
   const refreshSearch = async () => {
     await queryClient.cancelQueries({ queryKey: webSearchOptionsKey });
     await queryClient.invalidateQueries({ queryKey: webSearchOptionsKey });
@@ -323,7 +314,6 @@ export function ChatComposer({
       const line = editor.querySelector<HTMLElement>('.cm-line');
       if (!line || !prompt.clientWidth) return;
       const { paddingLeft, paddingRight, columnGap } = getComputedStyle(prompt);
-      // 展开后仍按单行布局的宽度测量，避免文本在两种布局间反复换行。
       const inlineWidth =
         prompt.clientWidth -
         parseFloat(paddingLeft) -
@@ -353,8 +343,6 @@ export function ChatComposer({
       ? [
           ...builtinCommands,
           ...(customCommands ?? []).map((command) => ({ ...command, hint: '自定义' })),
-          // Delion Bot 的会话命令：插入 `/name ` 留给参数，发送时由 use-chat 拦下执行。
-          // 旁问里没有会话命令：发出去就是普通提问。
           ...(sidechat ? [] : SESSION_COMMANDS).map((command) => ({
             name: command.name,
             prompt: `/${command.name} `,
@@ -397,7 +385,6 @@ export function ChatComposer({
     } else {
       const option = mentionItems[position];
       if (!option) return;
-      // 引用即文本：原位留下「@相对路径」或「#会话标题」token（尾随空格隔开后续输入），发送时解析回 key。
       editorRef.current?.replaceRange(
         menu.start,
         caret,
@@ -428,7 +415,6 @@ export function ChatComposer({
     editorRef.current?.focus();
   };
 
-  /** 插入一张已暂存的内联图片 token，返回新的插入位置（批量拖入时逐张顺延）。 */
   const insertImageView = (view: ChatMediaView, pos: number) => {
     setChatMediaPreview(view.id, view.previewUrl);
     const token = `${chatImageToken(view.id, view.name)} `;
@@ -439,7 +425,6 @@ export function ChatComposer({
   const addFiles = async (files: File[], pos: number) => {
     if (!window.delionBot) return;
     let insertPos = pos;
-    // 闭包里的 value 不含本轮已插入的 token，循环内自计数防止批量拖入绕过上限。
     let imageCount = matchChatImageTokens(value).length;
     let attachmentCount = attachments.length;
     for (const file of files) {
@@ -531,7 +516,6 @@ export function ChatComposer({
     comments.length > 0;
 
   const sendable = configured && !modelUnavailable && !projectSwitching && canSend;
-  // 主会话运行中输入框有内容就是插队发送；旁问不插队，运行中始终是停止。
   const stoppable = busy && (sidechat || !canSend);
 
   const selectSearchEntry = async (id: string | null) => {

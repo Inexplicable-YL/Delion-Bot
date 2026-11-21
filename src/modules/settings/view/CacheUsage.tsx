@@ -1,20 +1,18 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { TrashIcon as Trash2 } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { formatBytes } from '../../../ui/format-bytes';
 import { SettingRow } from './SettingRow';
 import { SettingsGroup } from './SettingsGroup';
 import { settingsClient } from './client';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { errorMessage } from '../../../core/protocol/contract';
 
-/** 通用 › 缓存占用：缓存目录文件极多，量一次要扫盘，量完之前不显示数字也不让点。 */
 export function CacheUsage() {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // 量不出来就保持「正在计算」，用户仍可点清除（清理本身不依赖这个数）。
   const size = useQuery({
     queryKey: ['settings', 'cacheSize'],
     queryFn: () => settingsClient.cacheSize(),
@@ -34,7 +32,6 @@ export function CacheUsage() {
       showToast({
         variant: 'success',
         title: freed ? `已清除 ${freed}` : '没有可清除的缓存',
-        // 删不掉的文件是这台机器当时的状态，说明白比假装清干净好。
         description: result.blocked ? '部分文件正被占用，重启应用后可再清除。' : undefined,
       });
     };

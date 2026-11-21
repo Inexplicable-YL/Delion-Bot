@@ -1,5 +1,3 @@
-// DeepSeek 官方 Search / Fetch 接口：Bearer 鉴权、按成功请求计费（5 元 / 千次，QPS 5），
-// 与 OpenAI 兼容的 chat 端点无关。Search 返回结构化网页，Fetch 返回 Markdown 正文。
 const BASE_URL = 'https://api.deepseek.com';
 const REQUEST_TIMEOUT_MS = 15000;
 
@@ -41,8 +39,6 @@ export interface DeepSeekSearchHit {
   snippet: string;
 }
 
-/** 搜索结果取标题、链接与长摘要：官方 summary（600–800 字）面向模型阅读，
- *  snippet（100–200 字）面向前端展示，WebSearch 的消费者是模型。 */
 export async function searchDeepSeek(
   query: string,
   count: number,

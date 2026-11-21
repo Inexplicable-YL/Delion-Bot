@@ -1,5 +1,3 @@
-// 映射直接消费 material-icon-theme 的上游 manifest，仓库不留生成物；
-// SVG 资产构建时由 vite.renderer.config.ts 拷入 out/renderer/file-icons/。
 import manifest from 'material-icon-theme/dist/material-icons.json';
 
 declare const __FILE_ICONS_DIR__: string;
@@ -10,7 +8,6 @@ for (const [definition, meta] of Object.entries(manifest.iconDefinitions)) {
   if (svg) svgOfDefinition.set(definition, svg);
 }
 
-// 上游有少量混合大小写的键，统一小写。
 function resolveKeys(mapping: Record<string, string>): Map<string, string> {
   const resolved = new Map<string, string>();
   for (const [key, definition] of Object.entries(mapping)) {
@@ -30,7 +27,6 @@ export function fileIconUrl(fileName: string): string | null {
   return icon ? baseUrl + icon : null;
 }
 
-// 后缀从长到短：「vue.config.js」优先于「js」；点文件（.gitignore）由 byName 命中。
 function suffixIconOf(name: string): string | null {
   let dot = name.indexOf('.');
   while (dot !== -1) {

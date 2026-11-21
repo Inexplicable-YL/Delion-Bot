@@ -1,6 +1,5 @@
 import { app, BrowserWindow, type IpcMainInvokeEvent } from 'electron';
 
-// Only the app's main frame can invoke credential, file and workspace operations.
 export function checkWorkspaceSender(event: IpcMainInvokeEvent) {
   const frame = event.senderFrame;
   if (!frame || frame !== event.sender.mainFrame) throw new Error('不允许的调用来源');
@@ -10,7 +9,6 @@ export function checkWorkspaceSender(event: IpcMainInvokeEvent) {
   }
 }
 
-/** 主窗口（工作台）的页面地址；其他窗口不接收工作台推送。 */
 function isWorkspaceWindow(value: string): boolean {
   try {
     const url = new URL(value);

@@ -13,12 +13,10 @@ import {
   type OfficeExportProgress,
 } from '../../workspace/contract';
 
-// 我的资料下集中存放导出 PDF 的固定文件夹；id 记在 settings，重命名后仍能找回。
 const EXPORT_FOLDER_NAME = '预览导出';
 const EXPORT_FOLDER_SETTING = 'preview-export-folder';
 const EXPORT_TIMEOUT_MS = 5 * 60 * 1000;
 
-// PowerShell 5.1 兼容（不用 PS7 语法）；路径经环境变量传入，不拼接进命令文本。
 const powerShellScript = [
   "$ErrorActionPreference = 'Stop'",
   '$code = 1',
@@ -68,7 +66,6 @@ function convertToPdf(input: string, output: string): Promise<void> {
       else resolve();
     };
     const timer = setTimeout(() => {
-      // 超时必须连进程树一起杀掉：挂起的 PowerShell 与其拉起的 PowerPoint 会常驻后台。
       if (child.pid) {
         spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
           windowsHide: true,
@@ -116,7 +113,6 @@ function ensureExportFolder(): { id: string; path: string } {
   const stored = db
     .prepare('SELECT value FROM workspace_settings WHERE key=?')
     .get(EXPORT_FOLDER_SETTING) as { value: string } | undefined;
-  // 设置键优先（文件夹被重命名后仍可找回），缺失时按名称兜底，最后才新建。
   const folder =
     usable(stored ? row(stored.value) : undefined) ??
     usable(
@@ -148,7 +144,6 @@ function registerExportEntry(
     previousEntryId &&
     db.prepare('SELECT 1 FROM workspace_entries WHERE id=?').get(previousEntryId)
   ) {
-    // local_path 必须与落盘路径同步：用户可能已重命名/移动过该条目。
     db.prepare('UPDATE workspace_entries SET name=?, local_path=?, updated_at=? WHERE id=?').run(
       basename(path),
       path,
@@ -158,8 +153,6 @@ function registerExportEntry(
     return previousEntryId;
   }
   const id = randomUUID();
-  // 导出的 PDF 需要稳定身份（关联记录按 id 指向它），所以落一行 file 条目；
-  // 列名显式写出：这张表的列随 schema 版本增删过，位置参数会静默错位。
   db.prepare(
     `INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, updated_at)
      VALUES (?, ?, ?, 'file', NULL, ?, ?)`,
@@ -167,8 +160,6 @@ function registerExportEntry(
   return id;
 }
 
-// PowerPoint COM 是单实例服务器：并发转换会互相打断（先完成方的 Quit 终止共享实例），
-// 用 Promise 链把实际转换串行化，同一时刻只跑一个 PowerPoint 任务。
 let conversionQueue: Promise<unknown> = Promise.resolve();
 function enqueueConversion(run: () => Promise<void>): Promise<void> {
   const work = conversionQueue.then(run, run);
@@ -191,7 +182,6 @@ async function runOfficeExport(
   const previous = readOfficeExportLink(ref.type, String(ref.id));
   const target =
     previous && existsSync(previous.path) ? previous.path : availablePath(folder.path, pdfName);
-  // 先写到临时名再改回目标名：转换失败时不破坏上一次的导出。
   const temporary = `${target}.${randomUUID()}.part.pdf`;
   try {
     await enqueueConversion(async () => {
@@ -200,9 +190,7 @@ async function runOfficeExport(
         try {
           const stats = statSync(temporary);
           if (stats.isFile()) onProgress({ phase: 'writing', bytes: stats.size });
-        } catch {
-          /* 输出尚未生成 */
-        }
+        } catch {}
       }, 1500);
       try {
         await convertToPdf(path, temporary);
@@ -214,9 +202,7 @@ async function runOfficeExport(
   } catch (error) {
     try {
       if (existsSync(temporary)) unlinkSync(temporary);
-    } catch {
-      /* 清理尽力而为 */
-    }
+    } catch {}
     throw error;
   }
   const entryId = registerExportEntry(folder.id, previous?.entryId, target);

@@ -5,8 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { WorkspaceChat } from '../../../../src/core/protocol/agent';
 import { ChatThread } from '../../../../src/modules/chat/view/ChatThread';
 
-// jsdom 不排版：Markdown 渲染与改动卡片换成占位，尺寸与滚动边界用最小桩。
-vi.mock('../../../../src/modules/chat/view/markdown', () => ({
+vi.mock('../../../../src/modules/chat/view/Markdown', () => ({
   ChatMarkdown: ({ children }: { children: ReactNode }) => <span>{children}</span>,
 }));
 vi.mock('../../../../src/ui/use-media-query', () => ({ useMediaQuery: () => true }));

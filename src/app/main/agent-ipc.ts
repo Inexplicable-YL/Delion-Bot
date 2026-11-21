@@ -1,4 +1,3 @@
-// agent 域入口：注册 Agent 协议与桌面私有的 llm、capabilities 契约；会话的桌面操作在 modules/chat。
 import { ipcMain } from 'electron';
 import { z } from 'zod';
 import { checkWorkspaceSender } from './window';
@@ -82,7 +81,6 @@ async function shutdownSessions(timeoutMs: number) {
   ]);
 }
 
-/** 模型/能力配置写入后让空闲会话按新配置重建。 */
 function invalidating<T>(fn: () => T): T {
   const result = fn();
   if (result instanceof Promise) return result.finally(invalidateSessions) as T;
@@ -90,14 +88,12 @@ function invalidating<T>(fn: () => T): T {
   return result;
 }
 
-/** 搜索配置变更同时刷新会话工具与各窗口的选择器。 */
 function changingWebSearch<T>(fn: () => T): T {
   const result = invalidating(fn);
   emit(capabilitiesContract, 'webSearchChanged', undefined);
   return result;
 }
 
-// 提供商配置只影响用它的会话；停用与删除也一样，那些会话下次使用时会提示另选模型。
 const llm = implement(llmContract, {
   catalog: () => llmCatalog(),
   list: () => listLlmProviders(),
@@ -180,13 +176,11 @@ const capabilities = implement(capabilitiesContract, {
 });
 
 export function registerAgentIpc() {
-  // 调用过协议的窗口才收得到会话事件。
   for (const channel of channelsOf(agentContract)) {
     const name = channel.slice(agentContract.namespace.length + 1);
     ipcMain.handle(channel, async (event, input: unknown) => {
       checkWorkspaceSender(event);
       hostPorts().broadcaster.subscribe(event.sender);
-      // 首页先恢复输入框和导航。复用已有记录的会话时，由 newSession 加载 Pi。
       if (name !== 'create-session' && name !== 'list-sessions' && name !== 'list-commands')
         await preloadPi();
       return agentProtocol.call(name, input);

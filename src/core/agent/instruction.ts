@@ -1,5 +1,3 @@
-// 用户附加指令（设置 › 自定义指令）：随系统提示注入每次 Run，空串不注入。
-// 上限与自定义指令正文一致，避免一条偏好挤占过多上下文预算。
 import { z } from 'zod';
 import { hostPorts } from '../ports';
 
@@ -9,7 +7,6 @@ const projectContextSchema = z.object({
   files: z.array(z.string()).max(100),
 });
 
-/** 键缺失、超长或数据损坏一律回退空串：注入端只关心“有没有内容”。 */
 export function getAgentInstruction(): string {
   const row = hostPorts()
     .database()

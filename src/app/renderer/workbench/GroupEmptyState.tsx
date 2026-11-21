@@ -2,8 +2,8 @@ import {
   PencilSquareIcon as SquarePen,
   Squares2X2Icon as LayoutGrid,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/button';
-import { EmptyState } from '../../../ui/empty-state';
+import { Button } from '../../../ui/Button';
+import { EmptyState } from '../../../ui/EmptyState';
 
 export function GroupEmptyState({ onNewChat }: { onNewChat: () => void }) {
   return (

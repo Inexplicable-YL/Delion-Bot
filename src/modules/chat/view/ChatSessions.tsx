@@ -7,14 +7,14 @@ import {
   XMarkIcon as X,
 } from '@heroicons/react/24/outline';
 import type { ChatSessionSummary } from '../../../core/protocol/agent';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { useDismissOnOutsidePointer } from '../../../ui/use-dismiss-on-outside-pointer';
-import { EmptyState } from '../../../ui/empty-state';
-import { IconButton } from '../../../ui/icon-button';
-import { SearchInput } from '../../../ui/search-input';
+import { EmptyState } from '../../../ui/EmptyState';
+import { IconButton } from '../../../ui/IconButton';
+import { SearchInput } from '../../../ui/SearchInput';
 import { cn } from '../../../ui/cn';
 import { poolKey, querySessions } from './sessions';
-import { Sheet, SheetContent } from '../../../ui/sheet';
+import { Sheet, SheetContent } from '../../../ui/Sheet';
 import { errorMessage } from '../../../core/protocol/contract';
 
 function SessionList({
@@ -119,17 +119,13 @@ export function ChatSessions({
         throw cause;
       }),
     enabled: open,
-    // 新结果到达前保留旧列表，面板打开与查询期间不闪空态文案。
     placeholderData: keepPreviousData,
   });
-  // 查询失败不静默呈现为空态：给一行错误与重试；新查询成功即复位。
   const loadError = sessionLists.isError;
   const lists = loadError ? undefined : sessionLists.data;
 
   const deleteSession = (sessionId: string) => {
     onDeleteSession(sessionId);
-    // 面板保持打开时列表仍可见：先乐观移除，再重取列表覆盖在途旧请求，
-    // 也让删除失败（IPC 报错）时该行按服务端事实恢复。
     queryClient.setQueriesData<ChatSessionSummary[][]>(
       { queryKey: ['chat', 'session-search'] },
       (current) => current?.map((list) => list.filter((item) => item.id !== sessionId)),

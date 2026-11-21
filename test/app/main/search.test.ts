@@ -1,4 +1,3 @@
-// 全局搜索对着 database.ts 建出来的真实表跑：影子 schema 曾经凭空补过列，让引用不存在的列也能全绿。
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

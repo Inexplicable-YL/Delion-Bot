@@ -1,12 +1,9 @@
-// 全局唯一的代码高亮方案（GitHub Light / Dark）：按 GitHub 主题的作用域规则把 lezer 标签映射到
-// --syntax-* 角色，色值在 ui/tokens.css 随明暗翻转。聊天区 shiki 直接用同名的 GitHub 主题。
 import { HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
 const fade = (role: string, percent: number) =>
   `color-mix(in srgb, var(--syntax-${role}) ${percent}%, transparent)`;
 
-/** 代码 token：源码文件、代码块与 Markdown 标记符号。 */
 export const codeHighlightStyle = HighlightStyle.define([
   { tag: t.comment, color: 'var(--syntax-comment)' },
   { tag: t.processingInstruction, color: 'var(--syntax-comment)' },
@@ -41,7 +38,6 @@ export const codeHighlightStyle = HighlightStyle.define([
   { tag: t.invalid, color: 'var(--syntax-error)' },
 ]);
 
-/** Markdown 正文元素：只用于看原文的编辑器（聊天输入框、未开即时渲染的 Markdown）。 */
 export const markdownHighlightStyle = HighlightStyle.define([
   { tag: t.heading, color: 'var(--syntax-constant)', fontWeight: 'bold' },
   { tag: t.strong, color: 'var(--syntax-fg)', fontWeight: 'bold' },

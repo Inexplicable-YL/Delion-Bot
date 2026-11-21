@@ -1,4 +1,3 @@
-// workspace_settings 中的设置读写：读取时缺失或损坏的值回退默认，不向调用方抛错。
 import { z } from 'zod';
 import { hostPorts } from '../../../core/ports';
 import { isAccelerator, isShortcutActionId, type KeybindingOverrides } from '../keybindings';
@@ -81,7 +80,6 @@ export function setTaskNotificationPrefs(prefs: TaskNotificationPrefs): TaskNoti
 
 const keybindingOverridesDefaults: KeybindingOverrides = {};
 
-/** 键缺失或 JSON 损坏回退空覆盖；未知动作 id / 非法键位串逐条丢弃，合法兄弟项保留。 */
 export function getKeybindingOverrides(): KeybindingOverrides {
   const raw = readSetting('keybindings');
   if (raw === undefined) return { ...keybindingOverridesDefaults };
@@ -91,7 +89,6 @@ export function getKeybindingOverrides(): KeybindingOverrides {
   } catch {
     return { ...keybindingOverridesDefaults };
   }
-  // 'null'、数组、标量都能通过 JSON.parse，但不是覆盖项对象；逐条过滤前先挡住。
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return { ...keybindingOverridesDefaults };
   }
@@ -103,20 +100,16 @@ export function getKeybindingOverrides(): KeybindingOverrides {
   return overrides;
 }
 
-/** 部分合并：只写传入的动作。不裁剪与默认值相同的项，否则默认值一改旧覆盖项语义就变了。 */
 export function setKeybindingOverrides(patch: KeybindingOverrides): KeybindingOverrides {
   const next = { ...getKeybindingOverrides(), ...patch };
   writeSetting('keybindings', JSON.stringify(next));
   return next;
 }
 
-/** 清空全部覆盖：写空对象而不是删键，读取路径只有一种形态。 */
 export function resetKeybindingOverrides(): KeybindingOverrides {
   writeSetting('keybindings', JSON.stringify(keybindingOverridesDefaults));
   return { ...keybindingOverridesDefaults };
 }
-
-// 「下次启动时提醒」标记：读到就清掉，只尝试一次，避免失败后每次启动静默重试。
 
 export function savedPendingInstall(): boolean {
   return readSetting('pending-install') === '1';

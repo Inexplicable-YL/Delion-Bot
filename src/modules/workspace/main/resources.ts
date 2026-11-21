@@ -25,7 +25,6 @@ export interface ResourceContent {
   url?: string;
 }
 
-/** Agent 的资源读取不生成预览地址、不查询 Office 导出，也不枚举解析格式。 */
 export async function readWorkspaceResource(id: string): Promise<ResourceContent> {
   const item = entry(id);
   if (item.kind === 'source' && item.sourceId)
@@ -39,7 +38,6 @@ export async function readWorkspaceResource(id: string): Promise<ResourceContent
   if (format !== 'text' && format !== 'markdown' && format !== 'image')
     return { title: item.name, format: 'file' };
   const stats = await stat(path);
-  // Agent 按 offset 分页读文本，不受编辑上限约束；只挡住整篇进内存会出问题的体量。
   if (stats.size > TEXT_PREVIEW_MAX_BYTES) throw new Error('文件较大，请在外部应用中打开');
   const bytes = await readFile(path);
   if (format === 'image')

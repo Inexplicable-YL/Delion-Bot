@@ -5,8 +5,6 @@ import type {
   WorkspaceChat,
 } from '../../../../src/core/protocol/agent';
 
-// 契约客户端与镜像订阅在模块加载时取 bridge，须先于导入 store 装好（全文件共享）；
-// 之后各用例只重编程 invoke 的返回值。
 const { invoke, listeners } = vi.hoisted(() => {
   const listeners: Record<string, Array<(payload: unknown) => void>> = {};
   const invoke = vi.fn<(channel: string, input: unknown) => Promise<unknown>>();
@@ -88,9 +86,7 @@ describe('sessions mirror store', () => {
     expect(merged.messages).toHaveLength(2);
     expect(merged.messages[1]).toMatchObject({ content: '正在回答' });
     expect(merged.activeTool).toBe('Read');
-    // 历史消息对象身份不变：memo 化的消息组件依赖引用相等跳过重渲。
     expect(merged.messages[0]).toBe(userMessage);
-    // 非运行态（终态已到或未开始）的增量被丢弃，等待全量推送兜底。
     useSessions.setState({ chats: { s2: { ...chat('s2', 1), running: false } } });
     pushStream({
       sessionId: 's2',
@@ -147,13 +143,11 @@ describe('sessions mirror store', () => {
     invoke.mockResolvedValue([summary('s1')]);
     useSessions.setState({ lists: {}, chats: {} });
 
-    // 首条消息落库（main 此刻才写标题，空会话本来就不在 list 里）。
     pushUpdate('s1', chat('s1', 1));
     await vi.advanceTimersByTimeAsync(1000);
     expect(invoke).toHaveBeenCalledWith('agent:list-sessions', { projectId: null });
     expect(useSessions.getState().lists.general?.map((item) => item.id)).toEqual(['s1']);
 
-    // 条数没变（同一轮的工具边界重复推送）不重读列表，避免每个边界都查一次库。
     invoke.mockClear();
     pushUpdate('s1', chat('s1', 1));
     await vi.advanceTimersByTimeAsync(1000);

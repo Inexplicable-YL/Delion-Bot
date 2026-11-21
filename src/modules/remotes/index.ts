@@ -1,4 +1,3 @@
-// 远程连接：SSH 连接的登记、探测、目录浏览与 helper 通道状态；远程执行后端在 core/remote。
 import { defineModule } from '../../app/module';
 import { helperSession, helperStates, onHelperState, retryHelper } from '../../core/remote/helper';
 import { emit } from '../../core/ports';
@@ -46,7 +45,6 @@ export const remotesModule = defineModule({
     mkdir: ({ draft, parent, name }) => createRemoteDirectory(draft, parent, name),
     pickKey: pickKeyFile,
     configHosts: configHostCandidates,
-    // 引导可能要几秒到几十秒（首次要传产物），进度只能推着走，主进程不记状态。
     prepare: (draft) =>
       prepareRemote(draft, (progress) => emit(remotesContract, 'setupProgress', progress)),
     helperStates,

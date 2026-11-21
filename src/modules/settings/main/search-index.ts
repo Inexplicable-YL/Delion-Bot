@@ -1,5 +1,3 @@
-// 全局搜索 setting 入口的单一索引：每项 = 一个已实现的设置选项（含内置关键词，
-// 覆盖同义词与英文），按 section 聚合后由主进程的搜索来源匹配。
 import { settingsSectionLabels, type SettingsSectionId } from '../contract';
 
 export interface SettingsSearchItem {
@@ -106,7 +104,6 @@ const settingsSearchItems: SettingsSearchItem[] = [
     title: '模型服务',
     keywords: ['模型', 'llm', 'ai', 'api', '提供商', '供应商', '密钥', 'key', '推理'],
   },
-  // 这些能力已并入 Agent 分组；「插件」仍作为搜索同义词保留
   {
     id: 'capabilities',
     section: 'capabilities',

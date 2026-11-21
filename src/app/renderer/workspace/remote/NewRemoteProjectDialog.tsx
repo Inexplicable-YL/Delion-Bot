@@ -1,20 +1,18 @@
-// 新建远程项目：一个面板走完，选中服务器就自动连上，下面是目录选择器；连接表单与「设置 › 远程」共用。
-// 事实都在主进程；这里只记「每台服务器上次停在哪个目录」这类偏好。
 import { useState } from 'react';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AdjustmentsVerticalIcon as Settings2,
   PlusIcon as Plus,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../../../ui/button';
-import { Input } from '../../../../ui/input';
+import { Button } from '../../../../ui/Button';
+import { Input } from '../../../../ui/Input';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../../ui/select';
+} from '../../../../ui/Select';
 import { cn } from '../../../../ui/cn';
 import type { WorkspaceEntry } from '../../../../modules/workspace/contract';
 import type {
@@ -39,13 +37,12 @@ import {
 } from '../../../../modules/remotes/view';
 import { useNavigationStore } from '../../navigation/view';
 import { purgeRemovedEntries } from '../../workbench/removed-cleanup';
-import { ErrorText } from '../../../../ui/alert';
-import { Spinner } from '../../../../ui/spinner';
-import { Dialog, DialogContent, DialogTitle } from '../../../../ui/dialog';
-import { Field } from '../../../../ui/field';
+import { ErrorText } from '../../../../ui/Alert';
+import { Spinner } from '../../../../ui/Spinner';
+import { Dialog, DialogContent, DialogTitle } from '../../../../ui/Dialog';
+import { Field } from '../../../../ui/Field';
 import { errorMessage } from '../../../../core/protocol/contract';
 
-/** 下拉框的值：已保存连接用 id，ssh config 候选用 `config:<别名>`，新建用哨兵。 */
 const NEW_CONNECTION = '__new__';
 const configValue = (alias: string) => `config:${alias}`;
 
@@ -92,7 +89,6 @@ export function NewRemoteProjectDialog({
     >
       <DialogContent
         aria-describedby={undefined}
-        // toast 挂在对话框 portal 之外：点它（关闭、选中文字）不算点到对话框外面。
         onInteractOutside={(event) => {
           if ((event.target as Element | null)?.closest('[data-toast-host]'))
             event.preventDefault();
@@ -111,7 +107,6 @@ export function NewRemoteProjectDialog({
   );
 }
 
-// 内容只在对话框打开时挂载：每次打开都是一份全新的状态，并重读连接与候选。
 function NewRemoteProjectPanel({
   importing,
   initialConnectionId,
@@ -152,7 +147,6 @@ function NewRemoteProjectPanel({
   const target = selected ?? path;
   const name = typedName ?? (target ? basename(target) || target : '');
 
-  // 选中服务器就连：同一时刻只认当前这台，换台之后旧的结果落不到新的服务器上。
   const prepare = useQuery({
     queryKey: ['remotes', 'prepare', connection?.host, connection?.port, connection?.keyPath],
     queryFn: connection
@@ -188,7 +182,6 @@ function NewRemoteProjectPanel({
       return;
     }
     if (value.startsWith('config:')) {
-      // config 里的主机：别名就是目的地，其余交给 ssh 解析。先存成连接，再连。
       const alias = value.slice('config:'.length);
       if (!window.delionBot) return;
       void remotesClient
@@ -257,7 +250,6 @@ function NewRemoteProjectPanel({
           onProjectsRemoved={purgeRemovedEntries}
           onRemoved={(id) => {
             setMode({ kind: 'browse' });
-            // 删掉的是当前连接：保持空选，不自动换到别的服务器。
             if (id === connectionId) setChosenId(id);
           }}
           onSaved={(saved) => {

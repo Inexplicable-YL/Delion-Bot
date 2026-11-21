@@ -102,10 +102,8 @@ function rangeOf(
   return { start, end: last, status: 206 };
 }
 
-/** 字节由 helper 分块拉，不整篇进内存。 */
 const remoteChunkSize = 1024 * 1024;
 
-/** 每次 pull 只向 helper 要一块，PDF 阅读器跳页取消流即停。 */
 async function remoteFileResponse(
   projectId: string,
   path: string,
@@ -157,14 +155,12 @@ export function registerPreviewProtocol(): void {
       const url = new URL(request.url);
       const host = previewHosts.get(url.hostname);
       if (host) return await host(request, url);
-      // remote-raw 与 remote 同一实现，供 Markdown 里的相对图片取字节；只放行项目根目录内的路径。
       if (url.hostname === 'remote' || url.hostname === 'remote-raw') {
         const projectId = decodeURIComponent(url.pathname.slice(1));
         const path = url.searchParams.get('path');
         if (!projectId || !path) throw new Error('无效的远端文档地址');
         return await remoteFileResponse(projectId, path, request);
       }
-      // 协议只是显示通道；解析按条目目录约束，不向 renderer 开放任意磁盘读取。
       if (url.hostname === 'note-asset') {
         const id = url.searchParams.get('id');
         const ref = decodeURIComponent(url.pathname.slice(1));

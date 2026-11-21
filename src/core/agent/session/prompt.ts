@@ -1,4 +1,3 @@
-// 一轮提问交给模型的内容：主会话与旁问共用。
 import { randomUUID } from 'node:crypto';
 import type { ImageContent } from '@earendil-works/pi-ai';
 import type { ChatAskInput } from '../../protocol/agent';
@@ -15,7 +14,6 @@ const imageMime: Record<string, string> = {
   webp: 'image/webp',
 };
 
-// 导出会话时按这些块把正文与附件拆回来，格式只在这里定义。
 export const sourcesBlock = (keys: string[]) =>
   `用户引用了这些文件（需要时用 read 读取）：\n${keys.map((key) => `- ${key}`).join('\n')}\n`;
 export const DOCUMENT_ATTACHMENT = '用户上传了文档附件：';
@@ -52,7 +50,6 @@ export function composePrompt(
     hostPorts().projects.remoteOf(projectId)
   )
     throw new Error('文档附件目前只支持本机会话，请切换到随聊或本地项目');
-  // @ 引用即路径：只告诉模型路径，读取由模型用 read 自主完成（pull 模型）。
   const sources = input.context.map((key) => ({ key, title: key }));
   const sessions = input.sessions ?? [];
   const meta = {

@@ -10,8 +10,8 @@ import {
 import type { TabId } from '../../../app/module';
 import type { ChatComment, ChatSessionSummary, WorkspaceChat } from '../../../core/protocol/agent';
 import { agentClient, chatClient } from './client';
-import { Button } from '../../../ui/button';
-import { IconButton } from '../../../ui/icon-button';
+import { Button } from '../../../ui/Button';
+import { IconButton } from '../../../ui/IconButton';
 import { ChatComposer } from './ChatComposer';
 import { composerContext } from './composer-context';
 import { ChatSessions } from './ChatSessions';
@@ -22,12 +22,12 @@ import {
   useChatTabSource,
   type ReferenceEntry,
   type ReferenceSource,
-} from './chat-source';
+} from './ChatSource';
 import { useChat, useChatDraft, type ChatReference } from './use-chat';
 import { referenceContext, sessionReferences } from './reference-tokens';
 import { exportSessionArchive, poolKey, updateSession, useSessions } from './sessions';
 import { useWorkspaceStore } from '../../workspace/view';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { SidechatPanel } from './SidechatPanel';
 import { openSidechat, useSidechats } from './sidechat-store';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -45,7 +45,6 @@ function parseChatTabId(tabId: string): string | null {
   return sessionId || null;
 }
 
-/** 会话身份来自 tabId（chat:{sessionId}），项目归属来自会话快照。 */
 export function ChatTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
   const sessionId = parseChatTabId(tabId);
   const source = useChatTabSource();
@@ -73,7 +72,6 @@ export function ChatTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
   );
 }
 
-/** 输入草稿只在本层订阅：打字每键只重渲本层与 ChatComposer，不带动整棵消息树。 */
 function ChatComposerArea({
   chat,
   chatState,
@@ -84,7 +82,6 @@ function ChatComposerArea({
   home = false,
   hideAgentActions = false,
 }: {
-  /** 会话快照；IPC 返回前为 null，模型信息按空值降级。 */
   chat: WorkspaceChat | null;
   chatState: ReturnType<typeof useChat>;
   error: string | null;
@@ -96,7 +93,6 @@ function ChatComposerArea({
 }) {
   const { prompt, comments = noComments } = useChatDraft(sessionId);
   const referenceOptions = useReferenceOptions(files, chat);
-  // 引用即文本：发送前从草稿文本解析 @token，附件与引用自此分开计数（附件维持上限 5）。
   const references = referenceContext(prompt, referenceOptions);
   const projectId = chat?.projectId ?? null;
   const project = useWorkspaceStore(
@@ -174,8 +170,6 @@ function ChatComposerArea({
 const noReferences: ChatReference[] = [];
 const noSessions: ChatSessionSummary[] = [];
 const noComments: ChatComment[] = [];
-/** @ 候选：会话快照就位前（projectId/cwd 未知）不列候选，避免列出别的项目的文件。 */
-/** @ 文件候选来自容器注入；# 会话候选是同池的其他会话（各池列表启动时已载入镜像）。 */
 function useReferenceOptions(files: ReferenceEntry[], chat: WorkspaceChat | null) {
   const projectId = chat?.projectId ?? null;
   const sessions = useSessions((state) => state.lists[poolKey(projectId)]);
@@ -213,7 +207,6 @@ function ChatSessionView({
   const [exporting, setExporting] = useState(false);
   const sidechatOpen = useSidechats((state) => Boolean(state.views[active]));
   const sidechatFromQuote = (quote: string) => void openSidechat(active, { quote });
-  // 子 Agent 的会话只读：没有输入框，不能编辑重发、分支或旁问。
   const subagent = chat?.subagent;
   const conversation = chat && (busy || chat.messages.length > 0 || chat.running || subagent);
   const showProjectSetup = chat && project?.kind === 'project' && !conversation;

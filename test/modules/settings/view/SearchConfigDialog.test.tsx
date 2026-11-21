@@ -5,7 +5,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { WebSearchEntryInput } from '../../../../src/core/protocol/capabilities';
 
-// 契约客户端在模块加载时取 bridge，须先于导入装好；用例按通道登记 handler。
 const { api, bridge } = vi.hoisted(() => {
   const api: Record<string, (input: never) => unknown> = {};
   const bridge = {

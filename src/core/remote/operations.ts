@@ -1,5 +1,3 @@
-/** 远程执行后端：文件、命令、搜索与后台命令都走远端 helper，不可用时报错而不退回一次性 ssh。
- * 参数已被宿主 node:path 解析成 Windows 形态，每个路径都必须先过 remotePath 还原。 */
 import { randomBytes } from 'node:crypto';
 import {
   helperSession,
@@ -45,7 +43,6 @@ export function writeRemoteFile(
   return session(target).writeFile(path, content);
 }
 
-/** helper 没有 mkdir 接口走 exec；不加 -p，同名已存在时直接报错。 */
 export async function makeRemoteDirectory(target: RemoteTarget, path: string): Promise<void> {
   const chunks: Buffer[] = [];
   const result = await session(target).exec(`mkdir -- ${shellQuote(path)}`, {
@@ -70,8 +67,6 @@ export async function remoteFileIndex(
   return (await session(target).glob(path, '**', limit)).files;
 }
 
-/** 上下文镜像路由：远端 skills 与 AGENTS.md 必须落到本地文件 Pi 才读得到，
- * 模型拿镜像路径操作时在此翻回远端真身（按项目 key 记路由，最长前缀优先）。 */
 const mirrorRoutes = new Map<string, { mirror: string; remote: string }[]>();
 
 export function setContextMirrors(key: string, routes: { mirror: string; remote: string }[]): void {
@@ -101,7 +96,6 @@ function throughMirror(value: string): string | null {
     : null;
 }
 
-/** 命令正文里的镜像路径也要翻回远端（模型可能直接 cat 镜像路径）；Windows 镜像兼容两种分隔符与大小写。 */
 export function mirrorCommandText(command: string): string {
   const routes = [...mirrorRoutes.values()]
     .flat()
@@ -150,7 +144,6 @@ const imageMime: Record<string, string> = {
   '.bmp': 'image/bmp',
 };
 
-/** 目录清单缓存：ls 工具会在 readdir 之后对每个条目再调一次 stat，用刚拉到的清单回答。 */
 const LISTING_TTL_MS = 10_000;
 
 const parentOf = (path: string) => path.slice(0, path.lastIndexOf('/')) || '/';
@@ -188,10 +181,8 @@ export function remoteBackend(target: RemoteTarget) {
     writeFile: async (absolutePath: string, content: string) => {
       const path = remotePath(absolutePath);
       await remote().writeFile(path, content);
-      // 写完就通知目录树：watch 只盯展开的目录，新建的子目录要靠这一下才出现。
       notifyRemoteChange(parentOf(path));
     },
-    // Pi 在 writeFile 之前会单独调一次 mkdir；helper 的写入自己就建父目录。
     mkdir: async (dir: string) => {
       void dir;
     },
@@ -208,7 +199,6 @@ export function remoteBackend(target: RemoteTarget) {
         env?: NodeJS.ProcessEnv;
       },
     ) => {
-      // 只转发 Pi 的 PI_* 会话变量：把宿主整个环境变量搬到远端既无必要，也会外泄本地信息。
       const forwarded = Object.fromEntries(
         Object.entries(options.env ?? {})
           .filter(([key]) => key.startsWith('PI_'))
@@ -224,7 +214,6 @@ export function remoteBackend(target: RemoteTarget) {
       });
       if (result.lost > 0)
         options.onData(Buffer.from(`\n[连接中断期间有 ${result.lost} 字节输出未能接回]\n`, 'utf8'));
-      // 命令可能建目录或改文件（mkdir、git clone 都走 bash）：以 cwd 为界让目录树重读。
       notifyRemoteChange(remoteCwd);
       if (options.signal?.aborted) throw new Error('aborted');
       if (result.state === 'timeout') throw new Error(`timeout:${options.timeout ?? 120}`);
@@ -269,7 +258,6 @@ export function remoteBackend(target: RemoteTarget) {
   const search = (request: HelperSearchRequest, signal?: AbortSignal) =>
     remote().search({ ...request, path: remotePath(request.path) }, signal);
 
-  /** 后台命令：signal 不交给 exec，停止时显式取消并等 helper 报回结束，退出应用时远端不留野进程。 */
   const runInBackground = async (
     command: string,
     cwd: string,

@@ -1,5 +1,3 @@
-// 后台 bash：真实进程，父会话的通知投递换成记录。成功、失败、长输出、停止（连同子进程），
-// 以及用户手动停止只追加不唤醒、归档删除时不投递。
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -102,7 +100,6 @@ it('长输出完整写进日志：通知只带末尾几行，task_output 按 off
 });
 
 it('task_stop 连同子进程一起结束，记为停止并照常投递', async () => {
-  // 后台子进程活下来的话，1 秒后会写出标记文件。
   const marker = join(root, 'survived');
   const taskId = await start(`(sleep 1; echo > '${marker}') & sleep 30; wait`);
   await new Promise((resolve) => setTimeout(resolve, 300));

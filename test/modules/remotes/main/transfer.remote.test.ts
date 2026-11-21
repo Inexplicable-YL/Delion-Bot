@@ -1,5 +1,3 @@
-// 远端文件传输真机回归：字节级往返与「用系统默认程序打开」的临时文件清理。
-// 需要 DELION_REMOTE_HOST（如 root@1.2.3.4），由 pnpm test:remote 运行，不在默认 pnpm test 与 CI 里。
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -35,7 +33,6 @@ afterAll(() => rmSync(local, { recursive: true, force: true }));
 
 describe('远端文件传输（真机）', () => {
   it('二进制上传与下载：字节逐个相同，大小与 sha256 都对得上', async () => {
-    // 3 MB 多一点的随机字节：跨过 1 MB 的分块边界，且带 NUL/非 UTF-8（文本通道会在这里变形）。
     const payload = Buffer.concat([randomBytes(3 * 1024 * 1024 + 7), Buffer.from([0, 255, 10])]);
     const source = join(local, 'bin.dat');
     writeFileSync(source, payload);
@@ -52,7 +49,6 @@ describe('远端文件传输（真机）', () => {
     expect(restored.length).toBe(payload.length);
     expect(createHash('sha256').update(restored).digest('hex')).toBe(digest);
 
-    // 分块读的边界：最后一块不能越界，offset 到文件尾也要能收尾。
     const tail = await readRemoteRange(target, remotePath, payload.length - 3, 3);
     expect([...tail]).toEqual([0, 255, 10]);
     expect((await readRemoteRange(target, remotePath, 0, 10)).length).toBe(10);

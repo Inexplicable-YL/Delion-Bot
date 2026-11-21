@@ -6,7 +6,6 @@ export interface ComposerContext {
   remote: boolean;
 }
 
-/** 浮岛只属于新对话：已有历史（或本轮正在跑、已发出待推送）就撤掉，不长期占位。 */
 export function composerContext(
   chat: WorkspaceChat | null,
   project: WorkspaceEntry | null,

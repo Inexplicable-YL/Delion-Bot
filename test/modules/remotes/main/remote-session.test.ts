@@ -1,7 +1,3 @@
-// 远程会话的接线验证（不需要真实主机，也不发任何模型请求）：
-// 以远端 POSIX 路径作 cwd 创建 Pi 会话要能成功，并且七个工具名下的生效定义必须是
-// Delion Bot 注入的远程版本——若同名覆盖失效，模型会拿远端路径调用 Pi 内置工具，
-// 在 Windows 上就会写到 E:\root\... 这类本地盘上，后果是静默改错文件。
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve as resolveLocal } from 'node:path';

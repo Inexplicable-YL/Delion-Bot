@@ -1,4 +1,3 @@
-// delion 命令域注册表：core 不认识具体业务，命令连同教 Agent 使用它们的 Skill 由模块注册。
 import type { z } from 'zod';
 
 export interface Command {

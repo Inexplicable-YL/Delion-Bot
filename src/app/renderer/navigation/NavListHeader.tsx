@@ -1,5 +1,3 @@
-// 侧栏列表标题：折叠、显示选项与新建。操作在悬停列表（标题与条目，祖先带 group/list）时出现，
-// 标题高度固定为按钮高度，出现与否都不改变行高。
 import type { ReactNode } from 'react';
 import {
   ArrowsUpDownIcon as ArrowsUpDown,
@@ -8,7 +6,7 @@ import {
   EllipsisHorizontalIcon as MoreHorizontal,
   PlusIcon as Plus,
 } from '@heroicons/react/24/outline';
-import { CollapseChevron } from '../../../ui/collapse';
+import { CollapseChevron } from '../../../ui/Collapse';
 import { cn } from '../../../ui/cn';
 import {
   DropdownMenu,
@@ -21,8 +19,8 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from '../../../ui/dropdown-menu';
-import { IconButton } from '../../../ui/icon-button';
+} from '../../../ui/DropdownMenu';
+import { IconButton } from '../../../ui/IconButton';
 import type { NavListPreference } from '../shell/preferences';
 import { rowEndInset } from './nav-styles';
 
@@ -42,7 +40,6 @@ const activityOptions: NavListOptions<NavListPreference<string>['activityDays']>
 
 const DAY_MS = 86_400_000;
 
-/** 最后活动筛选的起点（毫秒时间戳）；不筛选时为 0。 */
 export const activitySince = (days: number) => (days ? Date.now() - days * DAY_MS : 0);
 
 export function NavListHeader<Sort extends string>({
@@ -62,7 +59,6 @@ export function NavListHeader<Sort extends string>({
   preference: NavListPreference<Sort>;
   onChange: (patch: Partial<NavListPreference<Sort>>) => void;
   createLabel: string;
-  /** 列表为空时由列表内的新建行代替，标题栏不再放「+」。 */
   onCreate?: () => void;
 }) {
   const open = !preference.collapsed;

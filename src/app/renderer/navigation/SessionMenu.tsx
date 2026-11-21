@@ -1,4 +1,3 @@
-// 会话行的「…」菜单：导出、置顶、重命名、换归属、复制 ID、在标签中打开与归档。
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -17,8 +16,8 @@ import {
 import { errorMessage } from '../../../core/protocol/contract';
 import { exportSessionArchive, renameSession, updateSession } from '../../../modules/chat/view';
 import { useWorkspaceStore } from '../../../modules/workspace/view';
-import { Button } from '../../../ui/button';
-import { Dialog, DialogContent, DialogFooter, DialogTitle } from '../../../ui/dialog';
+import { Button } from '../../../ui/Button';
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from '../../../ui/Dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,10 +27,10 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from '../../../ui/dropdown-menu';
-import { IconButton } from '../../../ui/icon-button';
-import { Input } from '../../../ui/input';
-import { showToast } from '../../../ui/toast';
+} from '../../../ui/DropdownMenu';
+import { IconButton } from '../../../ui/IconButton';
+import { Input } from '../../../ui/Input';
+import { showToast } from '../../../ui/Toast';
 import type { NavSessionSummary } from './SessionRow';
 import { useNavigationStore } from './view';
 
@@ -178,7 +177,6 @@ export function SessionMenu({
   );
 }
 
-/** 子菜单打开时才挂载，读项目列表的订阅和搜索词都只在这时存在。 */
 function MoveTargets({
   currentProjectId,
   onSelect,
@@ -201,7 +199,6 @@ function MoveTargets({
         value={query}
         variant="ghost"
         onChange={(event) => setQuery(event.target.value)}
-        // 字符键留给输入框，不触发菜单的首字母跳转；方向键与 Esc 仍交给菜单。
         onKeyDown={(event) => {
           if (!['ArrowDown', 'ArrowUp', 'Escape'].includes(event.key)) event.stopPropagation();
         }}

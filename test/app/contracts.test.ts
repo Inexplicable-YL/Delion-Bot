@@ -1,4 +1,3 @@
-// preload 白名单只认 contracts.ts，主进程注册看 modules.ts：两份清单漏登一个，调用就会被拒。
 import { expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({ invoke: vi.fn() }));

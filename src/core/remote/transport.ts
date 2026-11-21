@@ -1,5 +1,3 @@
-/** ssh 边界：helper 的引导、连接自检、隧道与终端的连接参数；工具调用与目录树都经 helper.ts。
- * 默认用系统 OpenSSH，缺失时回退随包分发的；每条命令一个独立 ssh 进程（Windows OpenSSH 无 ControlMaster）。 */
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -11,7 +9,6 @@ export interface RemoteTarget {
   keyPath?: string | null;
 }
 
-/** 目标的身份：helper 通道与目录 watch 各自要判断「这是不是同一个连接」，两处必须是同一个算法。 */
 export function targetKey(target: RemoteTarget): string {
   return `${target.host}|${target.port ?? ''}|${target.keyPath ?? ''}`;
 }
@@ -38,8 +35,6 @@ export interface RemoteDirEntry {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 const CONNECT_TIMEOUT_SECONDS = 10;
-/** 静默超过这么久就发一个加密保活包：中间的 NAT/防火墙会把长时间没流量的连接丢掉，
- *  实测一次 10 分钟无输出的远端命令会让会话被对端 reset，加上它就没再复现。 */
 const KEEPALIVE_SECONDS = 15;
 const KEEPALIVE_COUNT_MAX = 3;
 
@@ -74,9 +69,7 @@ export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`;
 }
 
-/** 连接级参数：命令、终端与 helper 隧道都用同一套，避免某条路径漏掉认证或保活。 */
 export function sshBaseArguments(target: RemoteTarget): string[] {
-  // BatchMode：不接受任何交互式提问，认证失败就立刻报错，不把窗口挂死。
   const args = [
     '-o',
     'BatchMode=yes',
@@ -145,7 +138,6 @@ export function exec(
   });
 }
 
-/** 进度粒度：64 KB 一块，等管道 drain 再写下一块，报出的字节数才是真的写进了 ssh。 */
 const STDIN_CHUNK = 64 * 1024;
 
 async function writeChunked(

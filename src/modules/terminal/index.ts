@@ -1,4 +1,3 @@
-// 内置终端：项目目录里的交互 PTY，远程项目经本地 ssh -tt；另导出随包 MinGit 的 Bash 定位。
 import { app } from 'electron';
 import { defineModule } from '../../app/module';
 import { implement } from '../../core/protocol/contract';

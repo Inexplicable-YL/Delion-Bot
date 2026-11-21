@@ -26,7 +26,6 @@ export function match(value: string, keyword: string) {
   return value.toLocaleLowerCase().includes(keyword.toLocaleLowerCase());
 }
 
-/** 工具执行错误的跨层契约：细分错误码由边界抛出方携带，统一映射为模型与渲染侧可读的结果。 */
 export type ToolErrorCode =
   | 'INVALID_INPUT'
   | 'NOT_CONFIGURED'
@@ -51,7 +50,6 @@ export function toolError(code: ToolErrorCode, message: string): ToolError {
   return new ToolError(code, message);
 }
 
-/** cached=本地缓存查询；realtime=当次联网（如 fetch_page 和按需拉取的邮件正文）。 */
 export function freshness(kind: 'cached' | 'realtime', syncedAt?: string | null) {
   return { kind, ...(syncedAt ? { syncedAt } : {}) };
 }
@@ -60,7 +58,6 @@ export function coverage(scope: string, complete: boolean, warnings?: string[]) 
   return { scope, complete, ...(warnings?.length ? { warnings } : {}) };
 }
 
-/** 远端 cursor 分页：nextCursor 为不透明字符串原样回传，不伪造 total。 */
 export function cursorPage<T>(items: T[], nextCursor: string | null) {
   return { items, nextCursor };
 }

@@ -2,11 +2,11 @@ import { useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckIcon as Check, DocumentTextIcon as FileText } from '@heroicons/react/24/outline';
 import type { SkillView } from '../../../core/protocol/capabilities';
-import { ToastCard } from '../../../ui/toast';
-import { Button } from '../../../ui/button';
-import { DownloadProgressRow } from '../../../ui/download-progress';
-import { StepButton } from './step-controls';
-import { ErrorText } from '../../../ui/alert';
+import { ToastCard } from '../../../ui/Toast';
+import { Button } from '../../../ui/Button';
+import { DownloadProgressRow } from '../../../ui/DownloadProgress';
+import { StepButton } from './StepControls';
+import { ErrorText } from '../../../ui/Alert';
 import { capabilitiesClient } from '../../chat/view';
 import { errorMessage } from '../../../core/protocol/contract';
 
@@ -79,7 +79,6 @@ export function CapabilitySetup({
           ?.filter((skill) => skill.dependency)
           .map((skill) => {
             const dependency = skill.dependency!;
-            // 面向用户的名字只在此处映射：设置页仍按目录名列出，与其他 Skill 一致。
             const displayName = skill.name === 'document-reading' ? '文档读取' : skill.name;
             const downloading =
               dependency.status === 'installing' ||

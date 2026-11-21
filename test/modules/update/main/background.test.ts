@@ -1,4 +1,3 @@
-// 后台检查循环：用户不打开设置页时也要能发现新版本，仅在打包版已有窗口时检查。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -122,7 +121,6 @@ describe('startBackgroundUpdateCheck', () => {
   });
 });
 
-// 上次推迟的更新只准备到 ready，由用户再次确认安装。
 describe('准备上次推迟的更新', () => {
   const update = { version: '1.0.1' };
 

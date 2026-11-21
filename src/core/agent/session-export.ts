@@ -110,7 +110,6 @@ async function writeSessionArchive(
       const images = (typeof message.content === 'string' ? [] : message.content)
         .filter((block) => block.type === 'image')
         .map((image, index) => addImage(image, meta.images?.[index]?.name));
-      // 文本附件没有磁盘副本，正文来自 Delion Bot 写入提示词的附件块。
       const sourcePrefix = meta.sources?.length
         ? sourcesBlock(meta.sources.map(({ key }) => key))
         : '';

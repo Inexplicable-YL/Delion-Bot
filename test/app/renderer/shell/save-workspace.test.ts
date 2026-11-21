@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi, type Mock } from 'vitest';
 
-// 契约客户端在模块加载时取 bridge，须先于导入 store 装好；运行镜像也在加载时订阅推送。
 const invoke = vi.hoisted(() => {
   const invoke = vi.fn();
   const subscribe = () => () => {};
@@ -20,7 +19,7 @@ import {
 } from '../../../../src/modules/chat/view';
 import { useWorkbenchLayout } from '../../../../src/app/renderer/workbench/layout-store';
 import { saveWorkspace } from '../../../../src/app/renderer/shell/save-workspace';
-import { dismissToast, toasts } from '../../../../src/ui/toast';
+import { dismissToast, toasts } from '../../../../src/ui/Toast';
 
 const originalSave = useNoteDrafts.getState().save;
 let install: Mock<() => Promise<unknown>>;

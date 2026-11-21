@@ -1,5 +1,3 @@
-// 会话输入框上方的项目浮岛要显示当前 Git 分支：只有本地 Git 仓库才有分支名，
-// 非仓库目录、目录不存在、分离 HEAD 都当作「没有分支」，浮岛只显示项目名。
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

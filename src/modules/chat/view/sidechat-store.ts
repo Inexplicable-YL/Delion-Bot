@@ -1,17 +1,14 @@
-// 旁问镜像：旁问本身在主进程（不入库、关闭即丢弃），这里按主会话 id 缓存它的快照与面板折叠态，
-// 切走标签再回来面板照旧。推送与流式增量的合并方式与会话镜像相同。
 import { create } from 'zustand';
 import type { SidechatView } from '../../../core/protocol/agent';
 import { agentClient, onAgentEvent } from './client';
 import { keepToolImages } from './sessions';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { emptyDraft, useChatDrafts } from './drafts';
 import { errorMessage } from '../../../core/protocol/contract';
 
 interface SidechatState {
   views: Record<string, SidechatView>;
   collapsed: Record<string, boolean>;
-  /** 已滑入过的旁问：只有新建的旁问滑入，切走标签再回来不再滑入。 */
   entered: Record<string, boolean>;
   put: (view: SidechatView) => void;
   forget: (parentId: string) => void;
@@ -41,7 +38,6 @@ export const useSidechats = create<SidechatState>((set) => ({
 
 export const sidechatDraftKey = (parentId: string) => `sidechat:${parentId}`;
 
-/** 打开旁问（已开着就展开）；quote 非空时作为评论放进旁问输入框，首条提问就带上这段原文。 */
 export async function openSidechat(
   parentId: string,
   options: { quote?: string; prompt?: string } = {},
@@ -64,7 +60,6 @@ export async function openSidechat(
 }
 
 onAgentEvent('sidechat-update', (view) => {
-  // 已关闭的旁问可能还有迟到的推送：只更新仍在镜像里的。
   if (useSidechats.getState().views[view.parentId]) useSidechats.getState().put(view);
 });
 onAgentEvent('sidechat-stream', ({ sessionId, message, activeTool }) => {

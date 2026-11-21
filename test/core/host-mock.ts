@@ -4,7 +4,6 @@ import { join, resolve } from 'node:path';
 import { vi } from 'vitest';
 import { provideHostPorts, type BundledResource, type HostPorts } from '../../src/core/ports';
 
-// 默认把用户数据目录指到临时目录，避免相对路径把测试产物写进仓库。
 const scratch = mkdtempSync(join(tmpdir(), 'delion-test-'));
 const secrets = new Map<string, string>();
 const bundledInRepo: Record<BundledResource, string> = {
@@ -50,7 +49,6 @@ const testPorts: HostPorts = {
   network: {
     fetch: vi.fn(() => Promise.reject(new Error('单元测试不访问网络'))),
   },
-  // setupFile 不能 import 主进程模块，否则用例里的 vi.mock 对它们失效；用到数据库的用例自己提供。
   database: () => {
     throw new Error('用例未提供数据库：provideTestHostPorts({ database })');
   },

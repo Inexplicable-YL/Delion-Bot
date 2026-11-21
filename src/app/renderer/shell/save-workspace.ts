@@ -1,4 +1,3 @@
-// 安装更新前的工作区保存：登记给 update 模块的 beforeInstall，任何一步失败都不安装。
 import { useNoteDrafts } from '../../../modules/note/view';
 import { saveChatDrafts, runBadge, useRuns } from '../../../modules/chat/view';
 import { saveWorkbenchLayout } from '../workbench/layout-store';

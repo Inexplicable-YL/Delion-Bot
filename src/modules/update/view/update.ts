@@ -1,12 +1,8 @@
-// 更新相关的渲染层逻辑：快照的展示映射、快照镜像 store 与动作派发。
 import { create } from 'zustand';
 import { errorMessage } from '../../../core/protocol/contract';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import type { UpdateReason, UpdateSnapshot, UpdateStep } from '../contract';
 import { onUpdateEvent, updateClient } from './client';
-
-// 渲染层不自行推断状态：文案与可用动作全部由快照的 phase / reason / failedAt 查表得到。
-// 主进程状态机（main/state.ts）新增阶段时只有这里要跟上，漏掉分支会被 update-view.test.ts 报错。
 
 export type UpdateAction = UpdateStep;
 
@@ -91,14 +87,9 @@ export function updateView(state: UpdateSnapshot): UpdateView {
   }
 }
 
-/** 标题栏提示：只在有东西等用户处理时亮（可下载、下载中、待安装）；installing 与失败不提示。 */
 export function pendingUpdate(state: UpdateSnapshot): boolean {
   return state.phase === 'available' || state.phase === 'downloading' || state.phase === 'ready';
 }
-
-// 主进程是唯一真源（main/updater.ts），这里只存最近一次快照给界面读。
-// 标题栏提示与设置页那一条读的是同一个 store，订阅由视图定义的 start 挂一次：
-// 用户从没打开过设置页，标题栏也得能亮。
 
 interface UpdateState {
   snapshot: UpdateSnapshot | null;
@@ -143,13 +134,9 @@ export function startUpdateMirror() {
     (snapshot) => {
       if (!receivedPush) receive(snapshot);
     },
-    // 读不到就维持空快照：标题栏安静，设置页按未检查过展示。
     () => {},
   );
 }
-
-// 更新动作的派发：设置页那一行与「下载完成」确认弹窗共用同一套。
-// 安装前先跑外壳登记的保存，失败就不安装；保存期间由应用级弹窗阻止继续编辑。
 
 export async function runUpdateAction(action: UpdateAction): Promise<boolean> {
   if (!window.delionBot) return false;
@@ -184,8 +171,6 @@ export async function runUpdateAction(action: UpdateAction): Promise<boolean> {
     }
     return true;
   } catch (error) {
-    // 主进程的正常失败都会以快照形式回来，走到这里说明 IPC 本身出了问题，
-    // 保持原状态并留下日志，用户可以直接再点一次。
     console.error('Update action failed', error);
     showToast({
       variant: 'error',

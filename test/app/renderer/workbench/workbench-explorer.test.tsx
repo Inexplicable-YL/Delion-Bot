@@ -1,19 +1,15 @@
 // @vitest-environment jsdom
-// 打开远端项目时目录侧栏收掉写入口：「+ 新建」下拉不出现，空白处双击也不出现新建输入行；
-// 只读操作（全部收起）保留。本地项目树里新建是 VS Code 式行内输入，不开弹窗。
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import type { WorkspaceEntry, WorkspaceState } from '../../../../src/modules/workspace/contract';
 
-// 契约客户端在模块加载时取 bridge，须先于导入视图装好；会话镜像也在加载时订阅推送。
 const { api, desktop } = vi.hoisted(() => {
   const handlers: Record<string, (input: never) => unknown> = {};
   const subscribe = () => () => {};
   const desktop = {
     bridge: {
-      // 远程连接与通道状态随目录树加载，这里的用例不依赖它们。
       invoke: async (channel: string, input: never) =>
         channel.startsWith('remotes:') ? [] : handlers[channel.split(':')[1]!]?.(input),
       subscribe,
@@ -37,9 +33,7 @@ let WorkbenchExplorer: typeof import('../../../../src/app/renderer/workbench/Wor
 let currentContainerOf: typeof import('../../../../src/app/renderer/workbench/WorkbenchExplorer').currentContainerOf;
 
 beforeAll(async () => {
-  // explorer-state 在模块求值时就调 window.matchMedia，jsdom 没有这个 API。
   vi.stubGlobal('matchMedia', mediaStub);
-  // Radix 的浮层要量尺寸；jsdom 没有 ResizeObserver。
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -93,7 +87,6 @@ const workspace: WorkspaceState = {
 beforeEach(() => {
   vi.stubGlobal('matchMedia', mediaStub);
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  // 选中行会滚进视口；jsdom 没有 scrollIntoView。
   Element.prototype.scrollIntoView = () => {};
   container = document.createElement('div');
   document.body.append(container);
@@ -139,7 +132,6 @@ async function render(projectId: string | null, activeDocKey: string | null = nu
 it('hides the write entries while a remote project is open', async () => {
   const { onAction } = await render(remoteProject.id);
   expect(newButton()).toBeNull();
-  // 「全部收起」是只读操作，远端树照常保留。
   expect(collapseButton()).toBeTruthy();
 
   await act(async () => blank().dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
@@ -147,7 +139,6 @@ it('hides the write entries while a remote project is open', async () => {
   expect(nameInput()).toBeNull();
 });
 
-/** 受控 input 要走原生 setter 才会触发 React 的 onChange。 */
 function type(input: HTMLInputElement, value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
   input.dispatchEvent(new Event('input', { bubbles: true }));
@@ -180,7 +171,6 @@ it('creates files inline: double-click shows a name row, Enter submits, no dialo
   expect(nameInput()).toBeNull();
 });
 
-// #91：切到空项目后，上一个项目选中的文件夹不能再当新建目标。
 it('falls back to the current project root when the selection belongs to another project', () => {
   useWorkspaceStore.setState({
     workspace: { ...workspace, entries: [...workspace.entries, localFolder] },
@@ -190,7 +180,6 @@ it('falls back to the current project root when the selection belongs to another
   expect(currentContainerOf(localFolder.id, remoteProject.id)).toBe(remoteProject.id);
   expect(currentContainerOf(localFolder.id, localProject.id)).toBe(localFolder.id);
   expect(currentContainerOf(null, localProject.id)).toBe(localProject.id);
-  // 全局视图（rootId 为空）保持旧行为：选中项目时新建到项目内。
   expect(currentContainerOf(localProject.id, null)).toBe(localProject.id);
 });
 
@@ -199,7 +188,6 @@ const treeRow = (label: string) =>
     (el) => el.getAttribute('aria-label') === label,
   );
 
-// 资料树只呈现资料根目录里的东西；外部登记的项目与远程项目从侧栏项目列表进入。
 it('hides remote and external projects from the library tree', async () => {
   const externalProject: WorkspaceEntry = {
     ...localProject,

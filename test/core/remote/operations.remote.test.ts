@@ -1,5 +1,3 @@
-// 远程工具的真机回归：bash/读写/stat/glob/grep/edit、超时与输出丢弃说明。
-// 需要 DELION_REMOTE_HOST（如 root@1.2.3.4），由 pnpm test:remote 运行，不在默认 pnpm test 与 CI 里。
 import { existsSync } from 'node:fs';
 import { resolve as resolveLocal } from 'node:path';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
@@ -29,7 +27,6 @@ describe('远程工具（真机）', () => {
   const ops = remoteBackend(target);
 
   beforeAll(async () => {
-    // 建目录这一步不能用它自己当 cwd：目录还不存在时 helper 会以 bad_cwd 拒掉。
     await ops.bash.exec(`mkdir -p ${shellQuote(root)} && rm -rf ${shellQuote(root)}/*`, '/', {
       onData: () => {},
     });
@@ -171,7 +168,6 @@ describe('远程工具（真机）', () => {
 
     expect((await readRemoteRange(target, `${root}/slice.txt`, 0, 4)).toString()).toBe('0123');
     expect((await readRemoteRange(target, `${root}/slice.txt`, 8, 2)).toString()).toBe('89');
-    // 只回一段：整体长度不是文件的全部长度（整篇进内存就是在这里失守的）。
     expect((await readRemoteRange(target, `${root}/slice.txt`, 2, 3)).length).toBe(3);
   }, 120_000);
 

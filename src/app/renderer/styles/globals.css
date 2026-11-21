@@ -151,6 +151,15 @@ svg[viewBox='0 0 24 24'][data-slot='icon']:is(.size-5, .size-6),
   -webkit-app-region: no-drag;
 }
 
+.app-toolbar > * {
+  height: 100%;
+}
+
+.app-toolbar button,
+.app-toolbar .glass {
+  max-height: 100%;
+}
+
 .app-toolbar button > svg {
   width: var(--spacing-icon-sm);
   height: var(--spacing-icon-sm);

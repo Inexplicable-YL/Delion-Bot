@@ -1,0 +1,56 @@
+import { ChevronRightIcon as ChevronRight } from '@heroicons/react/24/outline';
+import { useState, type ReactNode } from 'react';
+import { cn } from './cn';
+import { useMediaQuery } from './use-media-query';
+
+function Collapse({
+  open,
+  className,
+  children,
+}: {
+  open: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const [closing, setClosing] = useState(false);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (wasOpen !== open) {
+    setWasOpen(open);
+    setClosing(!open && !reducedMotion);
+  }
+  return (
+    <div
+      className={cn(
+        'grid transition-[grid-template-rows,opacity] duration-slow ease-out-strong motion-reduce:transition-none',
+        open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr] opacity-0',
+      )}
+      data-slot="collapse"
+      data-state={open ? 'open' : 'closed'}
+      inert={!open}
+      onTransitionEnd={(event) => {
+        if (event.target === event.currentTarget && event.propertyName === 'grid-template-rows')
+          setClosing(false);
+      }}
+    >
+      <div className={cn('min-h-0 overflow-hidden', className)}>
+        {(open || closing) && children}
+      </div>
+    </div>
+  );
+}
+
+function CollapseChevron({ open, className }: { open: boolean; className?: string }) {
+  return (
+    <ChevronRight
+      aria-hidden="true"
+      className={cn(
+        'size-4 shrink-0 transition-transform duration-base motion-reduce:transition-none',
+        open && 'rotate-90',
+        className,
+      )}
+    />
+  );
+}
+
+export { Collapse, CollapseChevron };

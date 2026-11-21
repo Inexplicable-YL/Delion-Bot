@@ -2,10 +2,8 @@ import { create } from 'zustand';
 import type { ChatComment } from '../../../core/protocol/agent';
 import { hasChatImages } from '../../../core/protocol/chat-input';
 
-/** session：# 引用的同项目会话，key 是 sessionId；其余是 @ 引用的文件，key 是绝对路径。 */
 export type ChatReference = { key: string; title: string; session?: true };
 
-/** comments：对回复正文的评论，随草稿持久化；没有评论时省略。 */
 type ChatDraft = { prompt: string; comments?: ChatComment[] };
 
 export const emptyDraft: ChatDraft = { prompt: '' };
@@ -71,9 +69,7 @@ function loadStored(): Record<string, ChatDraft> {
 function store(drafts: Record<string, ChatDraft>) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(drafts));
-  } catch {
-    // 存储不可用（如配额）时放弃持久化，会话内的内存草稿仍然工作。
-  }
+  } catch {}
 }
 
 function prune(drafts: Record<string, ChatDraft>): Record<string, ChatDraft> {
@@ -86,7 +82,6 @@ function prune(drafts: Record<string, ChatDraft>): Record<string, ChatDraft> {
 
 export const useChatDrafts = create<{
   drafts: Record<string, ChatDraft>;
-  /** 各会话视图登记的「还有未发送附件」检查：安装更新前据此拦截。 */
   attachmentChecks: ReadonlySet<() => boolean>;
   update: (sessionId: string, patch: Partial<ChatDraft>) => void;
   clear: (sessionId: string) => void;

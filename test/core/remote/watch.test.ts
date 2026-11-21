@@ -1,5 +1,3 @@
-// 远端目录 watch 的接线：渲染端报的集合 → helper 的 setWatch；helper 的事件 → notifyRemoteChange。
-// 真机行为（inotify 到底推什么、合并不合并）在 helper.test.ts 与 remote-smoke 里验。
 import { beforeEach, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
@@ -59,7 +57,6 @@ function collect() {
 
 beforeEach(async () => {
   closeRemoteWatch();
-  // 让上一条流的 abort 落地（假会话要等 abort 才摘掉监听器），免得上一条用例的事件串进来。
   await new Promise((resolve) => setTimeout(resolve, 0));
   sessions.clear();
   sessions.set(target.host, new FakeSession());

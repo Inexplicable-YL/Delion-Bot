@@ -52,7 +52,6 @@ async function markGitIgnored(entries: WorkspaceEntry[], cwd: string) {
           ),
         ),
     );
-    // 非仓库或 Git 提前退出时，stdin 可能关闭；目录浏览仍正常返回。
     child.stdin?.on('error', () => {});
     child.stdin?.end(input);
   });
@@ -141,7 +140,6 @@ export async function getLocalWorkspaceState(): Promise<WorkspaceState> {
   const directory = hostPorts().paths.storage();
   const root = join(directory, 'workspace');
   const stored = storedEntries();
-  // prepareStorage 不保证无归档种子行的测试库已有 workspace。
   await mkdir(root, { recursive: true });
   const entries = await markGitIgnored(await readDirectory(root, null, stored), root);
   const byPath = new Map(

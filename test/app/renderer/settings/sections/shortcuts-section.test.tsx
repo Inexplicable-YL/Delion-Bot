@@ -4,7 +4,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { DelionBotApi } from '../../../../../src/app/preload/api';
 
-// 契约客户端在模块加载时取 bridge，须先于导入页面装好。
 const { invoke } = vi.hoisted(() => {
   const invoke = vi.fn();
   window.delionBot = { bridge: { invoke, subscribe: () => () => {} } } as unknown as NonNullable<

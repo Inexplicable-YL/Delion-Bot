@@ -30,6 +30,7 @@ import { notificationsModule } from '../src/modules/notifications';
 import { previewModule } from '../src/modules/preview';
 import { remotesModule } from '../src/modules/remotes';
 import { connectorsModule } from '../src/modules/connectors';
+import { toolkit } from '../src/modules/connectors/contract';
 import { settingsModule } from '../src/modules/settings';
 import { updateModule } from '../src/modules/update';
 import { registerAgentIpc } from '../src/app/main/agent-ipc';
@@ -55,6 +56,16 @@ app
           const path = new URL(url).pathname;
           if (!url.startsWith('https://backend.composio.dev/'))
             return electronPorts.network.fetch(url, init);
+          if (path.endsWith('/toolkits/multi'))
+            return Response.json({
+              items: toolkit.options.map((slug) => ({
+                slug,
+                name: slug,
+                meta: {
+                  logo: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E",
+                },
+              })),
+            });
           if (
             path.endsWith('/tool_router/session') &&
             new Headers(init?.headers).get('x-api-key') === 'restricted-smoke-key'
@@ -296,16 +307,17 @@ app
       if (link.querySelector('img')) throw new Error('未连接时侧栏不应显示应用图标');
       if (document.querySelector('nav[aria-label="功能入口"]').textContent.includes('连接器')) throw new Error('连接器出现在顶部功能入口');
       link.click();
+      for (let i=0;i<50 && ![...document.querySelectorAll('#app-main button')].some(button => button.textContent?.trim() === '配置 Composio');i++) await new Promise(r=>setTimeout(r,100));
+      const configure = [...document.querySelectorAll('#app-main button')].find(button => button.textContent?.trim() === '配置 Composio');
+      if (!configure) throw new Error('缺少连接器配置按钮');
+      configure.click();
       for (let i=0;i<50 && !document.querySelector('input[aria-label="Composio 项目密钥"]');i++) await new Promise(r=>setTimeout(r,100));
-      if (!document.querySelector('input[aria-label="Composio 项目密钥"]')) throw new Error('缺少连接器配置入口');
-      const icons = [...document.querySelectorAll('#app-main [data-setting-id] img')];
-      if (icons.length !== 7) throw new Error('应用目录缺少图标');
-      await Promise.all(icons.map(img => img.decode()));`);
+      if (!document.querySelector('input[aria-label="Composio 项目密钥"]')) throw new Error('缺少连接器配置入口');`);
     for (const width of [600, 900, 1280, 1920]) {
       win.setContentSize(width, 800);
       assert.equal(
         await invoke(`await new Promise(requestAnimationFrame);
-        const pane=document.querySelector('input[aria-label="Composio 项目密钥"]').closest('main');
+        const pane=document.querySelector('input[aria-label="Composio 项目密钥"]').closest('[role="dialog"]');
         return pane.scrollWidth <= pane.clientWidth;`),
         true,
       );
@@ -315,46 +327,81 @@ app
       connectedApps.add('gmail');
       return { action: 'deny' };
     });
-    await invoke(`const input=document.querySelector('input[aria-label="Composio 项目密钥"]');
-      const submitKey=(key)=>{
+    await invoke(`const submitKey=(key)=>{
+        const input=document.querySelector('input[aria-label="Composio 项目密钥"]');
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,key);
         input.dispatchEvent(new Event('input',{bubbles:true}));
-        input.form.requestSubmit();
+        const form=input.closest('form') ?? document.querySelector('[role="dialog"] form');
+        if (!form) throw new Error('连接器配置表单不存在');
+        form.requestSubmit();
       };
       submitKey('restricted-smoke-key');
-      for(let i=0;i<50 && !document.getElementById('composio-setup-error');i++) await new Promise(r=>setTimeout(r,100));
-      if(!document.getElementById('composio-setup-error')?.textContent.includes('req_smoke401')) throw new Error('密钥错误未显示在输入框旁');
+      const dialog=document.querySelector('[role="dialog"]');
+      for(let i=0;i<50 && !dialog.textContent.includes('req_smoke401');i++) await new Promise(r=>setTimeout(r,100));
+      if(!dialog.textContent.includes('req_smoke401')) throw new Error('密钥错误未显示在输入框旁');
+      if(!document.querySelector('input[aria-label="Composio 项目密钥"]')) throw new Error('错误后输入框消失: ' + dialog.innerHTML);
       submitKey('smoke-key');
-      const row=document.querySelector('[data-setting-id="gmail"]');
-      for(let i=0;i<60 && row.querySelector('button').disabled;i++) await new Promise(r=>setTimeout(r,100));
-      row.querySelector('button').click();
-      for(let i=0;i<80 && !row.textContent.includes('已连接');i++) await new Promise(r=>setTimeout(r,100));
-      if(!row.textContent.includes('已连接')) throw new Error('Gmail 授权后未显示账户');
+      let row;
+      for(let i=0;i<60 && !(row=document.querySelector('[role="group"][aria-label="gmail"]'));i++) await new Promise(r=>setTimeout(r,100));
+      if(!row) throw new Error('配置后未显示应用目录');
+      const icons=[...document.querySelectorAll('#app-main [role="group"] img')];
+      if(icons.length===0) throw new Error('应用目录缺少图标');
+      await Promise.all(icons.map(img=>img.decode()));
+      for(let i=0;i<60 && row.querySelector('button')?.disabled !== false;i++) await new Promise(r=>setTimeout(r,100));
+      const connect=row.querySelector('button');
+      if(!connect || connect.disabled) throw new Error('Gmail 连接入口不可用');
+      connect.click();
+      for(let i=0;i<80;i++) {
+        const accounts=await window.delionBot.bridge.invoke('connectors:accounts');
+        if(accounts.some(item=>item.toolkit.slug==='gmail' && item.status==='ACTIVE')) break;
+        await new Promise(r=>setTimeout(r,100));
+      }
+      [...document.querySelectorAll('#app-main button')].find(button=>button.textContent.trim()==='刷新账户')?.click();
+      for(let i=0;i<80;i++) {
+        row=document.querySelector('[role="group"][aria-label="gmail"]');
+        if(row?.textContent.includes('管理')) break;
+        await new Promise(r=>setTimeout(r,100));
+      }
+      if(!row?.textContent.includes('管理')) throw new Error('Gmail 授权后未显示账户');
       const sidebar = document.querySelector('#main-nav button[title="连接器"]');
       if (sidebar.querySelectorAll('img').length !== 1) throw new Error('侧栏应只显示已连接的 Gmail');`);
     connectedApps.add('googledrive').add('github');
     await invoke(`
       const sidebar = document.querySelector('#main-nav button[title="连接器"]');
-      [...document.querySelectorAll('#app-main button')].find(button=>button.textContent==='刷新账户').click();
+      const refresh=()=>[...document.querySelectorAll('#app-main button')].find(button=>button.textContent.trim()==='刷新账户');
+      for(let i=0;i<50 && !refresh();i++) await new Promise(r=>setTimeout(r,100));
+      if(!refresh()) throw new Error('刷新账户入口不存在');
+      refresh().click();
       for(let i=0;i<50 && sidebar.querySelectorAll('img').length!==3;i++) await new Promise(r=>setTimeout(r,100));
       if (sidebar.querySelectorAll('img').length !== 3) throw new Error('侧栏未更新已连接应用');`);
     connectedApps.add('googlecalendar').add('slack').add('notion');
     await invoke(`
       const sidebar = document.querySelector('#main-nav button[title="连接器"]');
-      [...document.querySelectorAll('#app-main button')].find(button=>button.textContent==='刷新账户').click();
+      const refresh=()=>[...document.querySelectorAll('#app-main button')].find(button=>button.textContent.trim()==='刷新账户');
+      for(let i=0;i<50 && !refresh();i++) await new Promise(r=>setTimeout(r,100));
+      if(!refresh()) throw new Error('刷新账户入口不存在');
+      refresh().click();
       const appNames = () => sidebar.querySelector('span[title]')?.title.split('、') ?? [];
       for(let i=0;i<50 && appNames().length!==6;i++) await new Promise(r=>setTimeout(r,100));
       if (appNames().length !== 6 || sidebar.querySelectorAll('img').length !== 3) throw new Error('侧栏最多显示三个图标，悬停时列出所有已连接应用');
-      const row=document.querySelector('[data-setting-id="gmail"]');
-      row.querySelector('button').dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+      const row=document.querySelector('[role="group"][aria-label="gmail"]');
+      const trigger=row.querySelector('button[aria-haspopup="menu"]');
+      trigger.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,button:0,pointerType:'mouse'}));
       const disconnect = () => [...document.querySelectorAll('[role="menuitem"]')].find(item=>item.textContent.trim().startsWith('断开'));
       for(let i=0;i<50 && !disconnect();i++) await new Promise(r=>setTimeout(r,100));
+      if(!disconnect()) throw new Error('断开账户菜单未出现');
       disconnect().click();
-      const confirm = () => [...document.querySelectorAll('[role="dialog"] button')].find(button=>button.textContent.trim()==='断开账户');
+      const confirm = () => [...document.querySelectorAll('[role="alertdialog"] button, [role="dialog"] button')].find(button=>button.textContent.trim()==='断开账户');
       for(let i=0;i<50 && !confirm();i++) await new Promise(r=>setTimeout(r,100));
+      if(!confirm()) throw new Error('断开账户确认框未出现');
       confirm().click();
-      for(let i=0;i<50 && row.textContent.includes('已连接');i++) await new Promise(r=>setTimeout(r,100));
-      if(row.textContent.includes('已连接') || appNames().includes('Gmail') || sidebar.querySelectorAll('img').length !== 3) throw new Error('断开后应更新侧栏的已连接应用');`);
+      for(let i=0;i<50;i++) {
+        const current=document.querySelector('[role="group"][aria-label="gmail"]');
+        if(current && !current.textContent.includes('管理')) break;
+        await new Promise(r=>setTimeout(r,100));
+      }
+      const current=document.querySelector('[role="group"][aria-label="gmail"]');
+      if(current?.textContent.includes('管理') || appNames().includes('gmail') || sidebar.querySelectorAll('img').length !== 3) throw new Error('断开后应更新侧栏的已连接应用');`);
     assert.equal(connectedApps.has('gmail'), false);
     assert(existsSync(path));
     closeDatabase();

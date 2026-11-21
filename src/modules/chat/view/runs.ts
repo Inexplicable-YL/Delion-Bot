@@ -2,15 +2,11 @@ import { create } from 'zustand';
 import { onAgentEvent } from './client';
 import type { RunEvent, RunStatus } from '../../../core/protocol/agent';
 
-// Run 状态镜像：按 sessionId 归并 run-event 推送，供导航行徽标与 ChatTab 共用；
-// 只订阅，不发起执行。
-
 export interface RunMirror {
   runId: string;
   status: RunStatus;
 }
 
-/** 事件归并：同一 session 的最新事件覆盖旧状态（主进程对同一 session 串行，IPC 保序）。 */
 function applyRunEvent(
   bySession: Record<string, RunMirror>,
   event: RunEvent,
@@ -24,8 +20,6 @@ function applyRunEvent(
   };
 }
 
-/** 徽标映射：运行中实时；终态（completed/failed）保留供导航提示已产生的结果；
- *  stopped 为用户主动停止、interrupted 仅启动时写入、waiting_input 本轮不触发，均不出徽标。 */
 export function runBadge(status: RunStatus): 'running' | 'failed' | 'completed' | null {
   if (status === 'pending' || status === 'running') return 'running';
   if (status === 'completed' || status === 'failed') return status;
@@ -34,12 +28,10 @@ export function runBadge(status: RunStatus): 'running' | 'failed' | 'completed' 
 
 interface RunsState {
   bySession: Record<string, RunMirror>;
-  /** 正开着的会话视图数：开着的视图看到终态即视为已读。 */
   viewing: Record<string, number>;
   apply: (event: RunEvent) => void;
   startViewing: (sessionId: string) => void;
   stopViewing: (sessionId: string) => void;
-  /** 会话结果已被某个视图看到：清掉终态记录（徽标消失）；运行中的状态不受影响。 */
   markSeen: (sessionId: string) => void;
 }
 
@@ -81,7 +73,6 @@ export function isSessionViewed(sessionId: string): boolean {
   return (useRuns.getState().viewing[sessionId] ?? 0) > 0;
 }
 
-/** 按行订阅：applyRunEvent 只替换目标键，其余会话的行不重渲。 */
 export function useSessionRunStatus(sessionId: string): RunStatus | null {
   return useRuns((state) => state.bySession[sessionId]?.status ?? null);
 }

@@ -17,7 +17,7 @@ import { walkGroups } from '../workbench/layout-schema';
 import { importFromDialog } from '../workspace/entry-actions';
 import { useNoteDrafts } from '../../../modules/note/view';
 import { useWorkspaceStore } from '../../../modules/workspace/view';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { useNavigationStore } from '../navigation/view';
 import { useMobileDrawer } from './mobile-drawer';
 import { useNotificationCounts } from '../../../modules/notifications/view';
@@ -30,7 +30,6 @@ function useSessionNavData(): {
   generalSessions: NavSessionSummary[];
 } {
   const lists = useSessions((state) => state.lists);
-  // 选择器必须返回稳定引用（useSyncExternalStore 的 getSnapshot 缓存要求），过滤放渲染期。
   const entries = useWorkspaceStore((state) => state.workspace.entries);
   const projects = entries.filter((entry) => entry.kind === 'project');
   const projectIds = projects.map((project) => project.id);
@@ -68,7 +67,6 @@ function ModulePage({ target, drawer }: { target: NavTarget; drawer: PageDrawer 
 function prewarmAgentAfterPaint(element: HTMLDivElement | null) {
   const desktop = window.delionBot;
   if (!element || !desktop) return;
-  // 两次帧回调给首屏留出一次绘制机会，再通知主进程预热。
   let frame = requestAnimationFrame(() => {
     frame = requestAnimationFrame(() => {
       desktop.window.contentReady();
@@ -107,7 +105,6 @@ export default function App() {
   });
   const activeSessionId =
     view === 'home' ? homeSessionId : view === 'workbench' ? workbenchSessionId : null;
-  // 通用池里据此互斥高亮「通用聊天」与「资料」。
   const activeTabIsChat = useWorkbenchLayout((state) => {
     const group = walkGroups(state.root).find((node) => node.id === state.focus);
     return group?.active?.startsWith('chat:') ?? false;
@@ -117,13 +114,11 @@ export default function App() {
     return onAgentEvent('session-update', ({ sessionId, chat }) => {
       if (chat.running) return;
       const store = useWorkspaceStore.getState();
-      // 会话终态后的后台自动刷新失败不打扰用户（浮窗只留给用户主动的动作），仅留诊断线索。
       void store.refresh().catch(console.error);
       for (const [id, draft] of Object.entries(useNoteDrafts.getState().drafts)) {
         if (draft.text === draft.saved)
           void useNoteDrafts.getState().acquire(id, true).catch(console.error);
       }
-      // 首条消息会给会话命名：终态时重读所属池的列表镜像，标题才不陈旧。
       const lists = useSessions.getState().lists;
       for (const [pool, list] of Object.entries(lists)) {
         if (list.some((session) => session.id === sessionId)) {
@@ -137,7 +132,6 @@ export default function App() {
     });
   }, []);
 
-  // 未保存笔记的退出守卫（草稿自动保存有 600ms 防抖窗口）。
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (
@@ -167,7 +161,6 @@ export default function App() {
     importFromDialog(view === 'workbench' ? useNavigationStore.getState().projectId : null);
   };
 
-  // 已在通用池时与「通用聊天」对称：把焦点让给已有的文档标签；没有则保持现状。
   const openSources = () => {
     const navigation = useNavigationStore.getState();
     if (navigation.view !== 'workbench' || navigation.projectId !== null) {
@@ -243,7 +236,6 @@ export default function App() {
         >
           <div
             className="flex min-h-0 flex-1 animate-view-in flex-col motion-reduce:animate-none"
-            // home 与工作台共用装配壳和 key：打开项目或资料时复用宿主，避免整壳重挂。
             key={view === 'home' || view === 'workbench' ? 'workspace' : view}
             ref={view !== 'home' || homeSessionId ? prewarmAgentAfterPaint : undefined}
           >
@@ -285,7 +277,7 @@ export default function App() {
       {onboarding.data && !appVisible && (
         <OnboardingFlow views={views} onWizardDone={() => setWizardFinished(true)} />
       )}
-      {/* 下载完成的确认弹窗挂在应用层：下载在后台跑完时，用户可能已经离开设置页。 */}
+
       {appVisible && <UpdatePrompt />}
       {appVisible && !isSmokeTest && <ReleaseNotesDialog />}
     </>

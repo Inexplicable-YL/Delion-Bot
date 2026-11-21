@@ -1,4 +1,3 @@
-// settings/prefs：存储值损坏时回退默认，非法输入在契约边界被拒绝。
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -58,7 +57,6 @@ describe('keybinding overrides', () => {
   it('falls back to empty overrides on corrupt stored JSON', () => {
     insert("INSERT INTO workspace_settings VALUES ('keybindings', 'not-json')");
     expect(getKeybindingOverrides()).toEqual({});
-    // 'null' 能通过 JSON.parse 但不是覆盖项对象，读取路径同样不能抛错。
     insert("INSERT OR REPLACE INTO workspace_settings VALUES ('keybindings', 'null')");
     expect(getKeybindingOverrides()).toEqual({});
   });

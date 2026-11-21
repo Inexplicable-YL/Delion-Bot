@@ -5,7 +5,6 @@ let armed = false;
 
 export const NOTIFICATIONS_SNOOZE_KEY = 'notifications-snoozed-until';
 
-/** 启动首轮刷新完成后调用；此前收集到的存量通知作为基线，不弹系统通知。 */
 export function armSystemNotifications(): void {
   armed = true;
 }
@@ -34,7 +33,6 @@ export function showSystemNotice(
   hostPorts().notifier.show(title, body, () => emit(notificationsContract, 'open', { id, target }));
 }
 
-/** Agent 任务提醒，点击只唤起主窗口。 */
 export function systemNotifyToast(title: string, body: string): void {
   if (!armed || snoozed()) return;
   hostPorts().notifier.show(title, body);

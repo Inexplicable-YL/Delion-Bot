@@ -5,7 +5,7 @@ import {
   TrashIcon as Trash2,
 } from '@heroicons/react/24/outline';
 import { todoCompleted, todoStatusLabels, type TodoItem } from '../contract';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { cn } from '../../../ui/cn';
 import { TodoSheet } from './TodoSheet';
 import { dateLabel } from './todo-format';

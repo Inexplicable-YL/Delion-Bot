@@ -1,9 +1,7 @@
-// 统一标签工作台的布局契约；zod schema 供 layout:* IPC 双侧校验（节点数上限、ratio 边界、组内标签去重）。
 import { z } from 'zod';
 
 const tabKinds = ['chat', 'note', 'preview', 'review', 'terminal'] as const;
 export type TabKind = (typeof tabKinds)[number];
-/** chat:{sessionId} | note:{entryId} | preview:{sourceKey|entryId} | review:{...} | terminal:{projectId} */
 export type TabId = `${TabKind}:${string}`;
 
 export type SplitOrientation = 'vertical' | 'horizontal';
@@ -13,9 +11,7 @@ export interface GroupNode {
   id: string;
   tabs: TabId[];
   active: TabId | null;
-  /** 预览标签（VS Code 语义）：组内至多一个，下次预览就地替换；编辑、双击后转常驻。 */
   preview?: TabId;
-  /** 固定标签（VS Code 语义）：恒为 tabs 的前缀子集；schema 只校验形状，失效引用载入时归一。 */
   pinned?: TabId[];
 }
 
@@ -36,7 +32,6 @@ export interface WorkbenchLayout {
 
 export const ratioMin = 0.05;
 export const ratioMax = 0.95;
-/** 节点数（组 + split）上限，防止持久化数据无限膨胀。 */
 export const maxLayoutNodes = 31;
 export const maxTabsPerGroup = 30;
 const maxSplitChildren = 4;

@@ -1,11 +1,10 @@
-// 连接一台服务器时的过程展示：步骤标签、上传字节进度条与逐行日志；失败时标题说清卡在哪一步。
 import { useState } from 'react';
 import { CheckIcon as Check, XMarkIcon as X } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { cn } from '../../../ui/cn';
-import { Collapse, CollapseChevron } from '../../../ui/collapse';
+import { Collapse, CollapseChevron } from '../../../ui/Collapse';
 import type { RemoteSetupProgress, RemoteSetupStep } from '../contract';
-import { Spinner } from '../../../ui/spinner';
+import { Spinner } from '../../../ui/Spinner';
 
 const stepLabels: Record<RemoteSetupStep, string> = {
   probe: '探测',
@@ -33,7 +32,6 @@ function statusOf(log: RemoteSetupProgress[], step: RemoteSetupStep, done: boole
   if (lines.some((line) => line.ok === false)) return 'failed';
   if (lines.some((line) => line.ok === true)) return 'done';
   if (lines.length) return 'running';
-  // 校验命中时不会上传：后面的步骤开始了它还没出现过，就是跳过了。
   const index = visibleSteps.indexOf(step);
   const later = visibleSteps
     .slice(index + 1)
@@ -64,7 +62,6 @@ function failureTitle(step: RemoteSetupStep | undefined): string {
   }
 }
 
-/** 每来一行新日志，末尾锚点重新挂载，借此把阅读位置贴到底。 */
 const stickToBottom = (anchor: HTMLElement | null) => {
   if (anchor?.parentElement) anchor.parentElement.scrollTop = anchor.parentElement.scrollHeight;
 };
@@ -87,7 +84,6 @@ export function SetupProgress({
   const failedLine = log.findLast((line) => line.ok === false);
   const upload = log.findLast((line) => line.step === 'upload' && line.bytes);
   const uploading = upload?.bytes && upload.ok === undefined && running;
-  // 进度更新是同一步的重复行：日志里只留开始与结束，不刷几十行百分比。
   const lines = log.filter((line) => !(line.step === 'upload' && line.bytes && !line.detail));
 
   return (

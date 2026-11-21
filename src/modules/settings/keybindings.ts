@@ -1,6 +1,3 @@
-// 可配置快捷键的单一事实来源：动作目录、默认键位与规范化纯函数，供 main 校验持久化载荷、renderer 渲染设置与录制。
-// 键位串 `Mod` 在 Windows/Linux 为 Ctrl、macOS 为 ⌘（Control 另记 Ctrl）；命名键沿用 KeyboardEvent.key，空格=Space，`+`→`=`。
-
 export type ShortcutActionId =
   | 'new-project'
   | 'import-files'
@@ -27,7 +24,6 @@ export interface ShortcutAction {
   group: string;
   label: string;
   defaultKeys: string | null;
-  /** 键位族：`digit` 只固定修饰键，末位接受 1…9。 */
   family?: 'digit';
 }
 
@@ -101,7 +97,6 @@ export const shortcutActions: readonly ShortcutAction[] = [
     scope: 'global',
     group: '帮助',
     label: '快捷键一览',
-    // Mod+/ 被 CodeMirror 的注释切换占用，所以用 F1。
     defaultKeys: 'F1',
   },
 ];
@@ -112,7 +107,6 @@ export type KeybindingMap = Record<ShortcutActionId, string | null>;
 
 export interface KeyEventLike {
   key: string;
-  /** 物理键位；digit 族在 macOS 上按 Alt+数字会产生别的字符，故优先取它。 */
   code?: string;
   ctrlKey: boolean;
   metaKey: boolean;
@@ -171,7 +165,6 @@ export function acceleratorFromEvent(
   platform: 'mac' | 'other' = 'other',
 ): string | null {
   if (event.isComposing || (platform === 'other' && event.metaKey)) return null;
-  // Option 会改变 event.key（如 Option+Z 为 Ω）；快捷键仍按相应字母/数字键识别。
   const physicalKey =
     platform === 'mac' && event.altKey
       ? event.code?.match(/^(?:Key([A-Z])|Digit([0-9]))$/)
@@ -245,7 +238,6 @@ export interface ShortcutConflict {
   actionIds: ShortcutActionId[];
 }
 
-/** digit 族按“修饰键 + 1…9”展开比较；跨作用域也算冲突（派发顺序不可依赖）。 */
 export function findShortcutConflicts(bindings: KeybindingMap): ShortcutConflict[] {
   const used = new Map<string, ShortcutActionId[]>();
   const push = (accelerator: string, id: ShortcutActionId) => {

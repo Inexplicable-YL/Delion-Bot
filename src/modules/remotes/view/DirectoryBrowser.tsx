@@ -1,5 +1,3 @@
-// 远端目录选择器：只列目录，单击选中、双击进入；路径栏平时是面包屑，点一下变输入框。
-// 读取中不禁用任何东西；已读过的目录先显示缓存再静默刷新。新建文件夹失败走 toast，输入框保留原名。
 import { useState, type KeyboardEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -9,16 +7,16 @@ import {
   FolderPlusIcon as FolderPlus,
   HomeIcon as House,
 } from '@heroicons/react/24/outline';
-import { Card } from '../../../ui/card';
-import { Checkbox } from '../../../ui/checkbox';
-import { Input } from '../../../ui/input';
-import { SearchInput } from '../../../ui/search-input';
-import { Skeleton } from '../../../ui/skeleton';
+import { Card } from '../../../ui/Card';
+import { Checkbox } from '../../../ui/Checkbox';
+import { Input } from '../../../ui/Input';
+import { SearchInput } from '../../../ui/SearchInput';
+import { Skeleton } from '../../../ui/Skeleton';
 import { cn } from '../../../ui/cn';
 import type { RemoteDraft } from '../contract';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { remotesClient } from './client';
-import { IconButton } from '../../../ui/icon-button';
+import { IconButton } from '../../../ui/IconButton';
 import { errorMessage } from '../../../core/protocol/contract';
 
 function crumbs(path: string): { name: string; path: string }[] {
@@ -71,8 +69,6 @@ export function DirectoryBrowser({
   const scratch = stored.path === path ? stored : scratchOf(path);
   const { filter, typed, creating } = scratch;
   const edit = (patch: Partial<Scratch>) => setStored({ ...scratch, ...patch });
-  // 进到一个目录就读一次：有缓存先显示缓存，同时静默刷新，远端在 Delion Bot 之外改过也看得到。
-  // draft 每次渲染都是新对象：读取只跟着连接参数与路径走。
   const browseKey = [
     'remotes',
     'browse',
@@ -93,7 +89,6 @@ export function DirectoryBrowser({
   const createFolder = async () => {
     const name = creating?.trim();
     if (!window.delionBot || !name) return;
-    // 主进程同样会拦；这里先拦是为了给出人话，而不是 zod 的校验转储。
     const invalid = /[/\0]/.test(name)
       ? '文件夹名不能包含 /，只能新建一层'
       : name === '.' || name === '..'

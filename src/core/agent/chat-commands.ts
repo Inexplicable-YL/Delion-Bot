@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { type ChatCommandView, SESSION_COMMANDS } from '../protocol/agent';
 import { hostPorts } from '../ports';
 
-// 设置 › 插件：自定义 / 指令。名称限制为无空白字符，保证能作为触发词输入。
 const commandName = z
   .string()
   .trim()
@@ -41,7 +40,6 @@ export function listChatCommands(): ChatCommandView[] {
 
 export function saveChatCommand(input: unknown): ChatCommandView {
   const command = chatCommandInputSchema.parse(input);
-  // 与会话命令（/compact 等）同名会让 / 候选里出现两个一样的条目，新建与改名时拒绝。
   if (SESSION_COMMANDS.some((item) => item.name === command.name.toLowerCase()))
     throw new Error(`/${command.name} 是内置命令，请换一个名称`);
   const commands = readChatCommands();

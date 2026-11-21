@@ -27,7 +27,7 @@ import {
 import type { EdgeZone } from './tab-dnd';
 import { workspaceClient } from '../../../modules/workspace/view';
 import { terminalClient } from '../../../modules/terminal/view';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const PERSIST_DEBOUNCE_MS = 800;
@@ -38,7 +38,6 @@ function notifyCapacityLimit() {
   showToast({ variant: 'error', title: CAPACITY_LIMIT_REACHED });
 }
 
-/** 文件与资料是「看一眼」的内容，会话、终端、审阅一旦打开就是要留着的工作现场。 */
 export function previewable(tabId: TabId): boolean {
   return tabId.startsWith('note:') || tabId.startsWith('preview:');
 }
@@ -111,7 +110,6 @@ function schedulePersist() {
   });
 }
 
-/** 去抖窗口内项目切换时冲刷在途保存：此刻快照仍属旧项目（init 尚未覆盖状态），立即落库。 */
 function flushPersist() {
   const { persistTimer } = useWorkbenchLayout.getState();
   if (!persistTimer) return;
@@ -159,13 +157,11 @@ export const useWorkbenchLayout = create<Store>((set, get) => ({
   },
 
   init: async (projectId) => {
-    // 同项目布局已在用（home↔工作台切换会重挂载宿主）：复用现态，不再置 ready=false 重走 IPC，免得切换瞬间空白。
     if (get().ready && get().projectId === projectId) return;
     flushPersist();
     const token = get().initToken + 1;
     set({ initToken: token, ready: false });
     let saved: WorkbenchLayout | null = null;
-    // 读取失败时保留磁盘上的已存布局：把默认布局写回会覆盖掉实际存在的保存。
     let loadFailed = false;
     if (typeof window !== 'undefined' && window.delionBot) {
       try {
@@ -328,15 +324,11 @@ export const useWorkbenchLayout = create<Store>((set, get) => ({
     const sameGroup = fromGroupId === toGroupId;
     const sourceTabs = source.tabs.filter((tab) => tab !== tabId);
     const destinationTabs = destination.tabs.filter((tab) => tab !== tabId);
-    // 固定区边界：未固定标签不得插进固定区之前；固定标签在固定区内任意换位
-    //（插入位 ≤ 其余固定标签数都仍在固定区前缀内），跨组移动保留固定态（仿 VS Code）。
     const pinnedCount = (destination.pinned ?? []).filter((tab) => tab !== tabId).length;
     const staysPinned = source.pinned?.includes(tabId) ?? false;
     const upper = staysPinned ? pinnedCount : destinationTabs.length;
     const index = Math.max(staysPinned ? 0 : pinnedCount, Math.min(targetIndex ?? upper, upper));
     destinationTabs.splice(index, 0, tabId);
-    // 目标组固定区按合并后的 tabs 顺序重建，恒为其前缀；拖入未固定副本时顺带剔除
-    // 目标组里同 id 的陈旧固定引用，否则前缀不变量会被破坏。
     const pinnedSet = new Set(destination.pinned ?? []);
     if (staysPinned) pinnedSet.add(tabId);
     else pinnedSet.delete(tabId);

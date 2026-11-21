@@ -6,7 +6,6 @@ import type { CommandDomain } from '../../../core/capabilities/commands';
 import { resourceResolver, type ResourceResolver } from '../../../core/capabilities/resources';
 import { freshness, offset, tool, toolError } from '../../../core/capabilities/domain-tools';
 
-/** 业务层中文错误消息 → 统一错误码（消息保持原文）；未识别的错误原样抛出。 */
 function refineReadError(error: unknown): unknown {
   const message = error instanceof Error ? error.message : '';
   if (message.includes('不存在') || message.includes('尚未同步'))

@@ -1,5 +1,3 @@
-// MCP 页签的可测纯逻辑：参数与键值文本解析、表单校验、编辑补丁与状态徽标映射。
-// 视图不携带命令、地址与密钥，编辑表单因此采用"留空保持原值"的部分补丁。
 import type {
   McpConnectionStatus,
   McpServerInput,

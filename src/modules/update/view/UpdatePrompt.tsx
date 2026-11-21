@@ -1,6 +1,4 @@
-// 下载完成后的确认弹窗：安装会关掉并重启 Delion Bot，必须让用户自己挑时机。
-// 挂在应用层——下载可能持续几分钟，用户早就离开设置页了。
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { useUpdateState, deferInstall, runUpdateAction } from './update';
 import {
   Dialog,
@@ -8,7 +6,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '../../../ui/dialog';
+} from '../../../ui/Dialog';
 
 export function UpdatePrompt() {
   const state = useUpdateState((snapshot) => snapshot.snapshot);
@@ -26,11 +24,7 @@ export function UpdatePrompt() {
   };
 
   return (
-    <Dialog
-      // Esc 与点遮罩只是关掉弹窗，不代为决定：那一行仍然留着「安装更新」。
-      onOpenChange={(open) => !busy && !open && dismiss()}
-      open
-    >
+    <Dialog onOpenChange={(open) => !busy && !open && dismiss()} open>
       <DialogContent
         size="sm"
         onEscapeKeyDown={(event) => {
@@ -52,8 +46,6 @@ export function UpdatePrompt() {
         {!busy && <DialogDescription>退出后自动安装，终端任务会结束。</DialogDescription>}
         {!busy && (
           <DialogFooter>
-            {/* 默认聚焦「下次启动」：下载是在后台跑完的，用户可能正在别处打字，
-                回车不该直接把应用关掉。 */}
             <Button autoFocus onClick={() => void choose(deferInstall)} variant="secondary">
               下次启动时提醒
             </Button>

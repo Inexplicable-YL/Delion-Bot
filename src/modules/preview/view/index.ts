@@ -1,4 +1,3 @@
-// 文件预览：PreviewTab 按格式分流到各预览器，文档加载与链接分流经 ContentLoader 由外壳注入。
 export { PreviewTab, type PreviewBranch } from './PreviewTab';
 export { parsePreviewTabId, type PreviewTabTarget } from './tab-id';
 export {
@@ -6,7 +5,7 @@ export {
   useContentLoader,
   type ContentLoader,
   type LoadedDocument,
-} from './loader';
+} from './Loader';
 export { useEditorSettings } from './editor-settings';
 export { mermaidConfig, renderMermaid } from './mermaid';
 export { codeHighlightStyle, markdownHighlightStyle } from './syntax-highlight';

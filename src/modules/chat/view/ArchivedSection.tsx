@@ -7,18 +7,17 @@ import {
 } from '@heroicons/react/24/outline';
 import type { ChatSessionSummary } from '../../../core/protocol/agent';
 import { chatClient } from './client';
-import { Button } from '../../../ui/button';
-import { SearchInput } from '../../../ui/search-input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/select';
+import { Button } from '../../../ui/Button';
+import { SearchInput } from '../../../ui/SearchInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/Select';
 import { useWorkspaceStore } from '../../workspace/view';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { refreshSessionLists, useSessions, updateSession } from './sessions';
 import { SectionHeader, SettingsGroup } from '../../settings/view';
-import { Callout, ErrorText } from '../../../ui/alert';
+import { Callout, ErrorText } from '../../../ui/Alert';
 import { errorMessage } from '../../../core/protocol/contract';
 import type { Navigate } from '../../../app/module';
 
-/** 项目筛选哨兵：Radix Select 不接受空串，「全部」与「随聊」（无项目）各用一个哨兵值。 */
 const allProjects = '__all__';
 const generalProject = '__general__';
 
@@ -88,7 +87,6 @@ export function ArchivedSection({ navigate }: { navigate: Navigate }) {
   const removeAll = async () => {
     if (busy || !window.delionBot || !sessions?.length) return;
     setBusy(true);
-    // 逐条永久删除：主进程拒绝未归档会话，这里的数据本就全部已归档。
     const removeEach = async () => {
       for (const session of sessions) {
         await chatClient.remove(session.id);

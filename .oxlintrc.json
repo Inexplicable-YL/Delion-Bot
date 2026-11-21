@@ -241,8 +241,8 @@
     },
     {
       "files": [
-        "src/modules/{mail,workspace,chat,remotes,terminal,settings,update}/index.ts",
-        "src/modules/{mail,workspace,chat,remotes,terminal,settings,update}/main/**"
+        "src/modules/{connectors,workspace,chat,remotes,terminal,settings,update}/index.ts",
+        "src/modules/{connectors,workspace,chat,remotes,terminal,settings,update}/main/**"
       ],
       "rules": {
         "no-restricted-imports": [

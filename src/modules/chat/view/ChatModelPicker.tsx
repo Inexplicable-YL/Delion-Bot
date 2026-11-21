@@ -7,11 +7,11 @@ import {
   PromptInputOptionCheck,
   PromptInputSetup,
   PromptInputTrigger,
-} from '../../../ui/agent/prompt-input';
+} from '../../../ui/agent/PromptInput';
 import { cn } from '../../../ui/cn';
-import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/popover';
-import { Slider } from '../../../ui/slider';
-import { useChatTabSource } from './chat-source';
+import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/Popover';
+import { Slider } from '../../../ui/Slider';
+import { useChatTabSource } from './ChatSource';
 import { llmClient } from './client';
 
 export function ChatModelPicker({

@@ -59,7 +59,6 @@ describe('shouldRestoreDraft（发送失败草稿恢复判定）', () => {
   it('带内联图片的输入按剥离 token 后的正文比对（与持久化 content 一致）', () => {
     const token = chatImageToken('0b2b1e28-1111-4222-8333-444455556666', 'a.png');
     const sent = `看图${token}`;
-    // 主进程持久化的 content 是剥离 token 后的正文。
     expect(shouldRestoreDraft(chatWith(['看图']), sent)).toBe(false);
     expect(shouldRestoreDraft(chatWith(['其他']), sent)).toBe(true);
   });

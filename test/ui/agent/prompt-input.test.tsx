@@ -2,9 +2,9 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { expect, it, vi } from 'vitest';
-import { CommentChip } from '../../../src/ui/agent/comment';
-import { PromptInputSubmit } from '../../../src/ui/agent/prompt-input';
-import { QueuedMessages } from '../../../src/ui/agent/queued-messages';
+import { CommentChip } from '../../../src/ui/agent/Comment';
+import { PromptInputSubmit } from '../../../src/ui/agent/PromptInput';
+import { QueuedMessages } from '../../../src/ui/agent/QueuedMessages';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

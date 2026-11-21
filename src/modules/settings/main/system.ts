@@ -1,4 +1,3 @@
-// 要作用到系统或窗口的偏好：主题、页面缩放与开机启动。
 import { app, nativeTheme, type WebContents } from 'electron';
 import { hostPorts } from '../../../core/ports';
 import type { ThemePreference, ZoomPreference } from '../contract';
@@ -20,7 +19,6 @@ export function setZoom(zoom: ZoomPreference): ZoomPreference {
   return zoom;
 }
 
-// 打包后以系统启动项为准（含任务管理器改动），开发运行不注册 electron.exe。
 export function openAtLogin(): boolean {
   if (!app.isPackaged) return savedOpenAtLogin();
   return process.platform === 'win32'

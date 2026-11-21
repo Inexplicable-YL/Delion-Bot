@@ -1,5 +1,3 @@
-// MCP 客户端接入：配置加密保存在 mcp-servers.bin，惰性连接 + 显式 refresh 重连；
-// 工具按 mcp_<server>_<tool> 命名空间化，断连标 error 并清空工具，返回内容只是资料而非指令。
 import { randomUUID } from 'node:crypto';
 import type { CallToolResult, McpTransport, Tool } from '@earendil-works/pi-mcp';
 import { z } from 'zod';
@@ -18,7 +16,6 @@ interface DynamicToolDefinition {
 
 const builtinToolNames = ['read', 'write', 'edit', 'bash', 'grep', 'find', 'ls'];
 
-/** pi-mcp 是纯 ESM 包而主进程产物是 CJS：只能首次连接时经动态 import() 加载并缓存。 */
 type McpSdk = typeof import('@earendil-works/pi-mcp');
 let mcpSdk: McpSdk | null = null;
 async function loadMcpSdk(): Promise<McpSdk> {
@@ -72,8 +69,6 @@ export const mcpServerInputSchema = z.discriminatedUnion('transport', [
   }),
 ]);
 
-// 不用 .partial()：zod 4 对带 default 的字段做 partial 时仍会填默认值，
-// 会把仅启停的 patch 变成「清空 args/env」。
 export const mcpServerPatchSchema = z.object({
   name: nameField.optional(),
   enabled: z.boolean().optional(),
@@ -94,17 +89,14 @@ interface ManagedServer {
   connecting: Promise<void> | null;
 }
 
-/** 内存态（id → 运行视图事实）；配置事实始终以 mcp-servers.bin 为准，读前先同步。 */
 const servers = new Map<string, ManagedServer>();
 
-/** 归一化工具名 → 服务器 id：执行路由按此精确归属，不猜命名空间前缀（a 的 b_x 与 a-b 的 x 同名时最长前缀会误配）。 */
 const toolOwner = new Map<string, string>();
 
 function saveMcpServers(configs: unknown[]): void {
   hostPorts().secrets.write('mcp-servers', JSON.stringify(configs));
 }
 
-/** 解不开时抛错，让设置页说明原因；工具表组装一侧自行降级为无服务器。 */
 function readMcpConfigs(): McpServerConfig[] {
   const payload = hostPorts().secrets.read('mcp-servers');
   const parsed = z.array(mcpConfigSchema).safeParse(payload === null ? [] : JSON.parse(payload));
@@ -134,12 +126,10 @@ function createTransport(sdk: McpSdk, config: McpServerConfig): McpTransport {
   });
 }
 
-// OAuth 授权尚未接入：要求授权的服务器只能用请求头里的访问令牌连接
 function connectError(sdk: McpSdk, error: unknown): string {
   if (error instanceof sdk.McpTimeoutError) return `连接超时（${CONNECT_TIMEOUT_MS / 1000}s）`;
   if (error instanceof sdk.McpAuthRequiredError)
     return '服务器要求授权（HTTP 401），Delion Bot 暂不支持 OAuth 登录；如服务支持访问令牌，可在请求头中填写 Authorization';
-  // fetch 的网络错误只说 fetch failed，真正原因（DNS、拒绝连接）在 cause 里
   if (error instanceof TypeError && error.cause instanceof Error)
     return `${error.message}（${error.cause.message}）`;
   return errorMessage(error);
@@ -182,7 +172,6 @@ function dropAdoptedTools(entry: ManagedServer): void {
   entry.tools = [];
 }
 
-/** 主动关闭（禁用/删除/重连前）：先摘引用再 close，onClose 回调据此跳过「断连标 error」。 */
 async function closeConnection(entry: ManagedServer): Promise<void> {
   const client = entry.client;
   entry.client = null;
@@ -213,7 +202,6 @@ function adoptTools(entry: ManagedServer, tools: Tool[]): void {
     else {
       used.add(namespaced);
       adopted.push({ namespaced, tool });
-      // 冲突跳过的工具不登记路由：被跳过方「已 advertised 但不可调用」即由此产生。
       toolOwner.set(namespaced, entry.config.id);
     }
   }
@@ -312,7 +300,6 @@ export async function mcpToolDefinitions(): Promise<DynamicToolDefinition[]> {
       if (entry.status !== 'connected') await connectServer(entry);
     }
   } catch {
-    // 配置解不开时不阻断会话：设置页会给出原因
     return [];
   }
   for (const entry of servers.values())
@@ -364,7 +351,6 @@ export async function executeMcpTool(
   const ownerId = toolOwner.get(name);
   let entry = ownerId ? servers.get(ownerId) : undefined;
   if (!entry) {
-    // 映射未命中时按前缀点名「已停用/断连」的服务器（运行中禁用后模型可能仍按旧定义调用）；不执行任何调用。
     for (const server of servers.values()) {
       if (!name.startsWith(`${namespaceOf(server.config.name)}_`)) continue;
       if (!entry || namespaceOf(server.config.name).length > namespaceOf(entry.config.name).length)
@@ -448,7 +434,6 @@ export async function updateMcpServer(id: string, patch: McpServerPatch): Promis
   if (patch.name && configs.some((config, i) => i !== index && config.name === patch.name))
     throw new Error(`已有同名服务器：${patch.name}`);
   const previous = configs[index]!;
-  // 另一种传输方式的字段由 schema 丢弃，传输方式本身不可改
   const next = mcpConfigSchema.parse({ ...previous, ...patch, transport: previous.transport });
   const configChanged =
     JSON.stringify({ ...next, enabled: previous.enabled }) !== JSON.stringify(previous);

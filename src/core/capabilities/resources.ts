@@ -1,4 +1,3 @@
-// 资源解析注册表：引用按 type 交给注册它的模块读取或落成文件，core 不认识具体来源。
 export interface ResourceResolver<Ref extends { type: string } = { type: string }> {
   read(ref: Ref, offset: number, limit: number): Promise<unknown>;
   path?(ref: Ref): Promise<string>;

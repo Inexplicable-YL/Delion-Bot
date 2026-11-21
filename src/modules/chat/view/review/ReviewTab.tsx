@@ -6,12 +6,12 @@ import {
 } from '@heroicons/react/24/outline';
 import type { TabId } from '../../../../app/module';
 import { diffStatOf } from '../../../../core/protocol/diff';
-import { PanelHeader } from '../../../../ui/panel-header';
+import { PanelHeader } from '../../../../ui/PanelHeader';
 import type { FileChangeDetail } from '../../../../core/protocol/agent';
 import { agentClient, chatClient } from '../client';
 import { parseReviewTabId } from './tab-id';
-import { Centered, STATUS_TEXT, basenameOf, dirnameOf } from './view-utils';
-import { DiffScroller, PatchDiffView } from './pierre-diff';
+import { Centered, STATUS_TEXT, basenameOf, dirnameOf } from './ViewUtils';
+import { DiffScroller, PatchDiffView } from './PierreDiff';
 import { errorMessage } from '../../../../core/protocol/contract';
 
 export function ReviewTab({ tabId }: { tabId: TabId; groupId: string }) {

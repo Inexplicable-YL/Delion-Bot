@@ -1,4 +1,3 @@
-// 导航视图状态（不持久化）；条目与会话事实由 workspace 镜像与注入的 sessions 数据提供。
 import { create } from 'zustand';
 import type { WorkspaceEntry } from '../../../modules/workspace/contract';
 
@@ -34,7 +33,6 @@ type Store = {
 
 export const useTreeState = create<Store>((set) => ({
   pendingCreate: null,
-  // 目标文件夹要展开，输入行才看得见。
   startCreate: (pending) =>
     set((s) => ({
       pendingCreate: pending,

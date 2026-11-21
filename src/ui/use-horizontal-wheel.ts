@@ -1,9 +1,5 @@
 import { useEffect, useRef } from 'react';
 
-/**
- * 纵向滚轮转成横向滚动，到两端后交回页面。增量须先夹住再滚，否则越界一步会原地不动；
- * passive: false 才能 preventDefault，故手动挂监听。
- */
 export function useHorizontalWheel<T extends HTMLElement>() {
   const ref = useRef<T>(null);
 

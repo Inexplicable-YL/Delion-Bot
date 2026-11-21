@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { BrowserWindow, dialog, type OpenDialogOptions, type WebContents } from 'electron';
 import { hostPorts } from '../../../core/ports';
 
-/** 私钥常常没有后缀，不按扩展名过滤。 */
 export async function pickKeyFile(): Promise<string | null> {
   const home = homedir();
   const sshDirectory = join(home, '.ssh');

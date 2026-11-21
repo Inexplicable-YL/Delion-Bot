@@ -1,5 +1,3 @@
-// helper 通道真机回归：需要 DELION_REMOTE_HOST（如 root@1.2.3.4），由 pnpm test:remote 运行，
-// 不在默认 pnpm test 与 CI 里。
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
@@ -109,7 +107,6 @@ describe('helper 通道（真机）', () => {
     expect(leftover.stdout.toString().trim()).toBe('0');
   }, 60_000);
 
-  // 这是这一版的核心承诺：网络断了，远端在跑的命令不被杀，重连后输出与退出码都接得回来。
   it('隧道在命令中途断开：命令继续跑，重连后输出与退出码完整接回', async () => {
     const chunks: Buffer[] = [];
     const running = helperSession(target).exec(
@@ -183,7 +180,6 @@ describe('helper 通道（真机）', () => {
     const events: WatchEvent[] = [];
     const controller = new AbortController();
     const stream = session.watchEvents((event) => events.push(event), controller.signal);
-    /** 等到出现「新」事件为止。只看新增：合并窗口会晚几百毫秒才推，之前的事件不能算数。 */
     const waitNew = async (label: string, from: number) => {
       for (let i = 0; i < 60 && events.length <= from; i += 1)
         await new Promise((r) => setTimeout(r, 100));
@@ -191,7 +187,6 @@ describe('helper 通道（真机）', () => {
     };
 
     expect((await session.setWatch('watch-test', [dir])).watching).toBe(1);
-    // 关键：这条 ssh 完全不经过 Delion Bot 的工具路径——watch 就是要覆盖它。
     let mark = events.length;
     await exec(target, `touch ${dir}/outside.txt`);
     await waitNew('远端自己在被监视目录里建文件后应有 change', mark);

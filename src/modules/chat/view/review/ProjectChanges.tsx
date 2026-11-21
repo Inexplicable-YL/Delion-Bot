@@ -4,12 +4,12 @@ import { ArrowPathIcon, DocumentIcon } from '@heroicons/react/24/outline';
 import type { TabId } from '../../../../app/module';
 import { errorMessage } from '../../../../core/protocol/contract';
 import { cn } from '../../../../ui/cn';
-import { IconButton } from '../../../../ui/icon-button';
-import { SearchInput } from '../../../../ui/search-input';
+import { IconButton } from '../../../../ui/IconButton';
+import { SearchInput } from '../../../../ui/SearchInput';
 import { fileIconUrl } from '../../../workspace/view';
 import { chatClient } from '../client';
 import { parseReviewTabId, reviewTabId } from './tab-id';
-import { STATUS_TEXT, basenameOf, dirnameOf } from './view-utils';
+import { STATUS_TEXT, basenameOf, dirnameOf } from './ViewUtils';
 
 const STATUS_MARK = {
   added: { letter: 'U', color: 'text-success' },

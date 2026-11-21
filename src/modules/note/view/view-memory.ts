@@ -1,6 +1,5 @@
-// 编辑模式（按文件）与滚动位置（按 标签+组）在本次运行内记忆，切换标签后恢复，不持久化。
 import { create } from 'zustand';
-import type { NoteMode } from './document-toolbar';
+import type { NoteMode } from './DocumentToolbar';
 
 export const useNoteViewMemory = create<{
   modes: Record<string, NoteMode>;

@@ -28,21 +28,19 @@ import {
 import { cn } from '../../../ui/cn';
 import type { ConnectorApp } from '../../connectors/view';
 import { codeHighlightStyle, markdownHighlightStyle } from '../../preview/view';
-import { openLightbox } from '../../../ui/lightbox';
+import { openLightbox } from '../../../ui/Lightbox';
 import { matchChatImageTokens } from '../../../core/protocol/chat-input';
 import { getChatMediaPreview } from './media';
 import type { ChatReference } from './drafts';
 import { matchReferenceTokens } from './reference-tokens';
 import { matchConnectorPrompts } from './connector-tokens';
 
-/** 容器注入的菜单键盘协议：返回 True 表示已消费该按键。 */
 type ComposerMenuApi = {
   onKey: (key: 'down' | 'up' | 'select' | 'close') => boolean;
 };
 
 export type ComposerEditorHandle = {
   focus: () => void;
-  /** 插入文本并把光标移到片段之后（内联图片 token 用）。 */
   insertAt: (pos: number, text: string) => void;
   replaceRange: (from: number, to: number, text: string) => void;
   selectionStart: () => number;
@@ -84,7 +82,6 @@ class InlineImageWidget extends WidgetType {
     remove.type = 'button';
     remove.addEventListener('mousedown', (event) => event.preventDefault());
     remove.addEventListener('click', () => {
-      // 每次从当前文档重新定位 token，不缓存可能因编辑失效的区间。
       const text = view.state.doc.toString();
       const match = new RegExp(`!\\[[^\\]\\n]*\\]\\(delion-img:${this.id}\\)`).exec(text);
       if (match)
@@ -126,8 +123,6 @@ const imagePlugin = ViewPlugin.fromClass(
   { decorations: (value) => value.decorations },
 );
 
-// @ 引用 token：文档文本就是「@相对路径」，这里只负责画出来——折叠成文件图标加文件名，
-// 并经 atomicRanges 让光标/退格把整段路径当整体。
 type ReferenceOptions = { files: ChatReference[]; connectors: readonly ConnectorApp[] };
 
 const noConnectors: readonly ConnectorApp[] = [];
@@ -140,7 +135,6 @@ const referenceField = StateField.define<ReferenceOptions>({
   },
 });
 
-// 文件图标（lucide file-text 同形）：widget 里直接建 DOM，不经 React。
 const FILE_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
   'stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>';
@@ -206,7 +200,6 @@ function referenceDecorations(view: EditorView): DecorationSet {
   const ranges: Range<Decoration>[] = [];
   for (const token of matchReferenceTokens(source, options.files)) {
     const { start, end, ref } = token;
-    // 文本里仍是完整「@路径」，解析不受显示折叠影响；会话标题里的 / 不是目录，只折叠 #。
     const split = ref.session ? -1 : ref.title.lastIndexOf('/');
     const nameStart = start + 1 + (split < 0 ? 0 : split + 1);
     ranges.push(
@@ -256,7 +249,6 @@ const composerTheme = EditorView.theme({
     maxHeight: 'min(14rem, 38vh)',
     padding: '0',
   },
-  // CM 默认的内边距会让光标/正文相对自绘占位符偏移，统一归零，共用同一原点。
   '.cm-content': { caretColor: 'inherit', padding: '0' },
   '.cm-line': { padding: '0' },
   '.delion-connector-token::after': { content: 'attr(data-connector-name)' },
@@ -393,7 +385,6 @@ export function ComposerEditor({
           }),
           Prec.highest(
             keymap.of([
-              // 候选菜单打开时接管方向键/Enter/Tab/Esc；返回 false 回落到默认行为。
               { key: 'ArrowDown', run: () => pressMenuKey('down') },
               { key: 'ArrowUp', run: () => pressMenuKey('up') },
               { key: 'Escape', run: () => pressMenuKey('close') },
@@ -401,7 +392,6 @@ export function ComposerEditor({
               {
                 key: 'Enter',
                 run: (target) => {
-                  // IME 组文中的 Enter 是候选词操作，不发送。
                   if (target.compositionStarted) return false;
                   if (pressMenuKey('select')) return true;
                   emitSend();
@@ -439,7 +429,6 @@ export function ComposerEditor({
                 target.posAtCoords({ x: event.clientX, y: event.clientY }) ??
                 target.state.selection.main.head;
               emitFiles(files, pos);
-              // stopPropagation 会阻断容器 onDrop，需主动通知容器复位拖拽蒙版。
               emitDropHandled();
               return true;
             },
@@ -470,8 +459,6 @@ export function ComposerEditor({
       current.destroy();
     };
   }, []);
-  // 外部值同步（发送失败恢复等）：IME 组文期间全量替换会打断输入法，此时丢弃外部变更，
-  // 以用户输入为准（后续 onChange 会把草稿收敛回编辑器内容）。
   useEffect(() => {
     const current = view.current;
     if (!current || value === current.state.doc.toString() || current.compositionStarted) return;
@@ -482,8 +469,6 @@ export function ComposerEditor({
       effects: setReferenceOptions.of({ files: referenceOptions, connectors: connectorApps }),
     });
   }, [referenceOptions, connectorApps]);
-  // combobox 语义落在 CM 内容元素：属性 CM 不管理，命令式同步；
-  // 拆成原始值做依赖，打字时不重复写 DOM。
   const menuAriaOpen = menuAria?.open ?? false;
   const menuAriaListId = menuAria?.listId ?? '';
   const menuAriaActiveId = menuAria?.activeId ?? null;
@@ -497,8 +482,6 @@ export function ComposerEditor({
       content.setAttribute('aria-activedescendant', menuAriaActiveId);
     else content.removeAttribute('aria-activedescendant');
   }, [menuAriaActiveId, menuAriaListId, menuAriaOpen]);
-  // 占位符用自绘覆盖层：CM 内置 placeholder 的行内 widget 会让空文档的光标视觉上落在文字右侧，
-  // 与实际插入点不一致。
   const empty = value.length === 0;
   return (
     <div className={cn('text-ui-body touch:text-ui-input-touch', className)}>

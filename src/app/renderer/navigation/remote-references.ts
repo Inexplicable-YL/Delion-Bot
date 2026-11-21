@@ -1,5 +1,3 @@
-// 远程项目的 @ 引用候选：本地镜像没有远端文件，改向主进程要远端文件索引（优先 rg --files，
-// 缺失时退到 find）。成功后缓存到本次运行结束；失败不报错也不阻塞输入，候选为空仍可手打远端路径。
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { WorkspaceEntry } from '../../../modules/workspace/contract';
@@ -58,7 +56,6 @@ export function useLocalReferences(cwd: string | null): WorkspaceEntry[] {
   return files.data ?? noLocalFiles;
 }
 
-/** 索引只是便利：失败时留空；同一项目一次运行只拉一次。 */
 export function useRemoteReferences(projectId: string | null): RemoteReference[] {
   return (
     useQuery({

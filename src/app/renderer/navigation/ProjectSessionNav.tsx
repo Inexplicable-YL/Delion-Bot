@@ -1,10 +1,9 @@
-// 新建聊天、功能入口、按项目分组的会话与无归属的聊天；会话数据由接入方注入。拖动会话行可换归属。
 import { useState, type DragEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { useDismissOnOutsidePointer } from '../../../ui/use-dismiss-on-outside-pointer';
-import { CollapseChevron } from '../../../ui/collapse';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ui/tooltip';
+import { CollapseChevron } from '../../../ui/Collapse';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ui/Tooltip';
 import {
   ArchiveBoxIcon as Archive,
   BookmarkIcon as Pin,
@@ -27,13 +26,13 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from '../../../ui/dropdown-menu';
-import { EntryDialogs, type EntryDialogRequest } from '../workspace/entry-dialogs';
+} from '../../../ui/DropdownMenu';
+import { EntryDialogs, type EntryDialogRequest } from '../workspace/EntryDialogs';
 import { cn } from '../../../ui/cn';
 import type { WorkspaceEntry } from '../../../modules/workspace/contract';
 import { remoteAccent } from '../../../modules/remotes/view';
 import { useVisibleNavEntries, type NavEntryId } from './entries';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import {
   SessionRow,
   projectSessionDragType,
@@ -50,14 +49,14 @@ import { activitySince, NavListHeader, type NavListOptions } from './NavListHead
 import { useTreeState } from './store';
 import { refreshSessionLists, chatClient, moveSession } from '../../../modules/chat/view';
 import { closeTabEverywhere } from '../workbench/layout-store';
-import { Input } from '../../../ui/input';
+import { Input } from '../../../ui/Input';
 import { purgeRemovedEntries } from '../workbench/removed-cleanup';
 import { navIcon, navRow, navSectionTitle, rowActions, rowEndInset } from './nav-styles';
-import { NewChatIcon } from './new-chat-icon';
+import { NewChatIcon } from './NewChatIcon';
 import { useRemoteActivity } from './remote-activity';
-import { RemoteConnectionTip } from './remote-connection-tip';
+import { RemoteConnectionTip } from './RemoteConnectionTip';
 import { useRemoteConnections } from './remote-connections';
-import { IconButton } from '../../../ui/icon-button';
+import { IconButton } from '../../../ui/IconButton';
 import { workspaceClient, useWorkspaceStore } from '../../../modules/workspace/view';
 import {
   Dialog,
@@ -65,7 +64,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogTitle,
-} from '../../../ui/dialog';
+} from '../../../ui/Dialog';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const fileManagerName = window.delionBot?.platform === 'darwin' ? 'Finder' : '资源管理器';
@@ -126,7 +125,6 @@ export function ProjectSessionNav({
   const chatList = usePreferences((state) => state.chatList);
   const projectList = usePreferences((state) => state.projectList);
   const patchNavList = usePreferences((state) => state.patchNavList);
-  // 归档会话只在某个列表要看时才读；归档的不进置顶区，置顶标记因此清掉。
   const queryClient = useQueryClient();
   const archived = useQuery({
     queryKey: ['chat', 'archived'],
@@ -163,7 +161,6 @@ export function ProjectSessionNav({
       (a, b) =>
         Number(Boolean(preferences[b.id]?.pinned)) - Number(Boolean(preferences[a.id]?.pinned)),
     );
-  // 项目的最后活动取名下最新的会话，没有会话时取条目本身的更新时间。
   const lastActivity = (project: WorkspaceEntry) =>
     sessionsOf(project.id).reduce(
       (latest, session) => (session.updatedAt > latest ? session.updatedAt : latest),
@@ -180,7 +177,6 @@ export function ProjectSessionNav({
         ? a.name.localeCompare(b.name)
         : lastActivity(b).localeCompare(lastActivity(a)),
     );
-  // 连接取自共享缓存，取数状态由目录树写、这里读，两处说法因此一致。
   const connections = useRemoteConnections();
   const activity = useRemoteActivity((state) => state.byProject);
   const [entryRequest, setEntryRequest] = useState<EntryDialogRequest | null>(null);
@@ -213,7 +209,6 @@ export function ProjectSessionNav({
       : Object.keys(sessionsByProject).find((id) =>
           sessionsByProject[id]!.some((session) => session.id === sessionId),
         );
-  // 换归属后旧位置的标签失效：先关掉，正在看的会话在新位置重新打开。
   const moveChat = (sessionId: string, projectId: string | null) =>
     void runAction('移动对话失败', async () => {
       await moveSession(sessionId, projectId);
@@ -258,15 +253,12 @@ export function ProjectSessionNav({
     const full = fullSessionLists.includes(key);
     const unpinned = sessions.filter((session) => !session.pinned);
     const visible = full ? unpinned : unpinned.slice(0, RECENT_SESSIONS);
-    // 会话行已高亮时项目行不再叠加底色：位置强调只落在最深的一个可见行上。
     const shownActiveSession =
       expanded && visible.some((session) => session.id === activeSessionId);
     const rowActive =
       groupActive &&
       !shownActiveSession &&
       !sessions.some((session) => session.pinned && session.id === activeSessionId);
-    // 远端项目行挂连接提示；挂在名称按钮上而非整行，键盘聚焦时也能看到。
-    // 图标与展开箭头共用一个槽位：悬停或键盘聚焦时换成箭头。
     const labelButton = (
       <button
         aria-current={rowActive ? 'page' : undefined}

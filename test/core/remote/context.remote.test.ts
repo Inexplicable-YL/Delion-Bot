@@ -1,5 +1,3 @@
-// 远端上下文镜像的真机验证（含 bash 命令正文里的镜像路径翻译）。
-// 需要 DELION_REMOTE_HOST（如 root@1.2.3.4），由 pnpm test:remote 运行，不在默认 pnpm test 与 CI 里。
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -41,7 +39,6 @@ describe('远端上下文镜像（真机）', () => {
   const root = `/tmp/delion-context-${Date.now()}`;
   const remoteDir = `${root}/nested/proj`;
   const home = `${root}/home`;
-  // .delion-bot/skills 不再是项目技能目录，放一个用来确认它不被镜像。
   const repoSkillFiles: [string, string][] = [
     ['.agents/skills/alpha/SKILL.md', skill('alpha', '仓库原生技能', 'ALPHA 正文')],
     ['.agents/skills/alpha/ref/note.txt', '附属文件\n'],

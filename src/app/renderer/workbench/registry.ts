@@ -1,4 +1,3 @@
-// 内容类型注册表：TabKind → { 组件, 图标, 标题解析 }；workbench 引用内容标签的唯一入口。
 import type { ComponentType } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import {
@@ -9,7 +8,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { TabId, TabKind } from '../../../modules/workspace/contract';
 import { ChatTab, ReviewTab, reviewTabTitle, useSessions } from '../../../modules/chat/view';
-import { titleOf as entryTitleOf } from '../workspace/entry-dialogs';
+import { titleOf as entryTitleOf } from '../workspace/EntryDialogs';
 import { NoteTab } from '../../../modules/note/view';
 import { PreviewTab } from '../../../modules/preview/view';
 import { TerminalTab } from '../../../modules/terminal/view';
@@ -23,7 +22,6 @@ export interface TabDescriptor {
   component: ComponentType<TabComponentProps>;
   icon: ComponentType<{ className?: string }>;
   title: (tabId: TabId, client: QueryClient) => string;
-  /** 标题即文件名：标签图标与目录侧栏一致，按文件类型取图标。 */
   file?: true;
 }
 

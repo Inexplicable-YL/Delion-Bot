@@ -1,5 +1,3 @@
-// 远程工具的离线回归：路径还原与镜像翻译。工具真的落到远端的判断需要真机，
-// 在 operations.remote.test.ts，由 pnpm test:remote 运行。
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({
@@ -14,7 +12,6 @@ import {
 
 describe('remotePath', () => {
   it('还原被 node:path 改写过的远端路径', () => {
-    // 本机实测：cwd=/root/proj 时相对路径 src/a.ts 会被解析成 E:\root\proj\src\a.ts
     expect(remotePath('E:\\root\\proj\\src\\a.ts')).toBe('/root/proj/src/a.ts');
     expect(remotePath('\\tmp\\x')).toBe('/tmp/x');
     expect(remotePath('/root/proj/')).toBe('/root/proj');
@@ -32,7 +29,6 @@ describe('remotePath', () => {
       expect(remotePath(`${mirror}\\repo\\.agents\\skills\\lint\\SKILL.md`)).toBe(
         '/root/proj/.agents/skills/lint/SKILL.md',
       );
-      // 大小写与混合分隔符都要认（Windows 盘符大小写不定）
       expect(remotePath(`${mirror.toLowerCase()}/home/.delion-bot/skills/x/SKILL.md`)).toBe(
         '/root/.delion-bot/skills/x/SKILL.md',
       );

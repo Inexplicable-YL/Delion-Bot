@@ -1,4 +1,3 @@
-// 远程连接契约。ssh 调用与私钥路径只存在于主进程；渲染端只拿到连接信息与目录清单。
 import { z } from 'zod';
 import { defineContract } from '../../core/protocol/contract';
 import type {
@@ -18,10 +17,8 @@ export type {
 export interface RemoteConnection {
   id: string;
   label: string;
-  /** ssh 的第一个位置参数：`~/.ssh/config` 别名或 `user@host`。 */
   host: string;
   port: number | null;
-  /** 私钥文件；null 表示交给 ssh 自己按 config 与 agent 解析。 */
   keyPath: string | null;
   createdAt: string;
 }
@@ -33,7 +30,6 @@ export interface RemoteDraft {
   keyPath?: string | null;
 }
 
-/** `~/.ssh/config` 里的一台具体主机：新建远程项目时作为候选，选中并连上后才保存为连接。 */
 export interface SshConfigHost {
   alias: string;
   hostName: string | null;
@@ -43,7 +39,6 @@ export interface SshConfigHost {
 
 export interface RemoteProbe {
   ok: boolean;
-  /** 成功时是一行环境摘要，失败时直接展示给用户的原因（主机不可达、认证失败、指纹未确认……）。 */
   message: string;
 }
 
@@ -53,7 +48,6 @@ export interface RemotePrepare {
   home: string | null;
 }
 
-/** 远端监听端口（/v1/ports）：归属拿不到（别的用户的进程）时 pid/process 缺省。 */
 export interface RemotePortEntry {
   port: number;
   pid?: number;
@@ -78,8 +72,6 @@ export interface RemoteDirectoryEntry {
   modifiedAt: number | null;
 }
 
-/** 远端条目在文件树里的身份：项目 id + 远端绝对路径。
- *  只用路径作 id 会让两台连接上的同路径目录串成同一个节点：清单缓存、展开态与选中态都会混。 */
 export function remoteNodeId(projectId: string, path: string): string {
   return `${projectId}:${path}`;
 }
@@ -88,14 +80,12 @@ export function withinRemotePath(root: string, path: string): boolean {
   return path === root || path.startsWith(root === '/' ? '/' : `${root}/`);
 }
 
-/** 远端 Markdown 里的相对图片按所在目录解析；越界的相对路径与绝对地址原样返回。 */
 export function remoteAssetUrl(
   projectId: string,
   root: string,
   fromPath: string,
   src: string,
 ): string {
-  // 带协议的地址、协议相对地址与页内锚点都不是「远端相对文件」，原样交回。
   if (/^[a-z][a-z0-9+.-]*:/i.test(src) || src.startsWith('//') || src.startsWith('#')) return src;
   const segments = fromPath.slice(0, fromPath.lastIndexOf('/')).split('/');
   for (const part of src.split('/')) {
@@ -175,7 +165,6 @@ export const remotesContract = defineContract(
     },
     pickKey: { input: z.undefined(), output: z.custom<string | null>() },
     configHosts: { input: z.undefined(), output: z.custom<SshConfigHost[]>() },
-    /** 连接：把 helper 引导起来（已连上就直接返回），过程经 setupProgress 一行行推送。 */
     prepare: { input: draft, output: z.custom<RemotePrepare>() },
     helperStates: { input: z.undefined(), output: z.custom<RemoteChannelState[]>() },
     tasks: { input: remoteId, output: z.custom<RemoteTask[]>() },
@@ -183,7 +172,6 @@ export const remotesContract = defineContract(
       input: z.object({ remoteId, taskId: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/) }),
       output: z.void(),
     },
-    /** 通道不可用时立刻重新引导，不等自动重试的间隔。 */
     retry: { input: remoteId, output: z.custom<RemoteChannelState>() },
   },
   {

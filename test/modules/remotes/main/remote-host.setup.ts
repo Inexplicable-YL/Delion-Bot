@@ -1,7 +1,5 @@
 import { existsSync } from 'node:fs';
 
-// 真机远程套件的前置检查：没有 DELION_REMOTE_HOST 或随包 rg 就直接失败，
-// 避免「整批用例被跳过」或「悄悄退回 Go 遍历」被当成通过。
 export default function setup(): void {
   if (!process.env.DELION_REMOTE_HOST) {
     throw new Error(

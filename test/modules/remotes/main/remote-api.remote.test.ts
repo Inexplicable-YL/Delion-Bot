@@ -1,5 +1,3 @@
-// 远程项目主进程链路的真机回归（假数据库 + 真实 helper）：需要 DELION_REMOTE_HOST（如 root@1.2.3.4），
-// 由 pnpm test:remote 运行，不在默认 pnpm test 与 CI 里。
 import Database from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -72,7 +70,6 @@ describe('远程项目主进程链路（真机）', () => {
 
     const probe = await probeConnection({ host, keyPath });
     expect(probe.ok).toBe(true);
-    // 摘要里带系统信息（`<主机名> · <系统> <架构>`）：探活失败时这里是给用户的原因。
     expect(probe.message).toMatch(/Linux|Darwin/);
   }, 60_000);
 

@@ -1,4 +1,3 @@
-// 通知来源筛选：记录取消勾选的来源，仅保存在内存中，导航切换保留，重启后恢复为全部来源。
 import { create } from 'zustand';
 
 interface SourceFilterState {

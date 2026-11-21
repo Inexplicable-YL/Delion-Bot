@@ -1,12 +1,10 @@
 // @vitest-environment jsdom
-// 设置 › Skills 的上传入口：目标只列远端项目，冲突（远端已存在）转覆盖确认后用 overwrite 重试。
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { WorkspaceEntry, WorkspaceState } from '../../../../src/modules/workspace/contract';
 
-// 契约客户端在模块加载时取 bridge，须先于导入装好；用例经 stubCapabilities 登记 handler。
 const { api, bridge } = vi.hoisted(() => {
   const api: Record<string, (input: never) => unknown> = {};
   const bridge = {
@@ -16,7 +14,7 @@ const { api, bridge } = vi.hoisted(() => {
   window.delionBot = { bridge } as unknown as NonNullable<typeof window.delionBot>;
   return { api, bridge };
 });
-import { dismissToast, toasts } from '../../../../src/ui/toast';
+import { dismissToast, toasts } from '../../../../src/ui/Toast';
 import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
 import { SkillsTab } from '../../../../src/modules/settings/view/agent/SkillsTab';
 

@@ -1,4 +1,3 @@
-// 导出本机数据的回归：断言落在磁盘上真实存在（或不存在）什么，而不是「某个函数被调用了」。
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -28,7 +27,6 @@ vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: () => null },
 }));
 
-// cp 照常工作，只对指定条目的源路径抛错，用来验证「一个条目失败不影响其余条目」。
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
@@ -66,8 +64,6 @@ beforeEach(() => {
   state.picked = { canceled: false, filePaths: [pickedDirectory] };
   state.failOn = '';
 
-  // 一棵有代表性但很小的应用数据目录：顶层与分区里都有可再生缓存，
-  // 也都有必须留下的用户数据（分区里的 Local Storage、pi 的会话正文）。
   userData = join(base, 'userData');
   state.root = userData;
   for (const cache of [
@@ -89,7 +85,6 @@ beforeEach(() => {
   writeFileSync(join(userData, 'pi', 'sessions', 'a.jsonl'), 'keep');
   mkdirSync(join(state.documents, 'Delion Bot'), { recursive: true });
   writeFileSync(join(state.documents, 'Delion Bot', 'note.txt'), 'keep');
-  // 用户自己写的 Skill 在 ~/.delion-bot/skills，不在应用数据目录里，得单独带走。
   state.home = join(base, 'home');
   provideTestHostPorts({
     paths: {
@@ -116,11 +111,9 @@ it('跳过可再生缓存、保留用户数据，并给数据库取一致快照'
        VALUES ('terms', '2026-10-15', '1.1.0', '2026-10-15T09:00:00.000Z')`,
     )
     .run();
-  // 前提：写入后 WAL 真的落在磁盘上，否则下面「快照不带 -wal」是白测的。
   expect(existsSync(join(userData, 'delion.db-wal'))).toBe(true);
 
   const result = exported(await exportUserData(null));
-  // 文件夹名不能带 Windows 非法字符（时间用 - 而不是 :）。
   expect(result.path).toMatch(/Delion Bot 备份 \d{4}-\d{2}-\d{2} \d{2}-\d{2}$/);
   expect(result.skipped).toEqual([]);
   const data = join(result.path, '应用数据');
@@ -157,13 +150,11 @@ it('同一分钟重复导出不覆盖已有备份', async () => {
 });
 
 it('目标落在数据目录里面时直接拒绝，不在源目录里建备份文件夹', async () => {
-  // 导出的源就是这个目录，写进它自己会让复制边写边读自己。
   state.picked = { canceled: false, filePaths: [userData] };
 
   const result = await exportUserData(null);
 
   expect(result).toMatchObject({ status: 'failed', reason: expect.stringContaining('数据目录') });
-  // 读工作目录设置本身要开库（delion.db 因此出现在 userData 里），但导出不该往里写备份。
   expect(readdirSync(userData).filter((name) => name.startsWith('Delion Bot 备份'))).toEqual([]);
 });
 

@@ -1,4 +1,3 @@
-// 工作台目录侧栏的装配层：项目文件树 + 同步来的资料 + 归档区；树的展开/筛选/选中态在 navigation/store。
 import { useEffect, useRef, useState } from 'react';
 import {
   ArchiveBoxIcon as Archive,
@@ -17,24 +16,24 @@ import type { TabId } from '../../module';
 import { ProjectChanges } from '../../../modules/chat/view';
 import { workspaceArchiveId, type WorkspaceEntry } from '../../../modules/workspace/contract';
 import { parseRemoteNodeId } from '../../../modules/remotes/contract';
-import { Button } from '../../../ui/button';
-import { CollapseChevron } from '../../../ui/collapse';
-import { PanelHeader } from '../../../ui/panel-header';
-import { SegmentedControl } from '../../../ui/segmented-control';
-import { SearchInput } from '../../../ui/search-input';
-import { Resizer } from '../../../ui/resizer';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ui/tooltip';
+import { Button } from '../../../ui/Button';
+import { CollapseChevron } from '../../../ui/Collapse';
+import { PanelHeader } from '../../../ui/PanelHeader';
+import { SegmentedControl } from '../../../ui/SegmentedControl';
+import { SearchInput } from '../../../ui/SearchInput';
+import { Resizer } from '../../../ui/Resizer';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ui/Tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
   useAfterMenuClose,
-} from '../../../ui/dropdown-menu';
+} from '../../../ui/DropdownMenu';
 import { ProjectFileTree, type EntryAction } from '../navigation/ProjectFileTree';
 import type { ExplorerPending } from '../../../modules/workspace/view';
 import { useRemoteActivity } from '../navigation/remote-activity';
-import { RemoteConnectionTip } from '../navigation/remote-connection-tip';
+import { RemoteConnectionTip } from '../navigation/RemoteConnectionTip';
 import { useRemoteConnections } from '../navigation/remote-connections';
 import { ancestorChainOf, useTreeState } from '../navigation/store';
 import { useNavigationStore as useAppNavigation } from '../navigation/view';
@@ -49,13 +48,13 @@ import {
 } from '../workspace/entry-actions';
 import { usePreferenceWidth, usePreferences } from '../shell/preferences';
 import { useMobileDrawer } from '../shell/mobile-drawer';
-import { RemotePortsDialog } from '../workspace/remote-ports-dialog';
+import { RemotePortsDialog } from '../workspace/RemotePortsDialog';
 import { openTarget } from './open-target';
-import { useExplorerState } from './explorer-state';
+import { useExplorerState } from './ExplorerState';
 import { useViewportWidth } from '../../../ui/use-viewport-width';
 import { cn } from '../../../ui/cn';
 import { overlayFade } from '../../../ui/motion';
-import { IconButton } from '../../../ui/icon-button';
+import { IconButton } from '../../../ui/IconButton';
 import {
   explorerDragType,
   localPathsOf,
@@ -67,7 +66,6 @@ import { errorMessage } from '../../../core/protocol/contract';
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 360;
 
-/** 切换项目后 selected 可能仍指向上一个项目的条目：不属于当前根的一律回落到根。 */
 export function currentContainerOf(activeKey: string | null, rootId: string | null): string | null {
   const byId = new Map(
     useWorkspaceStore.getState().workspace.entries.map((entry) => [entry.id, entry]),
@@ -112,8 +110,6 @@ export function WorkbenchExplorer({
   const libraryRoot = useWorkspaceStore((s) => `${s.workspace.directory}/workspace`);
   const rootId = entries.some((entry) => entry.id === projectId) ? projectId : null;
   const root = entries.find((e) => e.id === rootId);
-  // 打开的若是远程项目，这棵树本轮只读：拖入的落点是远端 POSIX 路径，
-  // 本地写入入口（importDroppedFiles / moveEntry）会把它当本地目录，必须关掉。
   const remoteRoot = Boolean(root?.remoteId);
   const connections = useRemoteConnections();
   const activity = useRemoteActivity((s) => s.byProject);
@@ -208,7 +204,6 @@ export function WorkbenchExplorer({
     useTreeState.setState((s) => ({ expanded: [...new Set([...s.expanded, ...chain])] }));
     useTreeState.getState().startCreate({ kind, parentId: target });
   };
-  // 名称输入框空名失焦即取消，必须等菜单的焦点回收结束再建行。
   const afterMenuClose = useAfterMenuClose();
   const pending: ExplorerPending | null = pendingCreate && {
     ...pendingCreate,
@@ -240,7 +235,6 @@ export function WorkbenchExplorer({
     else onAction(action, id);
   };
 
-  // 窄屏抽屉只看 mobileOpen：忽略宽屏折叠残留，否则折叠目录后缩窗会永远打不开目录。
   const visible = narrow ? mobileOpen : !collapsed;
   const effectiveWidth = Math.min(width, Math.max(200, Math.round(viewportWidth * 0.28)));
   const wrapHeaderActions = !narrow && changesProjectId !== null && effectiveWidth < 220;
@@ -262,8 +256,6 @@ export function WorkbenchExplorer({
         inert={!visible}
         tabIndex={-1}
         className={cn(
-          // 三级背景层次（用户裁决，勿压平）：侧栏画布 --page → 目录树 --inset
-          // 略深一档 → 内容区白(1.0)；树与白底之间靠色差分隔，不画边框线。
           'min-h-0 shrink-0 flex-col overflow-hidden bg-page',
           narrow &&
             'absolute inset-y-app-inset left-app-inset z-drawer w-sidebar max-w-sheet rounded-panel glass-thick animate-drawer-left',
@@ -439,7 +431,7 @@ export function WorkbenchExplorer({
                 projectId={changesProjectId}
               />
             )}
-            {/* 切到改动时只隐藏不卸载：卸载会释放已展开目录，切回要重新读盘。 */}
+
             <div className="flex min-h-0 flex-1 flex-col" hidden={showChanges}>
               <SearchInput
                 aria-label="筛选已同步内容"
@@ -450,7 +442,6 @@ export function WorkbenchExplorer({
               />
               <div
                 className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
-                // 点空白处回到项目根：之后的新建落在二级，而不是沿用上次选中的子文件夹。
                 onClick={(event) => {
                   if (event.target === event.currentTarget) useTreeState.getState().select(rootId);
                 }}
@@ -548,8 +539,6 @@ export function WorkbenchExplorer({
       <Resizer
         className={cn('bg-transparent', !visible && 'hidden')}
         label="调整目录宽度"
-        // 拖拽绑定用户偏好值与原上限：渲染宽度另有视口钳制，若把钳制值当 max，
-        // 窄窗下 min==max==value 会把拖拽完全锁死，还会把钳制值写回偏好。
         max={SIDEBAR_MAX_WIDTH}
         min={SIDEBAR_MIN_WIDTH}
         onChange={onChange}

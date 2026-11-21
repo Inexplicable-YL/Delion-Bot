@@ -1,5 +1,3 @@
-// 会话存储：SQLite 只存索引（项目归属、cwd、标题、置顶、归档、模型选择与 JSONL 路径），
-// 完整记录是 Pi 的会话文件。cwd 解析失败直接报错，不静默换目录。
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, sep } from 'node:path';
@@ -45,8 +43,6 @@ function chatSessionDirectory(id: string) {
   return dir;
 }
 
-/** 会话工作目录：会话自己的 cwd 优先；为 NULL 时按项目条目解析（通用会话用工作区根）。缺失即报错。
- *  远程项目的路径在远端，本地没有对应目录，因此跳过本地存在性检查。 */
 export function sessionCwd(projectId: string | null, stored: string | null): string {
   if (stored) return stored;
   const path = projectId === null ? workspaceRoot() : hostPorts().projects.find(projectId)?.path;
@@ -87,7 +83,6 @@ function readyChoice(
   };
 }
 
-/** 会话自己的选择优先；从未选过的沿用最近发过消息的会话，那个也用不了时取第一个可用提供商的首个模型。 */
 export function modelChoice(meta: SessionRow): ModelChoice {
   const providers = llmProviders();
   const usable = usableLlmProviders(providers);
@@ -161,7 +156,6 @@ export function storeVisibility(id: string, patch: { archived?: boolean; pinned?
     db.prepare('UPDATE sessions SET pinned=? WHERE id=?').run(Number(patch.pinned), id);
 }
 
-/** 换归属时 cwd 跟着换：进项目留 NULL 按项目目录解析，回通用池用自己的私有目录。子 Agent 会话只随迁归属。 */
 export function storeProject(id: string, projectId: string | null) {
   const db = hostPorts().database();
   const cwd = projectId === null ? chatSessionDirectory(id) : null;
@@ -216,7 +210,6 @@ export function archivedSessions(): ChatSessionSummary[] {
     .map((row) => toSummary(row as SummaryRow));
 }
 
-/** 通用池的空会话入口：只复用 cwd 在 chat-sessions 之下的；cwd 为 NULL 或建在别处的旧会话不认。 */
 function emptyGeneralSessionId(): string | undefined {
   const privateRoot = join(hostPorts().paths.storage(), 'chat-sessions', sep);
   const row = hostPorts()
@@ -242,7 +235,6 @@ export function emptySessionId(projectId: string | null): string | undefined {
   )?.id;
 }
 
-/** 文件在首条消息后由 Pi 写出。通用会话建自己的私有目录并写进 cwd 列，项目会话留 NULL 继续按项目目录解析。 */
 export function insertSession(projectId: string | null): string {
   const id = randomUUID();
   const cwd = projectId !== null ? null : chatSessionDirectory(id);
@@ -311,7 +303,6 @@ export function insertSubagentSession(parentId: string, description: string, cwd
 }
 
 let piSync: typeof import('@earendil-works/pi-coding-agent') | undefined;
-/** 读取历史的入口先加载 Pi，生成会话快照时同步取用。 */
 export function requirePiSync() {
   if (!piSync) throw new Error('Pi 尚未加载');
   return piSync;

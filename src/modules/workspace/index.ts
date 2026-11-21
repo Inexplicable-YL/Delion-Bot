@@ -1,4 +1,3 @@
-// 工作区：项目与资料条目、本地与远程目录树、文件读写和工作台布局；资料来源与预览协议对其他模块开注册口。
 import { defineModule } from '../../app/module';
 import { invalidateSessions } from '../../core/agent/session/run';
 import { registerCommandDomain } from '../../core/capabilities/commands';

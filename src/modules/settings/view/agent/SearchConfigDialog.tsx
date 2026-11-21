@@ -5,26 +5,26 @@ import {
   PlusIcon as Plus,
   TrashIcon as Trash2,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../../../ui/button';
-import { EmptyState } from '../../../../ui/empty-state';
-import { Input } from '../../../../ui/input';
+import { Button } from '../../../../ui/Button';
+import { EmptyState } from '../../../../ui/EmptyState';
+import { Input } from '../../../../ui/Input';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../../ui/select';
-import { Textarea } from '../../../../ui/textarea';
+} from '../../../../ui/Select';
+import { Textarea } from '../../../../ui/Textarea';
 import type {
   WebSearchEntry,
   WebSearchEntryInput,
   WebSearchKeySource,
 } from '../../../../core/protocol/capabilities';
-import { Switch } from '../../../../ui/switch';
-import { ErrorText } from '../../../../ui/alert';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../../../ui/dialog';
-import { Field } from '../../../../ui/field';
+import { Switch } from '../../../../ui/Switch';
+import { ErrorText } from '../../../../ui/Alert';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../../../ui/Dialog';
+import { Field } from '../../../../ui/Field';
 import { capabilitiesClient } from '../../../chat/view';
 import { errorMessage } from '../../../../core/protocol/contract';
 

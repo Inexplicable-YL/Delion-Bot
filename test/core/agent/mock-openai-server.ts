@@ -1,8 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-/** 可编程的本地 OpenAI 兼容 SSE mock 服务：按序返回脚本化响应并记录请求。 */
-
 export interface SseFrame {
   data: unknown;
   delayMs?: number;
@@ -98,8 +96,6 @@ export class MockOpenAiServer {
     this.queue.push(response);
   }
 
-  /** 每用例独立捕获：共享 requests 数组的按位切片存在跨用例竞态窗口，需要精确归属的
-   *  断言（如逐请求校验字段）改用监听器只收本用例运行期间到达的请求。 */
   onRequest(listener: (request: RecordedRequest) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -125,7 +121,6 @@ export class MockOpenAiServer {
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    // 连接被客户端中断（abort 测试）时避免 response 上的未处理 error 冒泡。
     response.on('error', () => {});
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(chunk as Buffer);

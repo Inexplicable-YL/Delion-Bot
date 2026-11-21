@@ -1,4 +1,3 @@
-// 协议 schema 一变就失败：只新增时用 pnpm test -u 更新；删改字段要先升 AGENT_PROTOCOL_VERSION。
 import { expect, it } from 'vitest';
 import { agentProtocolSchema } from '../../src/core/protocol/schema';
 

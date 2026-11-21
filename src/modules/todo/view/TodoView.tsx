@@ -22,20 +22,20 @@ import {
   type TodoSaveInput,
   type TodoState,
 } from '../contract';
-import { Button } from '../../../ui/button';
-import { ConfirmDialog } from '../../../ui/dialog';
-import { Textarea } from '../../../ui/textarea';
+import { Button } from '../../../ui/Button';
+import { ConfirmDialog } from '../../../ui/Dialog';
+import { Textarea } from '../../../ui/Textarea';
 import { useNow } from '../../../ui/use-now';
-import { CountBadge } from '../../../ui/count-badge';
-import { EmptyState } from '../../../ui/empty-state';
-import { Card } from '../../../ui/card';
-import { Input } from '../../../ui/input';
-import { Field } from '../../../ui/field';
-import { IconButton } from '../../../ui/icon-button';
-import { SegmentedControl } from '../../../ui/segmented-control';
-import { Switch } from '../../../ui/switch';
+import { CountBadge } from '../../../ui/CountBadge';
+import { EmptyState } from '../../../ui/EmptyState';
+import { Card } from '../../../ui/Card';
+import { Input } from '../../../ui/Input';
+import { Field } from '../../../ui/Field';
+import { IconButton } from '../../../ui/IconButton';
+import { SegmentedControl } from '../../../ui/SegmentedControl';
+import { Switch } from '../../../ui/Switch';
 import { cn } from '../../../ui/cn';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { EventColorRow } from './EventColorRow';
 import { dateKey, startOfDay } from './calendar';
 import { TodoCalendar } from './TodoCalendar';
@@ -44,14 +44,13 @@ import { TodoDetail } from './TodoDetail';
 import { TodoSheet } from './TodoSheet';
 import { useTodoPreferences } from './preferences';
 import { dateLabel } from './todo-format';
-import { ErrorText } from '../../../ui/alert';
+import { ErrorText } from '../../../ui/Alert';
 import type { NavTargets } from '../../../app/module';
 
 const views = ['calendar', 'list'] as const;
 
 const todo = createClient(todoContract, window.delionBot?.bridge);
 
-/** 待办状态的唯一副本：主进程推送 todo:state 时直接写入这一键（docs/adr/0017）。 */
 export function useTodoState() {
   return useQuery({ queryKey: ['todo', 'state'], queryFn: () => todo.state() });
 }
@@ -209,7 +208,6 @@ export function TodoView({ target }: { target: NavTargets['todo'] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<TodoItem | null>(null);
-  // 每次跳转都是新对象，据此在渲染中切到它的详情。
   const [shownTarget, setShownTarget] = useState(target);
   if (target !== shownTarget) {
     setShownTarget(target);

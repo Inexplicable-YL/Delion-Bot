@@ -1,13 +1,10 @@
 import type { ReactNode } from 'react';
 import type { AgentToolResult, SubagentDetails, WorkspaceChat } from '../../../core/protocol/agent';
-import { Reasoning } from '../../../ui/agent/reasoning';
-import { ToolGroup, ToolStep, type ToolStepStatus } from '../../../ui/agent/tool';
-import { Trace } from '../../../ui/agent/trace';
-import { ChatMarkdown } from './markdown';
-import { ToolBody } from './tool-views';
-
-// 回复的行内轨迹（Codex / Claude 式）：思考与工具步骤按发生顺序夹在正文之间，每步一行「动词 + 对象」。
-// 整轮折叠行只报用时：失败标在步骤行尾，整轮失败由错误卡说明。
+import { Reasoning } from '../../../ui/agent/Reasoning';
+import { ToolGroup, ToolStep, type ToolStepStatus } from '../../../ui/agent/Tool';
+import { Trace } from '../../../ui/agent/Trace';
+import { ChatMarkdown } from './Markdown';
+import { ToolBody } from './ToolViews';
 
 type ChatParts = NonNullable<WorkspaceChat['messages'][number]['parts']>;
 type Part = ChatParts[number];
@@ -33,7 +30,6 @@ function basename(path: string) {
   return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
 }
 
-/** 步骤对象：文件名、命令首行、搜索词；路径只显示文件名，完整值放 title。 */
 function stepTarget(result: AgentToolResult): { short: string; full: string } {
   const input = (result.input ?? {}) as Record<string, unknown>;
   const text = (key: string) => (typeof input[key] === 'string' ? (input[key] as string) : '');
@@ -61,7 +57,6 @@ function stepTarget(result: AgentToolResult): { short: string; full: string } {
   }
 }
 
-/** edit 的增删行数（来自参数的 old/new 文本，无需工具 details）。 */
 function editStat(result: AgentToolResult): { added: number; deleted: number } | undefined {
   if (result.name !== 'edit') return undefined;
   const edits = ((result.input as { edits?: { oldText?: string; newText?: string }[] } | null)
@@ -93,7 +88,6 @@ function ChatToolStep({ result, live }: { result: AgentToolResult; live: boolean
     status === 'running' && result.name === 'task'
       ? (result.output?.details as SubagentDetails | undefined)?.tool
       : undefined;
-  // 失败也走工具视图，只由行尾标记与卡片色条提示，不把正文染红。
   return (
     <ToolStep
       label={status === 'running' ? verb.doing : verb.done}
@@ -124,7 +118,6 @@ function summarize(results: AgentToolResult[]): string {
     .join('，');
 }
 
-/** 折叠行的用时：不足 1 秒按 1 秒计，分钟以上带分。 */
 export function formatDuration(ms: number): string {
   const seconds = Math.max(1, Math.ceil(ms / 1000));
   if (seconds < 60) return `${seconds} 秒`;
@@ -147,7 +140,6 @@ function ChatToolGroup({ results, live }: { results: AgentToolResult[]; live: bo
   );
 }
 
-/** 回复正文与轨迹：相邻工具组合并（Pi 每轮一组工具调用）；正文节点 key 取首次出现的索引，流式增长不重建。 */
 export function ReplyTrace({
   parts,
   live,
@@ -157,7 +149,6 @@ export function ReplyTrace({
 }: {
   parts: ChatParts;
   live: boolean;
-  /** 本轮的起止时刻（用户发问到回复落定）；旧会话没有，折叠行只报状态。 */
   startedAt?: number;
   finishedAt?: number;
   renderText?: (text: string) => ReactNode;
@@ -189,7 +180,6 @@ export function ReplyTrace({
     if (part.type === 'reasoning') return <Reasoning live={blockLive}>{part.text}</Reasoning>;
     return <ChatToolGroup live={blockLive} results={part.results} />;
   };
-  // 整轮结束且以正文收尾：之前的说明、思考与工具自动折进一行，只留最终回复。
   const foldable = !live && blocks.length > 1 && blocks[lastIndex]!.part.type === 'text';
   const duration =
     startedAt !== undefined && finishedAt !== undefined && finishedAt > startedAt

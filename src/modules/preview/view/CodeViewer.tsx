@@ -26,7 +26,6 @@ const viewerTheme = EditorView.theme({
     paddingRight: '1.5rem',
     textAlign: 'left',
   },
-  // 行号栏在横向滚动时是 sticky 的：背景必须不透明并覆盖左侧留白，否则长行会从行号下透出。
   '.cm-gutters': {
     borderRight: '1px solid var(--line)',
     backgroundColor: 'var(--surface)',
@@ -66,7 +65,6 @@ export function CodeViewer({
       state: EditorState.create({
         doc: value,
         extensions: [
-          // 只读仅锁事务不改 editable：保持可聚焦，搜索面板与键盘选择/复制可用。
           EditorState.readOnly.of(true),
           languageConf.of([]),
           lineNumbers(),
@@ -101,7 +99,6 @@ export function CodeViewer({
     });
   }, [wordWrap]);
 
-  /* 聚焦刷新等外部重读后的整篇替换：保持滚动位置，不计入编辑（只读本无编辑）。 */
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;

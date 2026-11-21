@@ -1,17 +1,16 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Switch } from '../../../ui/switch';
+import { Switch } from '../../../ui/Switch';
 import { SectionHeader } from './SectionHeader';
 import { SettingRow } from './SettingRow';
 import { SettingsGroup } from './SettingsGroup';
 import { settingsClient } from './client';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { UpdateControl } from '../../update/view';
 import { errorMessage } from '../../../core/protocol/contract';
 
 export function GeneralSection({ navEntries }: { navEntries: ReactNode }) {
   const queryClient = useQueryClient();
-  // 未读到当前状态（data 为 undefined）时开关保持禁用，避免闪烁出错误的默认值。
   const openAtLogin = useQuery({
     queryKey: ['settings', 'openAtLogin'],
     queryFn: () => settingsClient.openAtLogin().catch(() => false),
@@ -19,7 +18,6 @@ export function GeneralSection({ navEntries }: { navEntries: ReactNode }) {
   }).data;
   const [busy, setBusy] = useState(false);
 
-  // 浏览器预览没有 preload，只维护选择态；桌面端经主进程持久化并同步系统启动项。
   const toggleOpenAtLogin = async (next: boolean) => {
     if (busy) return;
     setBusy(true);

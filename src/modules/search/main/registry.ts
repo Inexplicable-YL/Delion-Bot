@@ -1,4 +1,3 @@
-// 只搜本机已有的数据：每个来源自己写查询，这里按注册顺序分组汇总。
 import { SEARCH_LIMIT, type SearchGroup, type SearchHit, type SearchIcon } from '../contract';
 
 export interface SearchProvider {
@@ -21,7 +20,6 @@ export function querySearch(query: string): SearchGroup[] {
   });
 }
 
-/** SQLite LIKE 的字面量匹配：转义通配符，配合 `ESCAPE '!'` 使用。 */
 export function likePattern(query: string): string {
   return `%${query.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_')}%`;
 }

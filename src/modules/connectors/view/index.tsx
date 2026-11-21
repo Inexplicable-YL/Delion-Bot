@@ -3,10 +3,10 @@ import { useMutation } from '@tanstack/react-query';
 import { SquaresPlusIcon as Blocks } from '@heroicons/react/24/outline';
 import { defineView } from '../../../app/module';
 import { errorMessage } from '../../../core/protocol/contract';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { cn } from '../../../ui/cn';
-import { ConfirmDialog } from '../../../ui/dialog';
-import { ErrorText } from '../../../ui/alert';
+import { ConfirmDialog } from '../../../ui/Dialog';
+import { ErrorText } from '../../../ui/Alert';
 import { McpTab, SettingsGroupLabel, SectionHeader } from '../../settings/view';
 import { appCategories, featuredApps, recommendedApps, toolkit } from '../contract';
 import { ComposioDialog } from './ComposioDialog';
@@ -48,7 +48,6 @@ function Connectors() {
   const browsing = category === null && !keyword;
   const sections = [
     { title: 'Connected', apps: filtered(toolkit.options.filter((slug) => connected.has(slug))) },
-    // 推荐只在浏览全部时出现；筛选或搜索时它会和分类结果重复。
     {
       title: 'Recommended',
       apps: browsing
@@ -144,7 +143,6 @@ function Connectors() {
                     aria-label={section.title}
                     className={cn(
                       'grid gap-2',
-                      // 已连接与下方可添加的应用之间只用一道通栏细线分区，行的左右边缘保持对齐。
                       section.title === 'Connected' &&
                         index < sections.length - 1 &&
                         'border-b border-line pb-8',

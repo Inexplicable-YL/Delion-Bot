@@ -1,10 +1,6 @@
 import DOMPurify from 'dompurify';
 import { renderPreviewHtml } from './preview-html';
 
-/**
- * 清洗 HTML 正文供沙箱 iframe 使用。rootSize：iframe 不继承外层 rem，需注入才随字号缩放；
- * htmlScrollY：'hidden' 用于随内容增高的详情，'auto' 用于固定高度、内层自滚的预览。
- */
 export function sanitizeHtml(
   text: string | null | undefined,
   baseUrl: string,

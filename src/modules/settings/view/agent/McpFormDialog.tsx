@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { Button } from '../../../../ui/button';
-import { Input } from '../../../../ui/input';
-import { Textarea } from '../../../../ui/textarea';
-import { SegmentedControl } from '../../../../ui/segmented-control';
+import { Button } from '../../../../ui/Button';
+import { Input } from '../../../../ui/Input';
+import { Textarea } from '../../../../ui/Textarea';
+import { SegmentedControl } from '../../../../ui/SegmentedControl';
 import type { McpServerView, McpTransportConfig } from '../../../../core/protocol/capabilities';
 import { mcpUpdatePatch, parseMcpForm } from './mcp-logic';
-import { ErrorText } from '../../../../ui/alert';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../../../ui/dialog';
-import { Field } from '../../../../ui/field';
+import { ErrorText } from '../../../../ui/Alert';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../../../ui/Dialog';
+import { Field } from '../../../../ui/Field';
 import { capabilitiesClient } from '../../../chat/view';
 import { errorMessage } from '../../../../core/protocol/contract';
 

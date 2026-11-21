@@ -24,8 +24,6 @@ import { readyDocumentReader } from '../capabilities/documents';
 import { readDisabledSkills } from '../capabilities/skills';
 import { hostPorts } from '../ports';
 
-// 内联图片暂存在 userData/chat-media/<UUID>.<ext>：模型拿到的是 base64（随 Pi 会话落盘），
-// 文档同样保留本地副本供 skill 按需读取；文本附件只进内存。启动时按会话引用回收孤儿文件。
 const attachments = new Map<string, { name: string } & ({ bytes: Buffer } | { path: string })>();
 
 function assertDocumentSkill(): void {

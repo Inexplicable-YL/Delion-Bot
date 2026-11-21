@@ -22,7 +22,6 @@ export const projectSearch: SearchProvider = {
   },
 };
 
-// 只按标题匹配：正文在 Pi 的 JSONL 会话文件里；子 Agent 会话只从父会话进入，不进搜索。
 export const chatSearch: SearchProvider = {
   id: 'chat',
   label: '聊天对话',

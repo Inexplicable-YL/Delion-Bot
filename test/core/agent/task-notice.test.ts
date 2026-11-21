@@ -1,5 +1,3 @@
-// 后台任务的通知投递：真实 Pi 会话加本地 mock 模型。父会话空闲时自动开一轮且界面显示运行中，
-// 主对话停止后结束的任务照常唤醒；每个任务只投递一次。
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

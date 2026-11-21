@@ -1,5 +1,3 @@
-// 跨会话读取：用 Pi 的 SessionManager 构造会话记录，覆盖多次压缩、编辑重发分支、运行中 / 停止 / 中断的轮次、
-// 插队并轮、超长回复与分页；session_search / session_read 只看当前项目内未归档的会话。
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -191,7 +189,6 @@ describe('pageTurns', () => {
   });
 
   it('超出总长度时少取几轮，续读能接上；单轮超长时截断并标出', () => {
-    // 每轮 43 字，上限 100 只容得下两轮。
     const page = pageTurns(turns, { turns: 10 }, 100);
     expect(page.turns.map(({ turnId }) => turnId)).toEqual(['d', 'e']);
     expect(page.before).toBe('d');

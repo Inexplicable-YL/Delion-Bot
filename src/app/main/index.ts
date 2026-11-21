@@ -51,7 +51,6 @@ import Database from 'better-sqlite3';
 import { spawn as spawnPty } from 'node-pty';
 
 app.commandLine.appendSwitch('enable-smooth-scrolling');
-// 默认 en-US 会让原生日期控件显示 AM/PM；强制与全中文界面一致。
 app.commandLine.appendSwitch('lang', 'zh-CN');
 registerPreviewScheme();
 
@@ -134,7 +133,6 @@ app
   .then(() => {
     if (!hasSingleInstanceLock) return;
     provideHostPorts(electronPorts);
-    // Windows 通知按 AppUserModelID 识别应用，开发运行也要显式设置。
     if (process.platform === 'win32') app.setAppUserModelId('io.delionbot.desktop');
     if (process.platform === 'darwin') {
       const action = (value: TrayAction) => () => {
@@ -164,7 +162,6 @@ app
             submenu: [
               { label: '新建对话', click: action('new-chat') },
               { label: '新建项目', click: action('new-project') },
-              // ⌘W 留给可配置的工作台关标签动作，原生菜单不抢同一组合。
               { label: '关闭窗口', click: (_item, window) => window?.close() },
             ],
           },
@@ -176,7 +173,6 @@ app
       if (app.isPackaged && !smokeTest) startHidden ||= app.getLoginItemSettings().wasOpenedAtLogin;
     } else Menu.setApplicationMenu(null);
     getDatabase();
-    // 随包 MinGit 与 rg/fd 前插 PATH，终端与 Agent 子进程开箱可用。
     prependRuntimePath();
     registerPreviewProtocol();
     applyTheme(savedTheme());
@@ -211,9 +207,7 @@ function openExternalUrl(url: string): void {
     if (external.protocol === 'https:' || external.protocol === 'http:') {
       void shell.openExternal(external.href);
     }
-  } catch {
-    // 无法解析的目标不外开。
-  }
+  } catch {}
 }
 
 async function createWindow(): Promise<void> {
@@ -227,7 +221,6 @@ async function createWindow(): Promise<void> {
     width: 1100,
     height: 760,
     minWidth: 600,
-    // 容得下 @ 候选菜单向上展开（256px）+ composer + 头部。
     minHeight: 600,
     show: !smokeTest && !startHidden,
     backgroundColor: backgroundColor(),
@@ -288,7 +281,6 @@ async function createWindow(): Promise<void> {
     }
   });
   const session = window.webContents.session;
-  // 仅放行终端所需的剪贴板权限。
   const allowClipboard = (_contents: unknown, permission: string) =>
     permission === 'clipboard-sanitized-write' || permission === 'clipboard-read';
   session.setPermissionRequestHandler((contents, permission, callback) =>
@@ -314,7 +306,6 @@ async function createWindow(): Promise<void> {
       smokeTest ? { query: { 'smoke-test': '1' } } : undefined,
     );
   }
-  // 页面加载后再设置，避免导航重置缩放级别。
   window.webContents.setZoomFactor(savedZoom());
 
   if (!smokeTest) createTray(window);
@@ -337,11 +328,9 @@ async function createWindow(): Promise<void> {
         `document.querySelector('main') !== null && document.querySelector('aside[aria-label="主导航"]') !== null && window.delionBot?.version === ${JSON.stringify(app.getVersion())} && typeof window.delionBot?.bridge.invoke === 'function' && typeof window.require === 'undefined'`,
       );
       if (!rendered) throw new Error('Renderer or preload smoke check failed');
-      // Pi 是纯 ESM 包，只能动态 import 加载；冒烟覆盖 dev 与打包两条路径。
       const pi = await loadPi();
       if (typeof pi.createAgentSession !== 'function')
         throw new Error('Pi runtime smoke check failed');
-      // 签名与 hardened runtime 可能让 PTY 起不来，打包产物要真起一次。
       await new Promise<void>((resolve, reject) => {
         const pty = spawnPty(locateBash(), ['--noprofile', '--norc', '-c', 'echo DELION_PTY_OK'], {
           cols: 80,
@@ -419,8 +408,6 @@ app
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-// 退出前停掉后台任务并结束会话，最多等 2 秒。拦在 before-quit：
-// will-quit 被拦下后 Electron 不再响应之后的 app.quit()。
 let sessionsClosed = false;
 app.on('before-quit', (event) => {
   quitting = true;
@@ -434,11 +421,9 @@ app.on('will-quit', () => {
   closeDomainBridge();
   tray?.destroy();
   for (const stop of stopModules) stop();
-  // 远端 helper 靠心跳消失后自行退出，这里只关本地隧道；先收掉 watch，免得退出中重建通道。
   closeRemoteWatch();
   void closeHelper();
   closeAllPortTunnels();
-  // 系统程序可能还开着为「用系统默认程序打开」下载的临时文件，删失败即可。
   void closeRemoteOpens();
   closeDatabase();
 });

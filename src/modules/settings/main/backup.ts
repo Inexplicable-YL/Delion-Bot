@@ -8,7 +8,6 @@ import { availablePath } from '../../workspace';
 import type { BackupResult } from '../contract';
 import { cacheDirectoryNames } from './cache';
 
-// 数据库走 VACUUM INTO 取一致快照；-wal/-shm 属于当前连接，跟着复制只会得到不自洽的副本。
 const databaseFiles = new Set(['delion.db', 'delion.db-wal', 'delion.db-shm', 'delion.db-journal']);
 
 function backupFolderName(now: Date) {
@@ -22,12 +21,10 @@ function isInside(parent: string, child: string) {
   return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
-/** 跳过符号链接（含 Windows junction）：无开发者模式时复刻链接会 EPERM，连累整个顶层条目。 */
 async function skipLinks(source: string) {
   return !(await lstat(source)).isSymbolicLink();
 }
 
-/** 应用数据额外按名字跳过 Chromium 缓存（名单与设置里的「缓存占用」共用，见 `cache.ts`）；工作目录里叫 Cache 的目录可能是用户自己的东西。 */
 async function skipCacheAndLinks(source: string) {
   if (cacheDirectoryNames.has(basename(source))) return false;
   return skipLinks(source);
@@ -48,7 +45,6 @@ export async function exportUserData(window: BrowserWindow | null): Promise<Back
   const dataDirectory = app.getPath('userData');
   const workspace = hostPorts().paths.storage();
   const skills = builtinSkillsDirectory();
-  // 目标落在源目录里面会让导出边写边读自己（复制到一半才发现，还会留下半个文件夹）。
   for (const source of [dataDirectory, workspace, skills]) {
     if (isInside(source, parent)) {
       return { status: 'failed', reason: '不能保存到 Delion Bot 的数据目录里，请另选一个位置' };
@@ -75,7 +71,6 @@ export async function exportUserData(window: BrowserWindow | null): Promise<Back
     }
   }
 
-  // 工作目录（默认「文档/Delion Bot」）与 userData 互不相干，各放一层，恢复时不会互相覆盖。
   if (existsSync(workspace)) {
     try {
       await cp(workspace, join(destination, '工作目录'), {
@@ -86,7 +81,6 @@ export async function exportUserData(window: BrowserWindow | null): Promise<Back
       skipped.push('工作目录');
     }
   }
-  // 用户自己写的 Skill 与内置 Skill 同处 ~/.delion-bot/skills，分不开，整层带走。
   if (existsSync(skills)) {
     try {
       await cp(skills, join(destination, '技能'), { recursive: true, filter: skipLinks });

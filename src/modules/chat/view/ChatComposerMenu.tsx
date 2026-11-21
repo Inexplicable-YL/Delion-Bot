@@ -26,13 +26,13 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
   useAfterMenuClose,
-} from '../../../ui/dropdown-menu';
-import { IconButton } from '../../../ui/icon-button';
-import { Input } from '../../../ui/input';
+} from '../../../ui/DropdownMenu';
+import { IconButton } from '../../../ui/IconButton';
+import { Input } from '../../../ui/Input';
 import type { WebSearchEntrySummary } from '../../../core/protocol/capabilities';
 import { ConnectorAppIcon, type ConnectorApp } from '../../connectors/view';
 import { useWorkspaceStore } from '../../workspace/view';
-import { useChatTabSource } from './chat-source';
+import { useChatTabSource } from './ChatSource';
 import { capabilitiesClient } from './client';
 
 export function ChatComposerMenu({

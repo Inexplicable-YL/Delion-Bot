@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { todoCompleted, type TodoItem } from '../contract';
-import { CountBadge } from '../../../ui/count-badge';
-import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/popover';
+import { CountBadge } from '../../../ui/CountBadge';
+import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/Popover';
 import { cn } from '../../../ui/cn';
 import { dateKey, eventColorStyle, formatMonthDay, formatTime, weekDays } from './calendar';
 import { groupTodosByDay, monthGridDays } from './todo-calendar';

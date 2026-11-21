@@ -1,5 +1,3 @@
-// Markdown 即时渲染（Obsidian 式）：文档始终是磁盘上的原文，只加装饰，用户不改的字节一个都不会变；
-// 光标进入公式、mermaid、表格即回到原文。表格要求调用方以 markdownLanguage 为 base 解析。
 import { syntaxTree } from '@codemirror/language';
 import { RangeSetBuilder, StateField, type EditorState, type Extension } from '@codemirror/state';
 import {
@@ -41,7 +39,6 @@ class ImageWidget extends WidgetType {
     image.loading = 'lazy';
     image.className = 'cm-md-image';
     if (!this.block) return image;
-    // 块级挂件的外边距不计入高度测量，外包一层 flow-root 收进盒子里。
     const wrapper = document.createElement('div');
     wrapper.className = 'cm-md-image-block';
     wrapper.append(image);
@@ -142,7 +139,6 @@ class TaskWidget extends WidgetType {
       const at = view.posAtDOM(box) + this.markerOffset + 1;
       view.dispatch({ changes: { from: at, to: at + 1, insert: this.checked ? ' ' : 'x' } });
     });
-    // 勾选状态只由正文决定：浏览器自己的切换一律撤销。
     box.addEventListener('click', (event) => event.preventDefault());
     return box;
   }
@@ -167,7 +163,6 @@ class TableWidget extends WidgetType {
   }
   toDOM() {
     const wrapper = document.createElement('div');
-    // 引用里的表格沿用引用的左边线；列表里的表格按原文缩进对齐。
     wrapper.className = this.prefix.includes('>') ? 'cm-md-table cm-md-quote' : 'cm-md-table';
     if (!this.prefix.includes('>')) wrapper.style.marginLeft = `${this.prefix.length}ch`;
     const table = wrapper.appendChild(document.createElement('table'));
@@ -320,7 +315,6 @@ function tableWidget(state: EditorState, table: SyntaxNode, from: number): Table
   );
 }
 
-/** 返回 null 表示不按图片显示，保持原文。 */
 export type ImageResolver = (src: string, alt: string) => string | null;
 
 function imageWidget(
@@ -344,7 +338,6 @@ function imageLine(state: EditorState, node: SyntaxNode) {
   return whole ? line : null;
 }
 
-/** 块装饰只能来自 StateField，不能来自 ViewPlugin。 */
 function blockWidgets(state: EditorState, resolveImage: ImageResolver): DecorationSet {
   const ranges: Range[] = [];
   syntaxTree(state).iterate({
@@ -364,7 +357,6 @@ function blockWidgets(state: EditorState, resolveImage: ImageResolver): Decorati
         return false;
       }
       if (node.name === 'Table') {
-        // 块级替换必须覆盖整行；行首还有列表符号等内容时放不下，保持原文。
         const from = state.doc.lineAt(node.from).from;
         const whole =
           /^[ \t>]*$/.test(state.sliceDoc(from, node.from)) &&
@@ -399,7 +391,6 @@ function blockWidgets(state: EditorState, resolveImage: ImageResolver): Decorati
   });
   for (const math of findMath(state.sliceDoc(), 0, (pos) => inCode(state, pos))) {
     if (!math.display || touches(state, math.from, math.to)) continue;
-    // 块级替换必须覆盖整行：$$ 前后还有文字时退回行内显示。
     const first = state.doc.lineAt(math.from);
     const last = state.doc.lineAt(math.to);
     const whole = first.from === math.from && last.to === math.to;
@@ -496,7 +487,6 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
           return;
         }
         if (name === 'Image') {
-          // 独占一行且光标不在时由 blockWidgets 整行替换。
           const widget = imageWidget(state, node.node, resolveImage);
           if (!widget || (!editing && imageLine(state, node.node))) return false;
           const end = lineOf(node.to).to;
@@ -517,7 +507,6 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
       },
     });
   }
-  // 行内公式：光标不在其所在行时替换为渲染结果。块级公式在 blockWidgets 里处理。
   for (const { from, to } of view.visibleRanges) {
     const start = state.doc.lineAt(from).from;
     for (const math of findMath(state.sliceDoc(start, to), start, (pos) => inCode(state, pos))) {
@@ -535,7 +524,6 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
   return builder.finish();
 }
 
-// 只引用基础变量与一定会输出的 theme 变量：Tailwind v4 会裁掉未被工具类用到的 --color-*。
 const theme = EditorView.theme({
   '.cm-md-h': { fontWeight: '600', color: 'var(--ink)' },
   '.cm-md-h1': { fontSize: '1.6em', lineHeight: '1.4' },
@@ -610,7 +598,6 @@ const theme = EditorView.theme({
   '.cm-md-mermaid-error': { color: 'var(--danger)', textAlign: 'left' },
 });
 
-/** 粘贴或拖入图片：交给 save 落盘，只在落点插入这一次的引用文本。 */
 export function markdownImageInsert(
   save: (file: File) => Promise<string>,
   onError: (error: unknown) => void,
@@ -623,7 +610,6 @@ export function markdownImageInsert(
       for (const file of images) {
         try {
           const ref = await save(file);
-          // 空格与括号会截断 `(...)` 链接目标：编码写入，读取方经 decodeAssetPath 还原。
           const target = encodeURI(ref).replace(/\(/g, '%28').replace(/\)/g, '%29');
           const text = `![${file.name.replace(/[[\]\n]/g, ' ')}](${target})`;
           view.dispatch({

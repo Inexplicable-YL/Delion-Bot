@@ -1,4 +1,3 @@
-// delion 命令是 shell 里的业务命令，不常驻模型工具表；复用应用已有的缓存、登录与操作边界。
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
@@ -64,7 +63,6 @@ export async function startDomainBridge() {
     }
   });
   let address = await listen(server);
-  // Node fetch（undici）拒绝连接知名服务端口（69、137 等），随机端口偶尔会落入其中。
   for (let attempt = 0; isBlockedPort(address.port) && attempt < 5; attempt++) {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -100,7 +98,6 @@ function listen(server: ReturnType<typeof createServer>) {
   });
 }
 
-/** WHATWG Fetch 规范的 bad-IPv4-port 列表（Node fetch 同步拒绝连接这些端口）。 */
 const BLOCKED_PORTS = new Set([
   1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102,
   103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465,

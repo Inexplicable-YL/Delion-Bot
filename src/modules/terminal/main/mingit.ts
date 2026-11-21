@@ -23,7 +23,6 @@ function systemBash(): string | null {
   return candidates.find((path) => existsSync(path)) ?? null;
 }
 
-/** Windows 优先系统的 Git for Windows，再用随包 MinGit；不回退 PATH 上的 bash（可能是 WSL）。 */
 export function locateBash(): string {
   if (process.platform === 'darwin') {
     const bash = systemBash();
@@ -38,7 +37,6 @@ export function locateBash(): string {
   return bash;
 }
 
-/** 缺失时 pi 会从 GitHub 直连下载（大陆大概率失败），所以随安装包分发并前插 PATH。 */
 function searchToolsDir(): string | null {
   const root = app.isPackaged
     ? join(process.resourcesPath, 'bin')
@@ -48,9 +46,7 @@ function searchToolsDir(): string | null {
   return ['rg', 'fd'].every((name) => existsSync(join(dir, `${name}${suffix}`))) ? dir : null;
 }
 
-/** 终端与 Agent 都继承主进程 PATH：启动时前插随包 MinGit 的 cmd 目录（git）与搜索工具目录。 */
 export function prependRuntimePath(): void {
-  // Finder 启动时 PATH 可能只有系统目录；保留已有顺序，补齐系统工具及常用 Homebrew 位置。
   if (process.platform === 'darwin') {
     const paths = (process.env.PATH ?? '').split(':').filter(Boolean);
     for (const path of [

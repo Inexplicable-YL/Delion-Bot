@@ -1,5 +1,3 @@
-// 插队：真实 Pi 会话加本地 mock 模型。运行中发来的消息在当前回复结束后、下一次调用模型前送达，
-// 沿用本轮 turnId；停止或撤回时还没送达的交回输入框。
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -121,7 +119,6 @@ it('停止时还没送达的插队消息连同附件、评论交回输入框，�
   expect(userTurns(id).map(({ content }) => content)).toEqual(['先做 A']);
   expect(openSession(id).queued).toEqual([]);
   expect(lastRequest()).not.toContain('顺便做 B');
-  // 交回输入框的附件还要重新发送，轮末不能释放。
   expect(readChatAttachment(note.id).name).toBe('note.txt');
 }, 30_000);
 

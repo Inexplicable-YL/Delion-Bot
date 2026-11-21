@@ -1,4 +1,4 @@
-import { Switch } from '../../../../ui/switch';
+import { Switch } from '../../../../ui/Switch';
 import { SettingRow, SettingsGroup } from '../../../../modules/settings/view';
 import { usePreferences } from '../../shell/preferences';
 import { navEntries } from '../../navigation/entries';

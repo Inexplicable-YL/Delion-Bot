@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { EntryDialogRequest } from './entry-dialogs';
+import type { EntryDialogRequest } from './EntryDialogs';
 
 export const useEntryDialog = create<{
   request: EntryDialogRequest | null;

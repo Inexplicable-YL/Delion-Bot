@@ -1,12 +1,10 @@
-// 标签组：标签栏 + 内容宿主 + 边缘拖放分屏。
-// 同组只挂载活动标签；组内非活动标签状态由内容组件本地保留与否自决。
 import { Suspense, useEffect, useRef, useState, type DragEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { GroupNode, TabId } from '../../../modules/workspace/contract';
 import { ErrorBoundary } from '../shell/ErrorBoundary';
 import { cn } from '../../../ui/cn';
 import { GroupEmptyState } from './GroupEmptyState';
-import { ExplorerRevealButton } from './explorer-state';
+import { ExplorerRevealButton } from './ExplorerState';
 import { walkGroups } from './layout-schema';
 import { useWorkbenchLayout } from './layout-store';
 import { kindOf, registry, titleOf } from './registry';
@@ -43,7 +41,6 @@ const dropPreviewClass: Record<EdgeZone | 'center', string> = {
 };
 
 export function TabGroup({ group, onNewChat }: { group: GroupNode; onNewChat: () => void }) {
-  // 订阅派生布尔而非 focus/maximized 原值：只有本组的未聚焦态翻转时才重渲。
   const unfocused = useWorkbenchLayout((s) => s.maximized === null && s.focus !== group.id);
   const revealAnchor = useWorkbenchLayout(
     (s) => (s.maximized ?? walkGroups(s.root)[0]?.id ?? null) === group.id,
@@ -133,9 +130,7 @@ export function TabGroup({ group, onNewChat }: { group: GroupNode; onNewChat: ()
       onDropCapture={onDrop}
     >
       <TabBar group={group} unfocused={unfocused} showReveal={revealAnchor} />
-      {/* 空组没有标签栏可挂展开入口：锚定在标签栏左端同一坐标（px-2 pt-1 + self-end mb-1
-          即左上 8px/8px），最后一个标签关闭时按钮不位移，也不落进空态的居中栈。
-          z-10 压过后方内容层（relative 且 DOM 靠后，会整层拦截指针）。 */}
+
       {revealAnchor && !group.tabs.length && (
         <ExplorerRevealButton className="absolute left-2 top-2 z-10" />
       )}
@@ -154,8 +149,7 @@ export function TabGroup({ group, onNewChat }: { group: GroupNode; onNewChat: ()
         ) : (
           <GroupEmptyState onNewChat={onNewChat} />
         )}
-        {/* 预览覆盖正文、不染组背景；半屏与实际二等分结果一致。
-            复用现有明暗主题蓝色 token，15% 不透明度保持正文可读。 */}
+
         <div
           aria-hidden
           className={cn(

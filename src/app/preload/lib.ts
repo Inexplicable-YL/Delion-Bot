@@ -1,6 +1,5 @@
 import { ipcRenderer } from 'electron';
 
-// 模块未装进清单时主进程没有对应处理器，给出产品提示而不是 Electron 的内部报错。
 export const invoke = (channel: string, ...args: unknown[]) =>
   ipcRenderer.invoke(channel, ...args).catch((error: unknown) => {
     if (String(error).includes(`No handler registered for '${channel}'`))

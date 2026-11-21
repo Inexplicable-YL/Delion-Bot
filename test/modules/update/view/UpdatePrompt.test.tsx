@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
-// 下载完成才弹确认；答过不再问，下一版重新问；保存与安装期间保持模态锁。
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { UpdateSnapshot } from '../../../../src/modules/update/contract';
-// 契约客户端在模块加载时取 bridge，须先于导入视图装好；各用例只替换通道实现。
 const bridge = vi.hoisted(() => {
   const procedures = new Map<string, () => Promise<unknown>>();
   const delion = {
@@ -35,7 +33,6 @@ const readyState: UpdateSnapshot = {
 let container: HTMLDivElement;
 let root: Root;
 
-/** 弹窗经 Portal 挂在 document.body 上，不在 container 里。 */
 function button(text: string): HTMLButtonElement {
   const element = [...document.body.querySelectorAll('button')].find(
     (item) => item.textContent?.trim() === text,
@@ -80,7 +77,6 @@ it('只有下载完成才弹：其它阶段都不打扰用户', async () => {
 it('答过就不再出现，但下一版下载完会重新问', async () => {
   await show(readyState);
   await act(async () => button('下次启动时提醒').click());
-  // 推迟不改状态机，快照仍是 ready，弹窗不该再冒出来。
   await show(readyState);
   expect(document.body.querySelector('[role="dialog"]')).toBeNull();
 

@@ -55,7 +55,6 @@ function watchWorkspace(state: WorkspaceState) {
     if (watchers.has(root)) continue;
     try {
       const watcher = watch(root, { recursive: true, persistent: false }, (event, file) => {
-        // 目录清单不含内容或 mtime；内容写入不应使整棵树和引用候选失效。
         const ignoreRules =
           file &&
           (basename(String(file)) === '.gitignore' ||
@@ -82,9 +81,7 @@ function watchWorkspace(state: WorkspaceState) {
         watchers.delete(root);
       });
       watchers.set(root, watcher);
-    } catch {
-      /* 聚焦时重读仍可发现变化。 */
-    }
+    } catch {}
   }
 }
 
@@ -136,7 +133,6 @@ export async function pickProjectFolder(): Promise<string | null> {
   return picked.canceled || !path ? null : path;
 }
 
-// 远端通道共用入口：路径一律先判「在项目根之内」，集中一处校验，漏判即越界读写。
 export function remoteTargetOf(projectId: string) {
   const location = projectLocation(projectId);
   if (location.kind !== 'remote') throw new Error('该项目不是远程项目');
@@ -196,7 +192,6 @@ export async function uploadRemote(projectId: string, directory: string, paths: 
   return written;
 }
 
-/** 越界的路径直接丢掉而不报错：集合来自界面的展开状态，报错会让整棵树失联。 */
 export function watchRemote(projectId: string, paths: string[]) {
   const { target, root } = remoteTargetOf(projectId);
   const wanted = paths

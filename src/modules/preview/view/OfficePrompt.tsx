@@ -5,10 +5,10 @@ import {
   DocumentArrowDownIcon as FileDown,
   PresentationChartBarIcon as Presentation,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { useNow } from '../../../ui/use-now';
-import { EmptyState } from '../../../ui/empty-state';
-import { showToast } from '../../../ui/toast';
+import { EmptyState } from '../../../ui/EmptyState';
+import { showToast } from '../../../ui/Toast';
 import { onWorkspaceEvent, workspaceClient } from '../../workspace/view';
 import type {
   OfficeExportEvent,
@@ -16,8 +16,8 @@ import type {
   OfficeExportProgress,
   ResourceRef,
 } from '../../workspace/contract';
-import { ErrorText } from '../../../ui/alert';
-import { Spinner } from '../../../ui/spinner';
+import { ErrorText } from '../../../ui/Alert';
+import { Spinner } from '../../../ui/Spinner';
 import { errorMessage } from '../../../core/protocol/contract';
 
 function progressText(progress: OfficeExportProgress | null, opening = false): string {
@@ -42,7 +42,6 @@ interface OfficeExportRun {
   error: string;
 }
 
-/* 导出状态放模块级 store：切标签页会卸载组件，但导出仍在后台进行，回来要能看到进行中状态。 */
 const useOfficeExports = create<{
   runs: Record<string, OfficeExportRun>;
   start: (ref: ResourceRef, onExported?: () => void) => void;
@@ -59,7 +58,6 @@ const useOfficeExports = create<{
       },
     }));
     workspaceClient.exportOfficePdf(ref).then(
-      // 保持动画直到重读翻转到 PDF，避免闪回按钮被误点而重复导出。
       async () => {
         set((state) => {
           const run = state.runs[key];
@@ -68,9 +66,7 @@ const useOfficeExports = create<{
         });
         try {
           await onExported?.();
-        } catch {
-          /* 重读失败已在 PreviewTab 经浮窗提示；这里吞掉异常保证导出状态被清理 */
-        }
+        } catch {}
         set((state) => {
           const runs = { ...state.runs };
           delete runs[key];
@@ -89,7 +85,6 @@ const useOfficeExports = create<{
   },
 }));
 
-// 组件外常驻订阅：卸载期间到达的进度事件不丢，重挂载即恢复显示（按 ref 归属，并发导出互不串扰）。
 if (typeof window !== 'undefined' && window.delionBot)
   onWorkspaceEvent('officeExportProgress', (event: OfficeExportEvent) => {
     const key = exportKey(event.ref);
@@ -126,7 +121,6 @@ export interface OfficePromptProps {
   onExported: (() => void) | undefined;
 }
 
-/** pptx 的确认卡片：经 PowerPoint 导出 PDF 预览需用户主动触发，也可直接用系统默认应用打开。 */
 export function OfficePromptCard({ title, officeRef, onExported }: OfficePromptProps) {
   const { supported, exporting, opening, error, run, progress, elapsed } = useOfficeExport(
     officeRef,

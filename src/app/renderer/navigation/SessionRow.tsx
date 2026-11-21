@@ -1,4 +1,4 @@
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../ui/hover-card';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../ui/HoverCard';
 import {
   ArchiveBoxIcon as Archive,
   BookmarkIcon as Pin,
@@ -19,9 +19,7 @@ export interface NavSessionSummary {
   pinned?: boolean;
   archived?: boolean;
 }
-/** 负载只有会话 id；归属由放下处按导航数据反查，未知 id 直接忽略。 */
 export const sessionDragType = 'application/x-delion-session';
-/** 项目内会话拖动时附带的标记：拖放期间读不到负载，聊天区靠它拒绝放下，移出项目只走菜单。 */
 export const projectSessionDragType = 'application/x-delion-project-session';
 const rowMarker = 'grid size-control-xs shrink-0 place-items-center';
 const badgeVisual: Record<RunStatus, { className: string; label: string }> = {
@@ -103,7 +101,7 @@ export function SessionRow({
           </span>
         </HoverCardContent>
       </HoverCard>
-      {/* 行尾标记与「…」共用一个槽位：归档标记常驻且不可点；置顶标记在「…」出现时让位。 */}
+
       {session.archived ? (
         <span className={cn(rowMarker, 'text-ink-3')}>
           <Archive className="size-4" role="img" aria-label="已归档" />

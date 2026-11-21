@@ -1,11 +1,9 @@
 import { LLM_MODEL_LIMIT } from '../../../../core/protocol/llm-models';
 
-/** 勾选结果按检测列表顺序回传；列表外的勾选（换过服务商后的残留）自然被丢掉。 */
 export function selectedModels(options: string[], checked: ReadonlySet<string>): string[] {
   return options.filter((id) => checked.has(id));
 }
 
-/** 写入配置前的上限收敛；提示文案与设置页同一套，避免两处说法不一致。 */
 export function capModels(
   picked: string[],
   limit = LLM_MODEL_LIMIT,

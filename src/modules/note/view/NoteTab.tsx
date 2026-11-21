@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 
-import { Button } from '../../../ui/button';
-import { showToast } from '../../../ui/toast';
+import { Button } from '../../../ui/Button';
+import { showToast } from '../../../ui/Toast';
 import { parseRemoteNodeId, type TabId, type WorkspaceEntry } from '../../workspace/contract';
 import { useWorkspaceStore, workspaceClient } from '../../workspace/view';
-import { DocumentToolbar } from './document-toolbar';
-import { useNoteDraftSource } from './draft-source';
+import { DocumentToolbar } from './DocumentToolbar';
+import { useNoteDraftSource } from './DraftSource';
 import { MarkdownEditor } from './MarkdownEditor';
 import {
   noteScrollOf,
@@ -15,8 +15,8 @@ import {
 } from './view-memory';
 import { useNoteDrafts } from './drafts';
 import { markdownImageInsert } from './live-preview';
-import { Spinner } from '../../../ui/spinner';
-import { ConfirmDialog } from '../../../ui/dialog';
+import { Spinner } from '../../../ui/Spinner';
+import { ConfirmDialog } from '../../../ui/Dialog';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const imageInsert = (entryId: string) =>
@@ -45,7 +45,6 @@ export function parseNoteTabId(tabId: string): string | null {
   return entryId || null;
 }
 
-/** 草稿经注入的 NoteDraftSource 读写；编辑器只把用户改的字节写回去，不做格式化。 */
 export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
   const entryId = parseNoteTabId(tabId);
   const scrollKey = `${tabId}:${groupId}`;
@@ -72,7 +71,6 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
     return () => void source.release(entryId);
   }, [entryId, source]);
 
-  // 笔记文件可能被外部编辑：窗口聚焦时重读磁盘；有未保存修改时不监听，避免覆盖编辑。
   useEffect(() => {
     if (entryId === null || unsaved) return;
     const refresh = () => reload(entryId);

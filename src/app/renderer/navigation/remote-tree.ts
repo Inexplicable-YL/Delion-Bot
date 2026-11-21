@@ -1,5 +1,3 @@
-// 远程项目在文件树里的懒加载：展开一层拉一层，每层是一条查询，收起即丢弃——远端是这些条目的唯一事实来源。
-// 子条目 id 带项目身份（remoteNodeId）：只用路径会让两台连接上的同路径目录串成同一个节点。
 import { useEffect, useState } from 'react';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { type WorkspaceEntry, hiddenWorkspaceNames } from '../../../modules/workspace/contract';
@@ -35,7 +33,6 @@ function createRemoteWatcher() {
       if (reported.get(projectId) === serialized) continue;
       reported.set(projectId, serialized);
       void workspaceClient.watchRemoteDirectories({ projectId, paths }).catch((error: unknown) => {
-        // 报不上去只是少了实时刷新：工具改动那条路照常，不打扰用户，但留一条线索。
         console.warn('[workspace] 上报远端监视目录失败', error);
         reported.delete(projectId);
       });
@@ -46,7 +43,6 @@ function createRemoteWatcher() {
       wanted = next;
       timer ??= setTimeout(flush, WATCH_DEBOUNCE_MS);
     },
-    /** 树卸载时取消监视：远端不该继续为看不见的目录留 inotify watch，待发的窗口也一并清掉。 */
     dispose() {
       clearTimeout(timer);
       timer = undefined;
@@ -69,7 +65,6 @@ export interface RemoteTree {
   connecting: boolean;
 }
 
-/** 传入的必须是这棵树里可见的条目（外加 rootId）：展开态被多棵树共用，不可见的远程项目不该触发远端请求。 */
 export function useRemoteTree(
   entries: WorkspaceEntry[],
   expanded: string[],
@@ -89,7 +84,6 @@ export function useRemoteTree(
     (entry) => entry.kind === 'project' && entry.remoteId && entry.path,
   );
   const channels = Object.values(useRemoteChannels(projects.length > 0));
-  /** 子目录键带项目身份：归属由「从哪个项目走下来」决定，远端路径本身不跨项目解释。 */
   const keyOf = (project: WorkspaceEntry, path: string) =>
     trimSlash(project.path!) === path ? project.id : remoteNodeId(project.id, path);
 
@@ -107,13 +101,10 @@ export function useRemoteTree(
   };
   for (const project of projects) visit(project, trimSlash(project.path!), project.id);
 
-  // 收起即丢弃（gcTime 0）：再展开就是用户手动刷新的一层，失败也在重新展开时重试。
   const results = useQueries({
     queries: openDirectories.map(({ projectId, path, root }) => ({
       queryKey: [...directoryQueries, projectId, path],
       gcTime: 0,
-      // 项目根这一层就是「连接」：冷启动全在这里等，所以在状态里报出来；
-      // 面板只在没有任何内容时才画过渡，热通道的几十毫秒够不到 200ms 门槛。
       queryFn: async ({ signal }: { signal: AbortSignal }) => {
         if (root) setPhase(projectId, 'connecting');
         try {
@@ -146,7 +137,6 @@ export function useRemoteTree(
   }, [watcher, watchKey]);
   useEffect(() => watcher.dispose, [watcher]);
 
-  // 远端工具改过文件或 watch 报告变化：受影响的展开目录重读。
   useEffect(() => {
     const changed = new Set<string>();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -195,10 +185,8 @@ export function useRemoteTree(
     walk(trimSlash(project.path!), project.id === rootId ? null : project.id);
   }
 
-  // 只报失败：读取中的提示会在每次展开/收起时插进、抽走一行，整棵树跟着上下跳。
   const status = results.find((result) => result.isError)?.error.message ?? null;
 
-  // 不可用提示按目的地对准：这棵树里有项目连着那台服务器才显示；不可用优先于重连中。
   const visible = channels.filter((channel) =>
     projects.some((project) => destinations[project.remoteId!] === channel.destination),
   );
@@ -210,7 +198,6 @@ export function useRemoteTree(
       ? `与 ${reconnecting.destination} 的连接中断，正在重连；远端正在运行的命令不受影响`
       : null;
 
-  // 首次连接时整棵树还没有内容才给过渡；逐层展开的读取很快，报了会让树上下跳。
   const connecting = rootActivity?.phase === 'connecting' && items.length === 0;
 
   return { items, destinations, status, degraded: degradedText, connecting };

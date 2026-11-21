@@ -1,10 +1,9 @@
 // @vitest-environment jsdom
-// 更新快照的渲染层镜像：标题栏与设置页共用同一份，整个应用只挂一次订阅。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { UpdateSnapshot } from '../../../../src/modules/update/contract';
 
 const toast = vi.hoisted(() => vi.fn());
-vi.mock('../../../../src/ui/toast', () => ({ showToast: toast }));
+vi.mock('../../../../src/ui/Toast', () => ({ showToast: toast }));
 
 const base: UpdateSnapshot = {
   phase: 'idle',
@@ -21,7 +20,6 @@ const base: UpdateSnapshot = {
 
 const available: UpdateSnapshot = { ...base, phase: 'available', version: '1.0.1' };
 
-// 契约客户端在模块加载时取桥，所以桥先于导入装好，各用例只替换它转发到的实现。
 const harness = vi.hoisted(() => {
   const state = {
     listeners: [] as ((snapshot: unknown) => void)[],

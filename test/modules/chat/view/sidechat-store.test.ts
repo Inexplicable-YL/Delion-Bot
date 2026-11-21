@@ -1,7 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import type { ChatStreamEvent, SidechatView } from '../../../../src/core/protocol/agent';
 
-// 契约客户端与旁问镜像在模块加载时取 bridge，须先于导入装好。
 const { invoke, listeners } = vi.hoisted(() => {
   const listeners: Record<string, Array<(payload: unknown) => void>> = {};
   const invoke = vi.fn(async (_channel: string, input: { parentId: string }) => ({

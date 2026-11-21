@@ -1,4 +1,3 @@
-// 类型与校验 schema 的唯一事实来源是 modules/workspace/layout.ts；本文件是 renderer 侧的树操作适配层。
 import {
   ratioMax,
   ratioMin,
@@ -70,7 +69,6 @@ export function findGroup(node: LayoutNode, id: string): GroupNode | null {
   return walkGroups(node).find((group) => group.id === id) ?? null;
 }
 
-/** 取「未被占用的最小组 id」，避免进程重启后计数器复位与已存布局撞名。 */
 export function nextGroupId(root: LayoutNode): string {
   const used = new Set(walkGroups(root).map((group) => group.id));
   let n = 1;

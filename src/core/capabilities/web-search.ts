@@ -10,14 +10,10 @@ import { loadLlmConfig } from '../agent/llm-config';
 import { readDisabledTools, setBuiltinCapabilities } from './tools';
 import { searchDeepSeek } from './deepseek';
 
-// 搜索服务配置（设置 › 内置能力 › 网络）：可存多条（同类型可重复，供多账号复用额度），
-// 聊天输入框左下角选择当前使用哪一条；应用不内置搜索服务。
 const CONFIG_KEY = 'web-search-api';
 const REQUEST_TIMEOUT_MS = 15000;
-// 4 类服务各留多账号余量且列表一屏可浏览；再大主要防配置堆积。
 const ENTRY_LIMIT = 16;
 
-// 请求头键限 HTTP token 字符；条数封顶防滥用。
 const headerKeySchema = z.string().regex(/^[\w!#$%&'*+\-.^`|~]{1,128}$/);
 const headersSchema = z
   .record(headerKeySchema, z.string().min(1).max(2048))
@@ -162,13 +158,11 @@ export function readWebSearchConfig(): WebSearchEntry | null {
   return providers.find(({ id }) => id === selectedId) ?? null;
 }
 
-/** 新建或更新一条配置；新建即选中并启用 web_search，更新不改选中。返回最新列表。 */
 export function saveWebSearchEntry(
   input: z.infer<typeof webSearchEntryInputSchema>,
 ): WebSearchEntry[] {
   const registry = readRegistry();
   const exists = input.id != null && registry.providers.some(({ id }) => id === input.id);
-  // 幽灵 id（别处已删除的草稿）按新建追加会静默复活条目，明确报错让用户重建。
   if (input.id != null && !exists) throw new Error('搜索服务配置不存在，可能已被删除');
   if (!exists && registry.providers.length >= ENTRY_LIMIT)
     throw new Error(`搜索服务配置最多 ${ENTRY_LIMIT} 条，请先删除部分配置`);
@@ -204,7 +198,6 @@ export function listWebSearchOptions(): {
   };
 }
 
-/** 选择当前使用哪条配置并确保 web_search 开启；null 关闭联网搜索（web_fetch 仍走本地抓取）。 */
 export function selectWebSearchEntry(id: string | null): void {
   if (id === null) {
     writeRegistry({ ...readRegistry(), selectedId: null });
@@ -218,7 +211,6 @@ export function selectWebSearchEntry(id: string | null): void {
   setBuiltinCapabilities(['web_search'], true);
 }
 
-/** DeepSeek 官方端点判定：只认 api.deepseek.com，中转或自建网关一律不算。 */
 function isDeepSeekEndpoint(baseUrl: string): boolean {
   try {
     return /(^|\.)api\.deepseek\.com$/i.test(new URL(baseUrl).hostname);
@@ -234,7 +226,6 @@ export function listWebSearchKeySources(): WebSearchKeySource[] {
     .map(({ id, name }) => ({ id, name }));
 }
 
-/** 读出指定 DeepSeek 模型供应商的密钥给表单预填（静态副本，不落库、不随供应商换 Key 更新）；不可用时返回 null。 */
 export function readWebSearchKey(providerId: string): string | null {
   const provider = loadLlmConfig().providers.find(({ id }) => id === providerId);
   return provider?.apiKey && isDeepSeekEndpoint(provider.baseUrl) ? provider.apiKey : null;
@@ -254,7 +245,6 @@ function searchError(status: number): Error {
 
 const compact = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
 
-// Brave 固定走 LLM Context 端点：grounding.generic 与 map/poi 同构，snippets 是页面抽取的片段而非搜索摘要。
 async function searchBrave(
   query: string,
   count: number,
@@ -381,8 +371,6 @@ function readResults(payload: unknown): WebSearchResult[] {
   });
 }
 
-// 自定义端点：填了请求体走 POST，否则 GET；URL 与请求体中的 {query}、{count} 替换为实参。
-// GET 且 URL 不含 {query} 时按 SearXNG 追加 q 与 format=json。自定义请求头可覆盖默认头。
 async function searchCustomEndpoint(
   query: string,
   count: number,
@@ -408,7 +396,6 @@ async function searchCustomEndpoint(
   });
   if (!response.ok) throw searchError(response.status);
   const payload = (await response.json()) as {
-    // SearXNG 把无响应引擎序列化为 [引擎名, 错误文案] 元组的数组。
     unresponsive_engines?: (string | [string, string])[];
   };
   const results = readResults(payload);

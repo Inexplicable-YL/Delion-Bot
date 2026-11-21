@@ -1,9 +1,8 @@
-// 设置 › 远程：已保存的 SSH 连接与实时通道状态；Delion Bot 不保存密码与密钥，凭据由 ssh 读取。
 import { useState, type ComponentType } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { CloudIcon as Cloud, PlusIcon as Plus } from '@heroicons/react/24/outline';
 import type { RemoteConnection } from '../contract';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { cn } from '../../../ui/cn';
 import { remoteAccent } from './remote-color';
 import { ConnectionForm } from './ConnectionForm';

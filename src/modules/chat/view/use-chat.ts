@@ -19,8 +19,8 @@ import {
   stripChatImageTokens,
 } from '../../../core/protocol/chat-input';
 import { agentClient } from './client';
-import { showToast } from '../../../ui/toast';
-import { useChatTabSource } from './chat-source';
+import { showToast } from '../../../ui/Toast';
+import { useChatTabSource } from './ChatSource';
 import { useSessions } from './sessions';
 import { isSessionViewed, useRuns } from './runs';
 import {
@@ -29,7 +29,7 @@ import {
   useChatDrafts,
   type ChatReference,
 } from './drafts';
-import type { ReferenceSource } from './chat-source';
+import type { ReferenceSource } from './ChatSource';
 import { releaseChatMedia } from './media';
 import { openSidechat } from './sidechat-store';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -47,21 +47,16 @@ export function canSendInput(
     : Boolean(text.trim() || hasChatImages(text) || attachmentCount || commentCount);
 }
 
-/** 发送失败后是否恢复输入：消息未上屏（快照里没有这条用户消息，或快照读不到）时恢复，
- *  图片 token 留在文本里、附件暂存未被消费，可原样重发；已上屏则只报错不恢复。 */
 export function shouldRestoreDraft(fresh: WorkspaceChat | null, sentText: string): boolean {
   if (!fresh) return true;
   const stripped = stripChatImageTokens(sentText);
   return !fresh.messages.some((message) => message.role === 'user' && message.content === stripped);
 }
 
-/** 输入草稿订阅只在 composer 容器层调用：打字每键仅重渲输入区，不带动消息列表。 */
 export function useChatDraft(sessionId: string) {
   return useChatDrafts((state) => state.drafts[sessionId] ?? emptyDraft);
 }
 
-/** 单个会话的对话状态：快照经 sessions 镜像共享；草稿订阅在 useChatDraft，附件 chip 不持久化，
- *  视图卸载即释放暂存文件。onNewChat 是 /new 命令的落点。 */
 export function useChat(
   sessionId: string,
   referenceSource?: ReferenceSource,
@@ -71,7 +66,6 @@ export function useChat(
   const chat = useSessions((state) => state.chats[sessionId] ?? null);
   const [attachments, setAttachments] = useState<ChatMediaView[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // 计数而非开关：插队的请求很快返回，不能把仍在等待的那一轮也算作结束。
   const [pending, setPending] = useState(0);
   const updateDraft = useChatDrafts((state) => state.update);
   const clearDraft = useChatDrafts((state) => state.clear);
@@ -86,8 +80,6 @@ export function useChat(
   const releaseAttachments = useEffectEvent(() =>
     releaseChatMedia(attachments.map((file) => file.id)),
   );
-  // 运行结果已被本视图看到（挂载即看、终态到达即看）：清掉导航徽标；
-  // 视图关闭期间到达的终态保留，供导航提示「有结果需要处理」。
   useEffect(() => {
     useRuns.getState().startViewing(sessionId);
     return () => {
@@ -96,8 +88,6 @@ export function useChat(
     };
   }, [sessionId]);
 
-  // 快照种子：镜像未缓存（应用启动后首次打开）时经 open-session 读取一次，不产生执行；
-  // 缓存被清（会话在别处被删）后再次尝试读取，读到「会话不存在」即就地报错。
   useQuery({
     queryKey: ['chat-session-seed', sessionId],
     enabled: !chat && Boolean(window.delionBot),
@@ -115,7 +105,6 @@ export function useChat(
   const setPrompt = (text: string) => updateDraft(sessionId, { prompt: text });
   const setComments = (comments: ChatComment[]) => updateDraft(sessionId, { comments });
 
-  // 附件暂存：与内联图片共用主进程通道，上限在主进程与这里各校验一次。
   const addAttachmentFile = async (file: File) => {
     if (!window.delionBot) throw new Error('附件仅在桌面端可用');
     if (attachments.length >= CHAT_ATTACHMENT_MAX)
@@ -130,7 +119,6 @@ export function useChat(
     setAttachments((current) => [...current, view]);
   };
 
-  // 已满时抛错让调用方（选择文件路径）把上限提示显示出来；重复 id 仍静默去重。
   const addAttachmentView = (view: ChatMediaView) => {
     if (attachments.length >= CHAT_ATTACHMENT_MAX)
       throw new Error(`附件最多 ${CHAT_ATTACHMENT_MAX} 个`);
@@ -144,9 +132,7 @@ export function useChat(
     releaseChatMedia([id]);
   };
 
-  // 引用即文本：删除 = 删掉 @token。运行中发送即插队（Pi 的 steer）；命令要等本轮结束。
   const send = async (references: ChatReference[]) => {
-    // 发送时点读取草稿（不依赖渲染期闭包）：拿到的一定是最后一次按键的值。
     const draft = useChatDrafts.getState().drafts[sessionId] ?? emptyDraft;
     const text = draft.prompt;
     const comments = draft.comments ?? [];
@@ -191,10 +177,8 @@ export function useChat(
       });
       if (result.sessionId) useSessions.getState().putChat(result.sessionId, result);
     } catch (e) {
-      // ask 抛错前 run 的终态推送已更新镜像：结果照常写共享缓存，其他入口不受影响。
       setError(errorMessage(e));
       if (isSessionViewed(requested)) {
-        // 消息未上屏（未配置模型、引用读取失败等发生在持久化前）时恢复输入，避免重打。
         const fresh = await agentClient['open-session']({ sessionId: requested }).catch(() => null);
         if (fresh) useSessions.getState().putChat(requested, fresh);
         if (isSessionViewed(requested) && shouldRestoreDraft(fresh, text)) {
@@ -207,7 +191,6 @@ export function useChat(
     }
   };
 
-  // 会话命令不发给模型；失败时恢复输入，/compact 期间算作忙，停止按钮可取消压缩。
   const runCommand = async (name: SessionCommandName, args: string, text: string) => {
     if (!window.delionBot) return;
     const requested = sessionId;
@@ -230,7 +213,6 @@ export function useChat(
       const result = await agentClient['run-command']({ sessionId: requested, name, args });
       useSessions.getState().putChat(requested, result);
       if (name === 'name') {
-        // 标题只在会话列表里，推送不带列表：重读一次，标签与侧栏才会换成新标题。
         void useSessions
           .getState()
           .refresh(result.projectId)
@@ -251,7 +233,6 @@ export function useChat(
     }
   };
 
-  // 撤回的插队消息排在输入框已有内容之前（与 Pi 终端界面一致）；视图已切走时附件无处安放，直接释放。
   const restoreQueued = (requested: string, queued: ChatQueuedDraft | null) => {
     if (!queued) return;
     const current = useChatDrafts.getState().drafts[requested] ?? emptyDraft;
@@ -285,7 +266,6 @@ export function useChat(
     );
   };
 
-  // 编辑重发说明原提问不合适，不带回原评论；重试按原消息重发，带上原评论。
   const editLast = async (text: string, comments: ChatComment[] = []) => {
     if (!window.delionBot || busy) return;
     const requested = sessionId;

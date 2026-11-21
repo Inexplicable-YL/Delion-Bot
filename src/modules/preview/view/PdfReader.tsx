@@ -15,14 +15,13 @@ import {
   MinusIcon as Minus,
   PlusIcon as Plus,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import { ErrorText } from '../../../ui/alert';
+import { ErrorText } from '../../../ui/Alert';
 import { errorMessage } from '../../../core/protocol/contract';
 
 declare const __PDF_ASSET_DIR__: string;
 GlobalWorkerOptions.workerSrc = workerUrl;
-// Bound each page bitmap to 16 MiB; the official viewer owns its LRU and render queue.
 const MAX_PIXELS = 4 * 1024 * 1024;
 const DRAWING_DELAY = 400;
 
@@ -135,8 +134,6 @@ export function PdfReader({
       import.meta.env.DEV ? '/@fs/' + __PDF_ASSET_DIR__ + '/' : './pdfjs/',
       document.baseURI,
     ).href;
-    // PDF.js only enables automatic range loading for http(s). Our scoped local
-    // protocol therefore supplies its explicit range transport through fetch.
     void (async () => {
       const initial = await fetch(url, {
         headers: { Range: 'bytes=0-65535' },
@@ -192,7 +189,6 @@ export function PdfReader({
   };
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {/* safe 居中：放不下时对齐起点并横向滚动，否则居中溢出会把两侧按钮裁掉。 */}
       <div className="flex shrink-0 items-center justify-center-safe gap-2 overflow-x-auto border-b px-3 py-1 text-ui-subhead">
         <Button
           size="icon-sm"

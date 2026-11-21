@@ -4,7 +4,6 @@ import type { NavTarget } from '../../app/module';
 
 export const SEARCH_LIMIT = 10;
 
-/** 分组图标：搜索界面自己的图标词表，来源从中挑选，界面因此不必认识各个模块。 */
 export type SearchIcon = 'folder' | 'message' | 'file' | 'check' | 'settings';
 
 export interface SearchHit {

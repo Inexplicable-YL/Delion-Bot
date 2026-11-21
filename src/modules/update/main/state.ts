@@ -1,5 +1,3 @@
-// 更新状态机：纯函数，主进程是唯一持有者，渲染层只读快照。
-// 唯一要防守的是迟到与乱序：结果事件只在对应的进行中阶段生效，其余丢弃并原样返回 state。
 import type { UpdateReason, UpdateSnapshot, UpdateStep } from '../contract';
 
 export type UpdateEvent =
@@ -37,7 +35,6 @@ export function initialUpdateState(input: { currentVersion: string }): UpdateSna
   };
 }
 
-/** 三个步骤的失败事件只有类型名不同；收敛成一个入口，更新器异常兜底时也不必按步骤各写一遍。 */
 export function failureEvent(
   step: UpdateStep,
   reason: UpdateReason,

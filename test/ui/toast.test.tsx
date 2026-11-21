@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it } from 'vitest';
-import { dismissToast, showToast, toasts, Toaster } from '../../src/ui/toast';
+import { dismissToast, showToast, toasts, Toaster } from '../../src/ui/Toast';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

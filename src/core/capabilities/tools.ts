@@ -1,7 +1,3 @@
-// 设置 › 内置能力：Pi 内置工具的开关。停用名单存 workspace_settings('tools-disabled')，
-// 新建会话时作为 excludeTools 交给 Pi；read/write/edit/bash 是 agent 最小工具集，不可关闭。
-// 联网搜索默认关闭：它要求用户自备搜索服务，未注册时调用只会报错。
-// 读取网页默认开启：它不依赖任何注册，只受 web_fetch 自身的安全边界约束。
 import { z } from 'zod';
 import type { AgentCapabilityView } from '../protocol/capabilities';
 import { hostPorts } from '../ports';

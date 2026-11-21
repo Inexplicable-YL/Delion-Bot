@@ -56,7 +56,6 @@ type SettingsNavProps = {
 };
 
 export function SettingsNav({ value, onSectionChange }: SettingsNavProps) {
-  // 窄屏那排横向分区行靠滚轮横滚；宽屏是纵列，不横向溢出，钩子自动放行。
   const navRef = useHorizontalWheel<HTMLElement>();
 
   return (

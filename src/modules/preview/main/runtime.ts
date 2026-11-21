@@ -52,9 +52,7 @@ export function documentDependency(): SkillDependency {
       existsSync(join(sitePackages(root), 'markitdown', '__init__.py'))
     )
       return { status: 'ready' };
-  } catch {
-    // Only an environment that completed validation is available to skills.
-  }
+  } catch {}
   return state.status === 'error' ? { ...state } : { status: 'missing' };
 }
 
@@ -215,7 +213,6 @@ export function installDocumentDependency(): Promise<void> {
     await rm(join(staging, 'installer'), { recursive: true, force: true });
     await rm(pythonArchive);
     await rm(uvArchive);
-    // Publish readiness only after validation; Windows may keep imported DLLs locked briefly.
     signal.throwIfAborted();
     await writeFile(join(staging, 'ready'), VERSION);
     signal.throwIfAborted();

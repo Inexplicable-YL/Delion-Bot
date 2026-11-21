@@ -1,18 +1,16 @@
-// 回答末尾的「本轮改动」卡片：数据取自主进程冻结的轮次 diff（目录前后快照比较，
-// 覆盖 bash 等一切写文件的途径）；默认折叠防大轮次刷屏。
 import { useQuery } from '@tanstack/react-query';
 import {
   CodeBracketIcon as CodeXml,
   FolderOpenIcon as FolderOpen,
 } from '@heroicons/react/24/outline';
 import type { FileChangeSummary } from '../../../core/protocol/agent';
-import { ChangedFile, ChangesCard } from '../../../ui/agent/changes';
-import { showToast } from '../../../ui/toast';
+import { ChangedFile, ChangesCard } from '../../../ui/agent/Changes';
+import { showToast } from '../../../ui/Toast';
 import { agentClient, chatClient } from './client';
 import { errorMessage } from '../../../core/protocol/contract';
-import { useChatTabSource } from './chat-source';
+import { useChatTabSource } from './ChatSource';
 import { reviewTabId } from './review/tab-id';
-import { basenameOf, dirnameOf } from './review/view-utils';
+import { basenameOf, dirnameOf } from './review/ViewUtils';
 
 const fileManagerName = window.delionBot?.platform === 'darwin' ? 'Finder' : '资源管理器';
 
@@ -75,12 +73,9 @@ export function TurnChangesCard({
   reviewEnabled,
 }: {
   sessionId: string;
-  /** 消息上继承的轮次标识；无冻结记录（旧消息、落盘失败）时整卡不渲染。 */
   turnId: string;
-  /** 仅项目会话提供差异审阅与行数统计。 */
   reviewEnabled: boolean;
 }) {
-  // 冻结记录写后不变：永不过期，卡片随展开/收起与切标签重挂载时不重复走 IPC。
   const { data: record } = useQuery({
     queryKey: ['chat', 'turn-changes', sessionId, turnId, reviewEnabled],
     queryFn: () =>
@@ -88,7 +83,6 @@ export function TurnChangesCard({
     staleTime: Infinity,
   });
 
-  // 无文件的记录不渲染：远程轮次、轮前快照缺失都落在这里——不把「没有记录」伪装成空改动。
   if (!record || record.files.length === 0) return null;
 
   const total = record.files.reduce(

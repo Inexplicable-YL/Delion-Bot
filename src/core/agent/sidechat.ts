@@ -1,5 +1,3 @@
-/** 旁问：借主会话当前位置的上下文问一句，会话记录只放内存、不进数据库；每个主会话最多一个，「保留」时才写成文件。
- * 实例走与主会话相同的 openPiSession，缓存前缀因此对得上。 */
 import { existsSync } from 'node:fs';
 import type { AgentSession, AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 import {
@@ -29,7 +27,6 @@ import { emit } from '../ports';
 interface Side {
   session: AgentSession;
   providerId: string;
-  /** 借来的主会话条目：Pi 压缩后消息数量会变化，不能用数组下标作为边界。 */
   baseEntryIds: Set<string>;
   run?: { cancelled: boolean; tool?: string; done: Promise<void> };
   steps: Map<string, AgentToolResult>;
@@ -115,13 +112,11 @@ function onEvent(parentId: string, side: Side, event: AgentSessionEvent) {
       stream(parentId, side);
       break;
     case 'message_end':
-      // Pi 先通知监听者再把这条消息写进会话记录，而旁问的快照读的是记录：等写入后再推送。
       queueMicrotask(() => publish(parentId, side));
       break;
   }
 }
 
-/** 旁问的起点：主会话当前分支上的记录；主会话正在回答时退到这一轮提问之前。 */
 async function sidechatSource(id: string) {
   const meta = row(id);
   const { selection } = readySelection(meta);
@@ -130,7 +125,6 @@ async function sidechatSource(id: string) {
     entry?.session.sessionManager ??
     (existsSync(meta.file) ? (await loadPi()).SessionManager.open(meta.file) : null);
   let branch = manager?.getBranch() ?? [];
-  // 本轮提问可能还没写进记录（发送前要先拍目录快照），按 turnId 认，不能只看最后一条用户消息。
   const turnId = entry?.run?.id;
   const asking = turnId
     ? branch.findIndex(

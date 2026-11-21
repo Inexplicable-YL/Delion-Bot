@@ -1,5 +1,3 @@
-// 设置页的 Skills 清单：内置与本机目录分开；每个本地项目各自成组，按 SKILL.md 路径开关，
-// 同名 Skill 互不牵连；文档读取在装好组件前不能开启。
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -7,7 +5,6 @@ import { DatabaseSync } from 'node:sqlite';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const home = mkdtempSync(join(tmpdir(), 'delion-skills-'));
-// 项目放在 home 之外：Pi 沿项目目录向上找 .agents/skills，不能撞上测试里的本机目录。
 const projects = mkdtempSync(join(tmpdir(), 'delion-skill-projects-'));
 let database: DatabaseSync;
 vi.mock('electron', () => ({ app: { getPath: () => home }, shell: {} }));

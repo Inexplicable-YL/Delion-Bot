@@ -33,7 +33,6 @@ const editorTheme = EditorView.theme({
   },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--syntax-caret)' },
   '.cm-placeholder': { color: 'var(--ink-3)' },
-  // 行号栏横向滚动时 sticky：背景必须不透明并接管左侧留白，否则长行会从行号下透出。
   '.cm-scroller:has(.cm-gutters)': { paddingLeft: '0' },
   '.cm-gutters': {
     border: 'none',
@@ -66,8 +65,6 @@ type EditorHandlers = {
 
 type EditorSession = { state: EditorState; scrollTop: number };
 
-/* EditorState 存在 React 树外，切换标签不丢撤销历史与光标；复用的 state 带着首次挂载
-   的扩展闭包，它们经 handlers 按键找到当前组件的回调。 */
 const sessions = new Map<string, EditorSession>();
 const noScroll = () => 0;
 const handlers = new Map<string, EditorHandlers>();
@@ -84,14 +81,11 @@ function replaceDocument(current: string, next: string) {
   return { from, to: currentEnd, insert: next.slice(from, nextEnd) };
 }
 
-/** 换行符跟随文件（按第一个换行判定，与 VS Code 一致）：CodeMirror 默认以 \n 拼回，
- *  CRLF 文件改一个字就整篇变 LF。 */
 export function lineSeparatorOf(text: string): '\r\n' | '\n' {
   const first = text.indexOf('\n');
   return first > 0 && text[first - 1] === '\r' ? '\r\n' : '\n';
 }
 
-/** 不传文件名（回复撰写框）按 Markdown；按名字找语言，无后缀的 Dockerfile 也能匹配。 */
 function languageForFilename(filename: string | undefined): ResolvedLanguage {
   if (!filename) return { kind: 'markdown' };
   if (formatByName(filename) === 'markdown') return { kind: 'markdown' };
@@ -121,14 +115,11 @@ export function MarkdownEditor({
   onChange: (text: string) => void;
   onSave: () => void;
   onScroll: (top: number) => void;
-  /* initialScroll 与 lineNumbers/ariaLabel/saveOnBlur 仅取初值：只装配于首次挂载，此后变化不生效。 */
   initialScroll?: () => number;
   placeholderText?: string;
   lineNumbers?: boolean;
   ariaLabel?: string;
-  /** 失焦即保存是笔记语义；回复编辑器传 false 防止误触发发送。 */
   saveOnBlur?: boolean;
-  /** 传入后在切换标签时保留撤销历史、光标和滚动位置。每个编辑器组应使用不同值。 */
   editorStateKey?: string;
   livePreview?: ImageResolver;
   readOnly?: boolean;
@@ -145,13 +136,11 @@ export function MarkdownEditor({
   const lastPublishedValue = useRef<string | null>(null);
   const publishChange = useEffectEvent((text: string) => {
     lastPublishedValue.current = text;
-    // 组词结束的定时回调可能早于 React 提交新的 value。
     latestValue.current = text;
     onChange(text);
   });
   const save = useEffectEvent(() => onSave());
   const reportScroll = useEffectEvent((top: number) => onScroll(top));
-  /* 外部值同步：IME 组文期间全量替换文档会打断输入法，推迟到组文结束后再补。 */
   const syncValue = () => {
     const current = view.current;
     if (!current) return;

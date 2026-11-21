@@ -6,7 +6,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { DelionBotApi } from '../../../../src/app/preload/api';
 import type { WorkspaceEntry } from '../../../../src/modules/workspace/contract';
 
-// 契约客户端在模块加载时取 bridge，须先于导入视图装好；会话镜像也在加载时订阅推送。
 const { api, desktop } = vi.hoisted(() => {
   const handlers: Record<string, (input: never) => unknown> = {};
   const subscribe = () => () => {};
@@ -20,7 +19,7 @@ const { api, desktop } = vi.hoisted(() => {
   window.delionBot = desktop;
   return { api: handlers, desktop };
 });
-import { EntryDialogs } from '../../../../src/app/renderer/workspace/entry-dialogs';
+import { EntryDialogs } from '../../../../src/app/renderer/workspace/EntryDialogs';
 import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
 
 function entry(
@@ -130,7 +129,6 @@ it.each([undefined, '普通文件夹', 'missing', '远程项目'])(
 
 it('clears an unavailable project target instead of silently using the workspace root', async () => {
   await render('课程项目');
-  // 目标项目从镜像里消失（如刚被移除）时清空选择，不静默落到工作区根。
   await act(async () =>
     useWorkspaceStore.setState({
       workspace: {

@@ -1,7 +1,3 @@
-/**
- * 跨会话读取：session_search 按标题找同项目的会话，session_read 按轮读当前分支的原文。
- * 只给用户消息与最终回复，不含工具调用、工具输出和推理；附件与 @ 引用只列名称。
- */
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 import type { SessionEntry, ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { TaskNoticeDetails } from '../protocol/agent';
@@ -19,7 +15,6 @@ export interface SessionTurn {
   files?: string[];
   references?: string[];
   sessions?: string[];
-  /** 最终回复正文；没有最终回复（停止、中断、运行中或只有工具调用）时为 null，不拿中间文字顶替。 */
   reply: string | null;
   status: SessionTurnStatus;
   error?: string;

@@ -4,8 +4,8 @@ import {
   ArrowRightIcon as ArrowRight,
 } from '@heroicons/react/24/outline';
 import { cn } from '../../../ui/cn';
-import { OnboardingWindowBar } from './onboarding-window-bar';
-import { Button } from '../../../ui/button';
+import { OnboardingWindowBar } from './OnboardingWindowBar';
+import { Button } from '../../../ui/Button';
 
 type WizardShellProps = {
   step: number;
@@ -24,7 +24,6 @@ export function WizardShell({
   footer,
   children,
 }: WizardShellProps) {
-  // 进退方向决定内容滑入的水平朝向：前进从右进、后退从左回；首屏为 0，不播放入场。
   const [motionStep, setMotionStep] = useState({ step, direction: 0 });
   if (motionStep.step !== step) {
     setMotionStep({ step, direction: step > motionStep.step ? 1 : -1 });

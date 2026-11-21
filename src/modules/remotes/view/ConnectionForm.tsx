@@ -1,17 +1,16 @@
-// 「新建远程项目」面板与「设置 › 远程」共用的 SSH 连接表单；密码与密钥内容都交给 ssh 自己读取。
 import { useState, type FormEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftIcon as ArrowLeft } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/button';
-import { Card } from '../../../ui/card';
-import { Input } from '../../../ui/input';
+import { Button } from '../../../ui/Button';
+import { Card } from '../../../ui/Card';
+import { Input } from '../../../ui/Input';
 import type { RemoteConnection, RemoteDraft } from '../contract';
 import { useWorkspaceStore } from '../../workspace/view';
 import { remotesClient } from './client';
 import { refreshRemoteConnections } from './remote-state';
-import { Callout, ErrorText } from '../../../ui/alert';
-import { Spinner } from '../../../ui/spinner';
-import { Field } from '../../../ui/field';
+import { Callout, ErrorText } from '../../../ui/Alert';
+import { Spinner } from '../../../ui/Spinner';
+import { Field } from '../../../ui/Field';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const MAX_PORT = 65535;
@@ -42,7 +41,6 @@ export function ConnectionForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removeConfirm, setRemoveConfirm] = useState(false);
-  // 选择器必须返回稳定引用（useSyncExternalStore 的 getSnapshot 缓存要求），过滤放渲染期。
   const entries = useWorkspaceStore((state) => state.workspace.entries);
   const projects = connection
     ? entries.filter((entry) => entry.kind === 'project' && entry.remoteId === connection.id)
@@ -93,7 +91,6 @@ export function ConnectionForm({
     try {
       await remotesClient.remove(connection.id);
       await refreshRemoteConnections(queryClient);
-      // 名下项目随连接被级联移除，主进程不单推工作区变更：拉一次镜像后交外壳清场。
       if (projects.length) {
         await useWorkspaceStore.getState().refresh();
         onProjectsRemoved(
@@ -172,7 +169,7 @@ export function ConnectionForm({
           </div>
         </Field>
       </div>
-      {/* 不提供密码输入：Delion Bot 只支持密钥与 ssh agent，放一个点了没用的控件更糟。 */}
+
       <p className="text-ui-subhead text-ink-2">
         暂不支持密码登录：请使用密钥或 ssh agent，或在 ~/.ssh/config 中为该主机配置好认证。
       </p>

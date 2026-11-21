@@ -18,7 +18,6 @@ function systemShell(): { file: string; args: string[]; title: string } {
       join(process.env.ProgramFiles ?? 'C:\\Program Files', 'PowerShell', '7'),
     ]
       .map((directory) => join(directory, 'pwsh.exe'))
-      // 商店版 pwsh 是应用执行别名，existsSync 认不出，lstat 能认出。
       .find((path) => lstatSync(path, { throwIfNoEntry: false }));
     const windowsPowerShell = join(
       process.env.SystemRoot ?? 'C:\\Windows',
@@ -33,7 +32,6 @@ function systemShell(): { file: string; args: string[]; title: string } {
   return { file, args: ['-l'], title: basename(file) };
 }
 
-// 重挂载时回放最近输出；每个终端最多保留约 100 万字符，避免长期任务无限占用内存。
 const BUFFER_LIMIT = 1024 * 1024;
 const sessions = new Map<string, { projectId: string; pty: IPty; snapshot: TerminalSession }>();
 
@@ -56,7 +54,6 @@ export function createTerminal(projectId: string, id: string): TerminalSession {
   let pty: IPty;
   let title: string;
   if (location.kind === 'remote') {
-    // 不加 BatchMode：交互终端可以让 ssh 自己问密码或询问主机指纹。
     const connection = remoteById(location.remoteId);
     const sshArgs = [
       '-tt',
@@ -92,7 +89,6 @@ export function createTerminal(projectId: string, id: string): TerminalSession {
   const current = { projectId, pty, snapshot };
   sessions.set(id, current);
   const live = () => sessions.get(id) === current;
-  // ConPTY 高吞吐时每个小块一条 IPC；8ms 合并成批。
   let pendingData = '';
   let dataFlushTimer: ReturnType<typeof setTimeout> | undefined;
   const flushData = () => {

@@ -1,6 +1,5 @@
-// 捕获子树渲染期异常并降级为静态提示，避免单个标签/视图崩溃带走整个应用，不做错误上报。
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -19,7 +18,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // 组件栈只进 console：布局/数据操作不经 React 树，此处错误全部来自渲染期。
     console.error(
       '[ErrorBoundary]',
       this.props.title ?? '此标签遇到错误',

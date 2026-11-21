@@ -1,5 +1,3 @@
-// 投影：Pi 的消息与会话状态 → 界面的 WorkspaceChat。<delion-meta> 的编解码只在这里，
-// 界面与跨会话读取都看不到 Pi 的记录格式。
 import { existsSync } from 'node:fs';
 import type { AgentSession, SessionManager } from '@earendil-works/pi-coding-agent';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
@@ -63,7 +61,6 @@ export function toolOutput(result: {
   };
 }
 
-/** running 时末条回复不写 finishedAt（renderer 据此合并流式增量）；已完成的回复带本轮最后条目作分支锚点。 */
 export function projectMessages(
   messages: AgentMessage[],
   pending?: Map<string, AgentToolResult>,
@@ -133,7 +130,6 @@ export function projectMessages(
       }
       if (entryId && reply) reply.entryId = entryId;
     } else if (message.role === 'custom' && message.customType === TASK_NOTICE) {
-      // 唤醒父会话的通知开启新的一轮：随后的回复从通知算起，审阅对应这一轮。
       const details = message.details as TaskNoticeDetails;
       if (details.turnId) {
         lastUserAt = message.timestamp;
@@ -142,8 +138,6 @@ export function projectMessages(
       out.push({ role: 'assistant', content: textOf(message.content), parts: [], task: details });
       reply = null;
     } else if (message.role === 'custom') {
-      // 扩展的可见消息自成一条，不并进前后的模型回复；display=false 的只给模型看。
-      // appendEntry 写的扩展状态不是消息，根本不会出现在这里。
       if (message.display) {
         out.push({
           role: 'assistant',
@@ -154,7 +148,6 @@ export function projectMessages(
         reply = null;
       }
     } else if (message.role === 'compactionSummary') {
-      // 压缩点之前的历史仍在 JSONL；投影只保留摘要后的上下文，开头标注一条。
       out.push({
         role: 'assistant',
         content: '（较早的对话已压缩为摘要）',
@@ -208,8 +201,6 @@ function readMessages(id: string): ChatMessage[] {
   }
 }
 
-/** 流式增量不带工具图片：图片已随工具结束的全量快照到过渲染端，
- *  而 ~100ms 一帧的增量重传 base64 会让 IPC 包随图片体积与历史步骤线性膨胀。 */
 export function withoutToolImages(message: ChatMessage): ChatMessage {
   const strip = (step: AgentToolResult): AgentToolResult => {
     if (!step.output?.image) return step;
@@ -227,11 +218,9 @@ export function withoutToolImages(message: ChatMessage): ChatMessage {
 }
 
 export function usageOf(entry: Live | undefined): ContextUsageView | null {
-  // 一次聚合同时取上下文占用与累计用量：分开调用会让按消息估算的重活在同一个流式节拍里做两遍。
   return entry ? contextUsageView(entry.session.getSessionStats(), entry.compactedTokens) : null;
 }
 
-/** Pi 会话统计 → 上下文用量。压缩后下次回复前 Pi 给不出用量（tokens 为 null），用 compactedTokens 估计顶上。 */
 export function contextUsageView(
   stats: Pick<ReturnType<AgentSession['getSessionStats']>, 'contextUsage' | 'tokens'>,
   compactedTokens?: number,
@@ -246,8 +235,6 @@ export function contextUsageView(
           estimated: true,
         }
       : null;
-  // 缓存命中率取本会话累计（含已压缩或被分支抛弃的历史）；提供商不上报缓存时恒为 0，
-  // 会被读成「一次没命中」，所以仅在出现过缓存读写时才带这两个字段。
   const { input, cacheRead, cacheWrite } = stats.tokens;
   return {
     tokens: usage.tokens,
@@ -296,15 +283,11 @@ export function snapshot(id: string): WorkspaceChat {
   let choice: ModelChoice = { kind: 'none' };
   try {
     choice = modelChoice(meta);
-  } catch {
-    // 凭据不可读时只显示未配置状态。
-  }
+  } catch {}
   let cwd: string | null = entry?.cwd ?? null;
   try {
     cwd ??= sessionCwd(meta.project_id, meta.cwd);
-  } catch {
-    // 项目目录缺失：快照照常展示历史，发送时由会话运行层报出具体错误。
-  }
+  } catch {}
   return {
     sessionId: id,
     projectId: meta.project_id,

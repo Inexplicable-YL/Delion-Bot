@@ -1,4 +1,3 @@
-// 轮次审阅记录工作目录的前后状态，不依赖工具名称，也不把历史 diff 重新对当前文件计算。
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
@@ -14,7 +13,6 @@ import { hostPorts } from '../ports';
 const execute = promisify(execFile);
 const compress = promisify(gzip);
 const decompress = promisify(gunzip);
-// 覆盖普通项目，限制单轮内存与主进程工作量；超限必须在接口中标记，不截断后假装完整。
 const FILE_LIMIT = 10_000;
 const HASH_BYTE_LIMIT = 16 * 1024 * 1024;
 const TEXT_BYTE_LIMIT = 1024 * 1024;
@@ -95,7 +93,6 @@ async function repository(cwd: string): Promise<{ root: string | null; missing: 
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { root: null, missing: true };
-    // 只将 Git 明确报告的非仓库视为隐藏入口，权限等错误继续上报。
     if (String((error as { stderr?: Buffer }).stderr).includes('not a git repository'))
       return { root: null, missing: false };
     throw error;
@@ -158,7 +155,6 @@ function stateOf(bytes: Buffer, budget: { remaining: number }): FileState {
   return state;
 }
 
-// 超过 1 MiB 的文件本就不给文本 diff，不读内容，按大小与修改时间判断变化，免得哈希大文件拖住发送。
 async function readDisk(
   cwd: string,
   path: string,
@@ -222,11 +218,9 @@ export async function captureDirectory(
     .filter(included)
     .sort();
   if (paths.length > FILE_LIMIT) warnings.add('工作目录超过 10,000 个文件，本轮记录不完整');
-  // 快照本身不应进入被跟踪目录，即使用户将 cwd 指向了应用数据目录。
   const tracked = paths
     .slice(0, FILE_LIMIT)
     .filter((path) => !inside(changesRoot(), resolve(cwd, path)));
-  // 分批并发读取，再按路径顺序分配文本预算，结果与读取完成的先后无关。
   for (let start = 0; start < tracked.length; start += READ_BATCH) {
     const batch = tracked.slice(start, start + READ_BATCH);
     const reads = await Promise.allSettled(batch.map((path) => readDisk(cwd, path)));
@@ -379,7 +373,6 @@ export async function readTurnChanges(
       ...fileSummary(file),
       ...(includeStats ? { stat: diffStatOf(detail(file).patch) } : {}),
     });
-    // 一次解压后顺序统计，文件间让出主进程，不并发保留整轮文本副本。
     if (includeStats) await new Promise<void>((resolve) => setImmediate(resolve));
   }
   return { ...saved, files };
@@ -443,7 +436,6 @@ async function uncommitted(
       .toString('utf8')
       .trim();
   } catch {
-    // 只有尚无首个提交可用空树；损坏的 HEAD 等错误不伪装为新仓库。
     await command(cwd, 'git', ['symbolic-ref', 'HEAD']);
   }
   const paths = summary.head
@@ -538,7 +530,6 @@ async function uncommitted(
             }
           : stateOf(await command(cwd, 'git', ['cat-file', 'blob', objectId!]), oldBudget);
       old.mode = mode === '100755' ? 0o755 : 0o644;
-      // Git 在 Windows 不追踪 POSIX 权限，避免每个文件都因 mode 显示为改动。
       if (process.platform === 'win32' && current) current.mode = old.mode;
       before.files[path] = old;
     } catch (error) {
@@ -570,7 +561,6 @@ export async function readUncommittedFileChange(
   const file = files[0];
   if (!file) throw new Error('此文件当前没有未提交改动');
   if (summary.head && file.before && fileSummary(file).textDiff) {
-    // Git 对已跟踪文件按仓库属性比较，避免把工作树 CRLF 与 blob LF 当作整文件替换。
     const patch = (
       await command(summary.cwd, 'git', [
         'diff',

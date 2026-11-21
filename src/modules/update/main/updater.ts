@@ -70,7 +70,6 @@ function fail(step: UpdateStep, error: unknown): UpdateSnapshot {
 function configureUpdater(): void {
   if (configured) return;
   configured = true;
-  // 检查、下载和安装分别由用户流程驱动，退出或推迟提醒不能绕过保存工作区。
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.autoRunAppAfterInstall = true;
@@ -84,7 +83,6 @@ function configureUpdater(): void {
     if (currentState().version === version) dispatch({ type: 'download/finished' });
   });
   autoUpdater.on('error', (error) => {
-    // check/download 的 Promise 处理失败；安装器启动后只能通过事件报告错误。
     if (currentState().phase === 'installing') fail('install', error);
     else console.error('Update failed', error);
   });
@@ -130,7 +128,6 @@ export async function beginInstall(): Promise<UpdateSnapshot> {
   if (started === previous) return started;
   try {
     setPendingInstall(false);
-    // 返回只表示已请求安装，不能宣称安装成功；新进程会从实际版本重新开始。
     autoUpdater.quitAndInstall(false, true);
     return currentState();
   } catch (error) {
@@ -164,7 +161,6 @@ export function startBackgroundUpdateCheck(): () => void {
   };
 }
 
-/** 重启后重新核对更新并复用 updater 的下载缓存，只准备到 ready，仍需用户确认。 */
 async function preparePendingUpdate(): Promise<void> {
   if (!app.isPackaged || !hasWindow() || !savedPendingInstall()) return;
   setPendingInstall(false);

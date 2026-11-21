@@ -1,5 +1,3 @@
-// 远程会话的后台任务：后台 bash 换成 helper 任务。
-// 停止走 helper 的显式取消，退出应用时要等 helper 报回结束；真机行为由 pnpm test:remote 覆盖。
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

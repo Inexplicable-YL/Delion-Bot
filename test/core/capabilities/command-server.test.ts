@@ -1,6 +1,3 @@
-// delion 命令桥 bash 函数：在真实 Git Bash 里执行 COMMAND_BRIDGE。
-// 两条回归：'<JSON>' 参数原样进入 input（\${2:-{}} 会被 bash 截断在第一个 } 再拼出字面量 }）；
-// 请求体经 stdin 递出，走 argv 时 Windows 会按 ANSI 代码页转码，非 ASCII 内容到端上已是替换字符。
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -58,7 +55,6 @@ async function postedBody(port: number, line: string) {
     line,
   );
   try {
-    // 异步执行：同步阻塞会让同进程的 HTTP 服务端无法应答。
     const child = spawn(locateBash(), [path], { stdio: ['ignore', 'ignore', 'pipe'] });
     let stderr = '';
     child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString()));
@@ -79,8 +75,6 @@ describe('delion 命令桥', () => {
     });
   });
 
-  // 走真实 curl 和本机端口，覆盖整条 argv → HTTP 的路径。Windows 上按 ANSI 代码页转码的问题
-  // 只在这段路上暴露，桩函数拿不到 argv 转换，因此必须打真实端口。
   it('非 ASCII 标题经端口送达时原样保留', async () => {
     const samples = ['社团活动', '日本語テスト', '重要🎌【全角】', 'Lab 报告 第3次'];
     const bodies: string[] = [];

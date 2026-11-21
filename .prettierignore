@@ -9,3 +9,5 @@ pnpm-lock.yaml
 scripts/*.ps1
 # 由 test/core/protocol-schema.test.ts 生成
 src/core/protocol/agent.schema.json
+# 设计规范含 YAML frontmatter，Prettier 会改写双引号与表格排版
+DESIGN.md

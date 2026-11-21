@@ -1,4 +1,3 @@
-// Agent 协议的主进程实现：只做转发，校验由协议 schema 完成。
 import { AGENT_PROTOCOL_VERSION, agentContract } from '../protocol/agent';
 import { implement } from '../protocol/contract';
 import { listChatCommands } from './chat-commands';

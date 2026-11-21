@@ -1,4 +1,3 @@
-// 协议的 JSON Schema：给移动端生成代码，也是 CI 比对兼容性的依据。
 import { z } from 'zod';
 import {
   AGENT_PROTOCOL_VERSION,
@@ -49,7 +48,6 @@ export function agentProtocolSchema(): Record<string, unknown> {
       metadata,
       io: 'input',
       unrepresentable: 'any',
-      // 二进制在网关上按 base64 传输。
       override: ({ zodSchema, jsonSchema }) => {
         if (zodSchema._zod.def.type === 'custom')
           Object.assign(jsonSchema, { type: 'string', contentEncoding: 'base64' });

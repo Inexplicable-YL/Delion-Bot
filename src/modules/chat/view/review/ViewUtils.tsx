@@ -1,0 +1,18 @@
+import type { ReactNode } from 'react';
+
+export const STATUS_TEXT = { added: '新增', modified: '修改', deleted: '删除' } as const;
+
+const lastSeparator = (path: string) => Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+export const basenameOf = (path: string) => path.slice(lastSeparator(path) + 1) || path;
+export const dirnameOf = (path: string) => path.slice(0, Math.max(0, lastSeparator(path)));
+
+export function Centered({ children, ...rest }: { children: ReactNode; role?: string }) {
+  return (
+    <div
+      className="flex min-h-0 flex-1 items-center justify-center gap-1.5 p-6 text-center text-ui-body text-ink-2"
+      {...rest}
+    >
+      {children}
+    </div>
+  );
+}

@@ -10,8 +10,8 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { errorMessage } from '../../../core/protocol/contract';
-import { Button } from '../../../ui/button';
-import { Card } from '../../../ui/card';
+import { Button } from '../../../ui/Button';
+import { Card } from '../../../ui/Card';
 import { cn } from '../../../ui/cn';
 import {
   Dialog,
@@ -19,7 +19,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogTitle,
-} from '../../../ui/dialog';
+} from '../../../ui/Dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,15 +27,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
   useAfterMenuClose,
-} from '../../../ui/dropdown-menu';
-import { IconButton } from '../../../ui/icon-button';
-import { SegmentedControl } from '../../../ui/segmented-control';
-import { Textarea } from '../../../ui/textarea';
-import { showToast } from '../../../ui/toast';
+} from '../../../ui/DropdownMenu';
+import { IconButton } from '../../../ui/IconButton';
+import { SegmentedControl } from '../../../ui/SegmentedControl';
+import { Textarea } from '../../../ui/Textarea';
+import { showToast } from '../../../ui/Toast';
 import { useNow } from '../../../ui/use-now';
 import type { WorkspaceEntry } from '../../workspace/contract';
 import { explorerDragType, localPathsOf } from '../../workspace/view';
-import { useChatTabSource } from './chat-source';
+import { useChatTabSource } from './ChatSource';
 import { chatClient } from './client';
 import { useSessions } from './sessions';
 

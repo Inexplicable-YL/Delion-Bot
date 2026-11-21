@@ -1,5 +1,3 @@
-// 更新后首次启动的「更新内容」：数据源是 CHANGELOG.md 每个版本的扁平列表。
-// 构建时以 ?raw 内联，运行时只取条目文本，`## Unreleased` 不进弹窗。
 import changelog from '../../../../CHANGELOG.md?raw';
 
 export interface ReleaseNote {
@@ -10,10 +8,6 @@ export interface ReleaseNote {
 
 const lastSeenKey = 'delion.release-notes.last-seen';
 
-/**
- * 只收已发布版本（`## <版本> - <日期>`，跳过 Unreleased），条目就是弹窗内容。
- * 没有条目的版本（同一天合并发布留下的空分节）不弹。
- */
 export function parseReleaseNotes(markdown: string): ReleaseNote[] {
   const notes: ReleaseNote[] = [];
   for (const section of markdown.split(/^## /m).slice(1)) {
@@ -48,7 +42,6 @@ export function notesBetween(
     .sort((a, b) => compareVersions(b.version, a.version));
 }
 
-/** 本次启动要展示的更新内容，并把当前版本记为已看过；首次记录不展示。 */
 export function takePendingReleaseNotes(current: string): ReleaseNote[] {
   const lastSeen = localStorage.getItem(lastSeenKey);
   localStorage.setItem(lastSeenKey, current);

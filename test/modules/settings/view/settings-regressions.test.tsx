@@ -9,8 +9,6 @@ import type {
   LlmVerifyResult,
 } from '../../../../src/core/protocol/llm';
 
-// 契约客户端在模块加载时取 bridge，须先于导入页面装好；设置用例替换 invoke 的实现，
-// 模型用例经 stubLlm 按通道登记 handler。
 const { api, bridge, invoke } = vi.hoisted(() => {
   const api: Record<string, (input: never) => unknown> = {};
   const invoke = vi.fn();
@@ -20,7 +18,7 @@ const { api, bridge, invoke } = vi.hoisted(() => {
 });
 import { LlmSection } from '../../../../src/modules/settings/view/agent/LlmSection';
 import { GeneralSection } from '../../../../src/modules/settings/view/GeneralSection';
-import { dismissToast, toasts } from '../../../../src/ui/toast';
+import { dismissToast, toasts } from '../../../../src/ui/Toast';
 
 let container: HTMLDivElement;
 let root: Root;
@@ -156,12 +154,10 @@ it('keeps the current provider and its draft when an earlier save finishes', asy
       }),
   });
   await renderLlm();
-  // 编辑态即时保存：名称失焦触发保存并挂起，此时切换提供商并输入草稿。
   const nameA = container.querySelector<HTMLInputElement>('input')!;
   await act(async () => nameA.focus());
   await fill(nameA, 'A renamed');
   await act(async () => nameA.blur());
-  // 列表行按钮含首字母块，按包含匹配提供商名。
   await act(async () =>
     [...container.querySelectorAll('button')]
       .find((item) => item.textContent?.includes('Provider B'))!

@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import { ArrowUturnLeftIcon as RotateCcw } from '@heroicons/react/24/outline';
-import { Button } from '../../../../ui/button';
-import { Kbd } from '../../../../ui/kbd';
+import { Button } from '../../../../ui/Button';
+import { Kbd } from '../../../../ui/Kbd';
 import {
   acceleratorFromEvent,
   acceleratorKeys,
@@ -13,8 +13,8 @@ import {
 } from '../../../../modules/settings/contract';
 import { useShortcuts } from '../../shell/shortcuts';
 import { SectionHeader, SettingsGroup } from '../../../../modules/settings/view';
-import { showToast } from '../../../../ui/toast';
-import { ErrorText } from '../../../../ui/alert';
+import { showToast } from '../../../../ui/Toast';
+import { ErrorText } from '../../../../ui/Alert';
 import { errorMessage } from '../../../../core/protocol/contract';
 
 const platform = window.delionBot?.platform === 'darwin' ? 'mac' : 'other';
@@ -87,7 +87,6 @@ export function ShortcutsSection() {
     void apply(recording, accelerator);
   });
 
-  // 录制：捕获阶段抢在 AppShell 的窗口级派发之前消费按键，避免边录制边触发动作。
   useEffect(() => {
     if (!recording) return;
     const onKeyDown = (event: KeyboardEvent) => recordKey(event);

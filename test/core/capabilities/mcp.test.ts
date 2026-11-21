@@ -1,5 +1,3 @@
-// 用本地 echo 服务器（stdio JSON-RPC）与环回 HTTP 服务器走真实的加密配置文件
-// （safeStorage 换成明文），覆盖 MCP 连接、工具发现、断连与配置持久化。
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -111,7 +109,6 @@ describe('MCP 连接与工具发现', () => {
     expect(refreshed[0]).toMatchObject({ status: 'connected', toolCount: 3, error: null });
   }, 20000);
 
-  // 工具名归一化后冲突时按登记路由到先到的服务器，不猜最长前缀。
   it('归一化同名冲突：路由按登记执行', async () => {
     await addMcpServer({ ...echoConfig, name: 'a', env: { DELION_TOOL_NAME: 'b_echo' } });
     const views = await addMcpServer({ ...echoConfig, name: 'a-b' });

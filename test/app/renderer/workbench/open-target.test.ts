@@ -1,5 +1,3 @@
-// 标签打开规则（workbench/open-target.ts 顶部那张表）的行为测试：每条规则在项目与资料两种
-// 工作台下各验一遍。规则改了，这里先红。
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LayoutNode } from '../../../../src/modules/workspace/contract';
 import {

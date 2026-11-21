@@ -1,4 +1,3 @@
-// workspace/store 状态机单测：并发 load 共享一次请求、失败后可重试、refresh/setError 镜像语义。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceEntry } from '../../../../src/modules/workspace/contract';
 
@@ -100,7 +99,6 @@ describe('workspace store mirror', () => {
     const { state, onChanged } = installDela({});
     await Promise.all([useWorkspaceStore.getState().load(), useWorkspaceStore.getState().load()]);
     expect(state).toHaveBeenCalledTimes(1);
-    // 外部文件变化订阅只注册一次（模块级去重），变化回调复用 refresh 通道。
     expect(onChanged).toHaveBeenCalledExactlyOnceWith('workspace:changed', expect.any(Function));
     expect(useWorkspaceStore.getState()).toMatchObject({
       loaded: true,

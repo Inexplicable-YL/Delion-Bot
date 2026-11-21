@@ -70,8 +70,6 @@ const underRemoteRoot = (root: string, path: string) => {
   return path === base || path.startsWith(`${base}/`);
 };
 
-/** 条目所属的远程项目根，本地条目返回 null。远端路径在 Windows 上会被 isAbsolute 判真，
- *  所有会碰本地文件系统的入口都必须先问这里，否则读到错位置。 */
 export function remoteProjectOf(id: string): RemoteRoot | null {
   const roots = remoteRoots();
   const byId = roots.find((root) => root.id === id);
@@ -81,7 +79,6 @@ export function remoteProjectOf(id: string): RemoteRoot | null {
     const owner = roots.find((root) => root.id === node.projectId);
     return owner && underRemoteRoot(owner.path, node.path) ? owner : null;
   }
-  // 裸远端路径只在唯一匹配时归属：多个项目都装得下它时宁可报错也不猜。
   const normalized = id.replace(/\\/g, '/');
   const matches = roots.filter((root) => underRemoteRoot(root.path, normalized));
   if (matches.length > 1) throw new Error('远端路径同时属于多个项目，无法确定归属');
@@ -111,7 +108,6 @@ export const workspaceProjects: Projects = {
   },
 };
 
-/** 目录留在远端，本地只补一条身份行；`local_path` 是远端 POSIX 路径。 */
 export async function importRemoteProject(
   remoteId: unknown,
   path: unknown,
@@ -205,8 +201,6 @@ function carryNoteAssets(fromFile: string, toFile: string, text: string): void {
   }
 }
 
-/** 项目目录只由 main 根据条目身份解析：条目必须是项目（升格后带数据库行），
- * 纯路径文件夹与文件不能经此入口打开。 */
 export function projectDirectory(id: unknown): string {
   const projectId = workspaceEntryIdSchema.parse(id);
   prepareStorage();
@@ -218,7 +212,6 @@ export function projectDirectory(id: unknown): string {
   return path;
 }
 
-/** 本地项目给出磁盘目录，远程项目给出远端路径与连接，避免把远端路径当本地目录用。 */
 export function projectLocation(
   id: unknown,
 ): { kind: 'local'; path: string } | { kind: 'remote'; remoteId: string; path: string } {
@@ -259,7 +252,6 @@ function managedPath(item: WorkspaceEntry): string | null {
   return stored.path;
 }
 
-/** 根目录迁移/移动后改写库里所有受管路径；须在调用方事务内执行。 */
 function rewriteStoredPaths(from: string, to: string) {
   const db = hostPorts().database();
   const relocate = (path: string) => {
@@ -298,7 +290,6 @@ function finishMove(move: PendingMove) {
   })();
 }
 
-/** 归档文件夹身份：路径缺失或目录丢失时重新落定，之后只读。 */
 function ensureArchiveFolder() {
   const db = hostPorts().database();
   const stored = db
@@ -367,7 +358,6 @@ export function getWorkspaceState(): WorkspaceState {
   };
   for (const child of readdirSync(root, { withFileTypes: true }))
     if (!child.isSymbolicLink()) scan(join(root, child.name), null);
-  // 远程项目的 local_path 是远端路径，跳过本地扫描。
   for (const item of stored)
     if (item.kind !== 'source' && item.path && !item.remoteId && !visited.has(resolve(item.path)))
       scan(item.path, null);
@@ -392,7 +382,6 @@ export function entry(id: string): WorkspaceEntry {
   workspaceEntryIdSchema.parse(id);
   if (isAbsolute(id)) {
     if (remoteProjectOf(id)) throw new Error('远程条目请通过远程接口访问，本地没有对应文件');
-    // source 行的 local_path 是容器目录（去重键），不代表目录身份，必须排除。
     const stored = hostPorts()
       .database()
       .prepare(
@@ -447,8 +436,6 @@ function checkParent(parentId: string | null, movingId?: string) {
   }
 }
 
-/** 新建名里的路径分隔符（与 VS Code 一致）会建出中间文件夹，`aaa/` 一律建文件夹；
- *  `.` 与 `..` 段拒绝，结果必定落在父目录之内。最后一段已存在时报错而不是自动改名。 */
 function createAtPath(
   parentId: string | null,
   name: string,
@@ -531,7 +518,6 @@ export function createWorkspaceEntry(input: WorkspaceCreateInput): WorkspaceEntr
   return entry(id);
 }
 
-/** 目录留在原处，只补一条项目身份行；重命名、移动都会真的动这个目录。 */
 export function linkProjectFolder(path: unknown): WorkspaceEntry {
   const resolved = resolve(z.string().min(1).max(32_767).parse(path));
   prepareStorage();
@@ -779,7 +765,6 @@ export function saveWorkspaceNote(id: string, text: string, revision: string): s
   return next;
 }
 
-/** 外键级联删不掉子项目的会话（会残留成随聊），所以先拒绝并点名。 */
 function assertNoChildProjects(projectId: string): void {
   const children = hostPorts()
     .database()
@@ -797,8 +782,6 @@ export async function removeWorkspaceEntry(value: unknown): Promise<void> {
   const item = entry(id);
   if (item.kind === 'project') {
     assertNoChildProjects(item.id);
-    // 「移除项目」＝项目终结：名下会话（含归档）一并删除，目录与文件保留。
-    // 动态导入避开 agent/session → workspace/api 的环。
     const { deleteSession } = await import('../../../core/agent/session/commands');
     const { invalidateSessions } = await import('../../../core/agent/session/run');
     const ids = hostPorts()

@@ -9,8 +9,8 @@ import {
 } from '@heroicons/react/24/outline';
 import type { Navigate, NoticeKind } from '../../../app/module';
 import { errorMessage } from '../../../core/protocol/contract';
-import { Callout } from '../../../ui/alert';
-import { Button } from '../../../ui/button';
+import { Callout } from '../../../ui/Alert';
+import { Button } from '../../../ui/Button';
 import { cn } from '../../../ui/cn';
 import {
   DropdownMenu,
@@ -20,8 +20,8 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '../../../ui/dropdown-menu';
-import { EmptyState } from '../../../ui/empty-state';
+} from '../../../ui/DropdownMenu';
+import { EmptyState } from '../../../ui/EmptyState';
 import type { NotificationItem } from '../contract';
 import { useNotificationSourceFilter } from './source-filter';
 import {
@@ -143,7 +143,6 @@ function NotificationsView({ navigate, kinds }: { navigate: Navigate; kinds: Kin
   const sources = all.filter((source) => !hidden.includes(source));
   const filtered = sources.length < all.length;
   const allState = useNotificationState();
-  // 筛选在主进程完成，否则最近 200 条可能都被其他来源占满。
   const filteredState = useQuery({
     queryKey: ['notifications', 'state', sources],
     queryFn: () => notificationsClient.state(sources),

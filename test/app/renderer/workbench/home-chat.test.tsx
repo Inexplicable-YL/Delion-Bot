@@ -5,7 +5,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceChat } from '../../../../src/core/protocol/agent';
 
-// 契约客户端在模块加载时取 bridge，须先于导入装好；各用例按通道替换或监视 handler。
 const { api, delion } = vi.hoisted(() => {
   const api: Record<string, (input: never) => unknown> = {};
   const delion = {
@@ -20,7 +19,7 @@ const { api, delion } = vi.hoisted(() => {
 import { useNavigationStore } from '../../../../src/app/renderer/navigation/view';
 import { useWorkbenchLayout } from '../../../../src/app/renderer/workbench/layout-store';
 import { walkGroups } from '../../../../src/app/renderer/workbench/layout-schema';
-import { toasts } from '../../../../src/ui/toast';
+import { toasts } from '../../../../src/ui/Toast';
 import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
 import {
   ChatHome,
@@ -30,7 +29,6 @@ import {
   useSessions,
 } from '../../../../src/modules/chat/view';
 
-// 保留 ChatHome、ChatTab、发送逻辑与导航 store；输入编辑器和消息排版不参与路由验证。
 vi.mock('../../../../src/modules/chat/view/ChatComposer', () => ({
   ChatComposer: ({
     value,
@@ -67,7 +65,6 @@ vi.mock('../../../../src/modules/chat/view/ChatThread', () => ({
   ),
 }));
 
-// 查询结果默认经 setTimeout 通知，act 等不到：改走微任务。
 notifyManager.setScheduler(queueMicrotask);
 
 let host: HTMLDivElement;
@@ -79,7 +76,6 @@ const noChatTab = () =>
     group.tabs.some((tab) => tab.startsWith('chat:')),
   );
 
-/** 代替工作台装配层：把导航的首页请求交给首页，跳转接到真实导航 store。 */
 function Home() {
   const request = useNavigationStore((state) => state.generalChat);
   const source = {
@@ -298,15 +294,12 @@ it('回到首页接着上次会话，清空运行内存（重启）后才是新�
     }),
   );
   const create = vi.spyOn(api, 'agent:create-session');
-  // 切走再回首页（侧栏「首页」就是 openGeneralChat(false)）：接着上次的会话，不新建。
   await act(async () => useNavigationStore.getState().openGeneralChat(false));
   expect(host.querySelector('[aria-label="对话消息"]')?.textContent).toBe('上次的回复');
   expect(create).not.toHaveBeenCalled();
-  // 重启等于这块内存没了：首页回到新对话。
   await act(async () => useSessions.setState({ homeSessionId: null }));
   await act(async () => useNavigationStore.getState().openGeneralChat(false));
   expect(create).toHaveBeenCalledTimes(1);
-  // 首页发起的通用会话落在随聊私有目录，不认资料页那一档。
   expect(create).toHaveBeenCalledWith({ projectId: null });
 });
 

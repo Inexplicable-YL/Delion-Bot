@@ -1,4 +1,3 @@
-// 工作台装配层：三个内容 Provider（chat/note/preview）、目录侧栏与 EntryDialogs 都挂在这里。
 import { useEffect, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -36,16 +35,16 @@ import { useShortcuts } from '../shell/shortcuts';
 import { walkGroups } from './layout-schema';
 import { purgeRemovedEntries } from './removed-cleanup';
 import { Workbench } from './Workbench';
-import { EntryDialogs } from '../workspace/entry-dialogs';
+import { EntryDialogs } from '../workspace/EntryDialogs';
 import { useEntryDialog } from '../workspace/entry-dialog-store';
 import { prefillNoteText, type EntryAction } from '../workspace/entry-actions';
 import { ancestorChainOf, useTreeState } from '../navigation/store';
 import { useLocalReferences, useRemoteReferences } from '../navigation/remote-references';
 import { documentTabId, useNavigationStore } from '../navigation/view';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { currentContainerOf, WorkbenchExplorer } from './WorkbenchExplorer';
 import { openTarget } from './open-target';
-import { ErrorText } from '../../../ui/alert';
+import { ErrorText } from '../../../ui/Alert';
 import { officeRefOf, opensInApp, sourceOf, sourceOfLink } from '../../views';
 import { workspaceClient, useWorkspaceStore } from '../../../modules/workspace/view';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -61,7 +60,6 @@ function newChatInCurrentPool() {
   void useNavigationStore.getState().newChat(useWorkbenchLayout.getState().projectId);
 }
 
-// 注入给标签的 hook 定义在模块级：组件体里的 hook 函数表达式会让编译器放弃整个 WorkbenchShell。
 function useReferenceEntries(projectId: string | null, cwd: string | null) {
   const entries = useWorkspaceStore((state) => state.workspace.entries);
   const remote = entries.find((item) => item.id === projectId)?.remoteId;
@@ -178,7 +176,6 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
 
   const onRemoved = (liveIds: Set<string>) => purgeRemovedEntries(liveIds);
 
-  // home 也预热布局，切进工作台时不会先闪一帧空白；同项目重复 init 会早退。
   useEffect(() => {
     if (!loaded) return;
     void useWorkbenchLayout.getState().init(projectId);

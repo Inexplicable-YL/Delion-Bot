@@ -1,7 +1,6 @@
 import type { LlmModelSettings } from '../protocol/llm';
 import { hostPorts } from '../ports';
 
-/** 主进程持久化的 LLM 提供商配置实例；apiKey 只存在这里，不进 renderer 或 SQLite。 */
 export interface StoredLlmProvider {
   id: string;
   name: string;
@@ -10,7 +9,6 @@ export interface StoredLlmProvider {
   models: string[];
   modelConfigs?: Record<string, LlmModelSettings>;
   piProvider: string | null;
-  /** 停用的提供商不进入会话的模型候选；用它的会话保留选择，但不能发送。 */
   enabled: boolean;
 }
 

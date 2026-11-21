@@ -7,24 +7,22 @@ import {
   TrashIcon as Trash2,
 } from '@heroicons/react/24/outline';
 import type { McpServerView } from '../../../../core/protocol/capabilities';
-import { Button } from '../../../../ui/button';
-import { Switch } from '../../../../ui/switch';
+import { Button } from '../../../../ui/Button';
+import { Switch } from '../../../../ui/Switch';
 import { cn } from '../../../../ui/cn';
-import { showToast } from '../../../../ui/toast';
+import { showToast } from '../../../../ui/Toast';
 import { SectionHeader } from '../SectionHeader';
 import { SettingsGroup } from '../SettingsGroup';
 import { mcpStatusBadge } from './mcp-logic';
 import { McpFormDialog, type McpEditState } from './McpFormDialog';
-import { ConfirmDialog } from '../../../../ui/dialog';
-import { ErrorText } from '../../../../ui/alert';
-import { Spinner } from '../../../../ui/spinner';
+import { ConfirmDialog } from '../../../../ui/Dialog';
+import { ErrorText } from '../../../../ui/Alert';
+import { Spinner } from '../../../../ui/Spinner';
 import { capabilitiesClient } from '../../../chat/view';
 import { errorMessage } from '../../../../core/protocol/contract';
 
 export function McpTab() {
   const queryClient = useQueryClient();
-  // 未读到列表（data 为 undefined）时不渲染空态，避免闪烁；connecting 是中间态，
-  // 期间每 500ms 重读，让“添加/重连 → 连接中 → 已连接/失败”落定，其余时候不轮询。
   const list = useQuery({
     queryKey: ['capabilities', 'mcpServers'],
     queryFn: () => capabilitiesClient.listMcpServers(),
@@ -75,7 +73,6 @@ export function McpTab() {
       setServers(await capabilitiesClient.removeMcpServer(id));
       setConfirmId(null);
     } catch (cause) {
-      // 删除失败也要让用户看到原因：关闭确认框，错误经 toast 提示。
       setConfirmId(null);
       showToast({ variant: 'error', title: '删除失败', description: errorMessage(cause) });
     }

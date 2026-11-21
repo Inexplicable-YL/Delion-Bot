@@ -1,7 +1,3 @@
-/**
- * 子 Agent（task 工具）：在父会话的目录下另开一个历史为空的会话，工具与父会话相同（不含 task），
- * 只把最终回复交回父会话。同时运行的子 Agent 数全应用合计，超出直接报错，不排队。
- */
 import type { AgentSessionEvent, ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { z } from 'zod';
 import type { TaskStatus, SubagentDetails } from '../protocol/agent';
@@ -95,9 +91,7 @@ export function taskTool(
         let owner: string | null = null;
         try {
           owner = row(params.taskId).parent_id;
-        } catch {
-          // 不存在的 taskId 与别人的子 Agent 一样报错。
-        }
+        } catch {}
         if (owner !== parent.id) throw new Error(`没有这个子 Agent：${params.taskId}`);
         if (taskRunning(params.taskId) || sessionRunning(params.taskId))
           throw new Error('这个子 Agent 还在运行，等它结束再续接');

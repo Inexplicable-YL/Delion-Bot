@@ -1,4 +1,3 @@
-// 渲染端清单：外壳据此渲染模块的页面（docs/adr/0019）；去掉一行，对应页面随之消失。
 import type { QueryClient } from '@tanstack/react-query';
 import type { ComponentType } from 'react';
 import type {
@@ -24,7 +23,6 @@ export const views: ViewDefinition[] = [
   updateView,
 ];
 
-/** 页面的参数类型因页而异，按 target.page 取出的定义与 target 必然匹配，这里统一放宽。 */
 interface AnyPage {
   component: ComponentType<{ target: NavTarget; navigate: Navigate; drawer: PageDrawer | null }>;
   drawer?: boolean;

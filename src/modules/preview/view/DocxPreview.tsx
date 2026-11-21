@@ -1,9 +1,9 @@
 import { renderAsync } from 'docx-preview';
 import { MinusIcon as Minus, PlusIcon as Plus } from '@heroicons/react/24/outline';
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { pinchZoomRef } from './use-pinch-zoom';
-import { ErrorText } from '../../../ui/alert';
+import { ErrorText } from '../../../ui/Alert';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const MIN_ZOOM = 0.5;
@@ -30,14 +30,10 @@ export function DocxPreview({ url }: { url: string }) {
         const container = host.current;
         if (!container) return;
         container.replaceChildren();
-        // useBase64URL：图片/字体内联为 data: URL（blob 路径实测不出图，且 font-src 未放行 blob:）；
-        // renderAltChunks:false：altChunk 默认渲染为无 sandbox 的 srcdoc iframe。
         await renderAsync(await response.arrayBuffer(), container, undefined, {
           useBase64URL: true,
           renderAltChunks: false,
         });
-        // docx-preview 把渲染结果直接挂进主文档且不过滤超链接：统一按协议白名单剥除，
-        // 阻断文档内 javascript: 等链接经主文档点击触发（与 sanitize-html 同一白名单）。
         container.querySelectorAll('a[href]').forEach((a) => {
           try {
             if (!['https:', 'http:'].includes(new URL(a.getAttribute('href')!).protocol))

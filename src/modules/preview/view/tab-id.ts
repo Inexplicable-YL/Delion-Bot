@@ -1,4 +1,3 @@
-/** preview:{entryId}（工作区条目）或 preview:source:{原 documentKey}（@ 引用型资料）。 */
 export type PreviewTabTarget = { entryId: string } | { sourceId: string };
 
 export function parsePreviewTabId(tabId: string): PreviewTabTarget | null {

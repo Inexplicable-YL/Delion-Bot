@@ -1,4 +1,3 @@
-// 阅读位置按 标签+组 在本次运行内记忆，切换标签不丢，不持久化。
 import { create } from 'zustand';
 
 const usePreviewScroll = create<Record<string, number>>(() => ({}));

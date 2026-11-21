@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import { commentRange } from '../../../../src/modules/chat/view/reply-comment';
+import { commentRange } from '../../../../src/modules/chat/view/ReplyComment';
 
 describe('commentRange', () => {
   afterEach(() => {

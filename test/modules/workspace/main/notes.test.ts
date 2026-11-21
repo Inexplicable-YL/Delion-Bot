@@ -1,5 +1,3 @@
-// 工作区文件的主进程行为：按内容判定格式、原样读写、图片落盘与受限资源解析、
-// 移动/转换/导入项目时的身份维护（条目 UUID + 项目目录，目录原地不动）。
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -231,7 +229,6 @@ describe('按内容判定格式（无扩展名白名单）', () => {
     const binary = await readWorkspaceEntry(write('core', Uint8Array.from([0x7f, 0x45, 0, 1])));
     expect(binary.format).toBe('binary');
     expect(binary.text).toBeUndefined();
-    // GBK「中文」：不是合法 UTF-8，按 UTF-8 读进来再写回会把它写坏。
     const gbk = write('gbk.txt', Uint8Array.from([0xd6, 0xd0, 0xce, 0xc4]));
     expect((await readWorkspaceEntry(gbk)).format).toBe('binary');
     expect(() => saveWorkspaceNote(gbk, 'x', 'any')).toThrow('只有文本文件可以编辑');
@@ -255,7 +252,6 @@ describe('按内容判定格式（无扩展名白名单）', () => {
     expect(before.text).toBe(original);
     saveWorkspaceNote(path, edited, before.revision!);
     expect(readFileSync(path, 'utf8')).toBe(edited);
-    // 硬链接仍指向同一份内容：说明是原地覆写，没有 rename 出一个新文件。
     expect(readFileSync(link, 'utf8')).toBe(edited);
     expect(statSync(path).ino).toBe(statSync(link).ino);
     expect(existsSync(`${path}.tmp`)).toBe(false);
@@ -354,7 +350,6 @@ describe('createWorkspaceEntry', () => {
       "INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, remote_id, updated_at) VALUES (?, NULL, '项目说明', 'source', 'external:4', ?, NULL, ?)",
     ).run(crypto.randomUUID(), folder.id, new Date().toISOString());
     expect(entry(folder.id).kind).toBe('folder');
-    // 同容器继续创建内容不受影响（source 行曾把容器误判成 source 而拒绝操作）。
     const note = createWorkspaceEntry({
       parentId: folder.id,
       name: '笔记.md',
@@ -406,7 +401,6 @@ describe('归档文件夹', () => {
     expect(entry(workspaceArchiveId).path).toBe(archivePath());
     expect(existsSync(archivePath())).toBe(true);
     expect(state.entries.find((item) => item.id === workspaceArchiveId)).toBeUndefined();
-    // 重复访问不重建：路径不变；只有 local_path 悬空时才重新落定。
     getWorkspaceState();
     expect(entry(workspaceArchiveId).path).toBe(archivePath());
     rmSync(archivePath(), { recursive: true, force: true });
@@ -449,7 +443,6 @@ describe('saveNoteImage / resolveWorkspaceAsset', () => {
     writeFileSync(join(sourceDir, '外部.png'), PNG);
     const importedId = insertFileEntry(db, join(sourceDir, '外部.png'), 'file');
     expect(() => saveNoteImage(importedId, 'a.png', PNG)).toThrow('只有 Markdown 文件可以插入图片');
-    // 导入文件以自身目录为基准解析相对图片；向上跳出该目录的引用被拒绝。
     expect(resolveWorkspaceAsset(importedId, '外部.png').mime).toBe('image/png');
     writeFileSync(join(state.root, '逃逸.png'), PNG);
     expect(() => resolveWorkspaceAsset(importedId, '../逃逸.png')).toThrow('资源路径超出文档目录');
@@ -551,7 +544,6 @@ describe('folder↔project 转换', () => {
     expect(db.prepare('SELECT count(*) AS n FROM sessions').get()).toEqual({ n: 0 });
     expect(db.prepare('SELECT count(*) AS n FROM workspace_entries').get()).toEqual({ n: 0 });
     expect(existsSync(directory)).toBe(true);
-    // 重新导入同一目录得到全新身份，不接回历史。
     const reborn = linkProjectFolder(directory);
     expect(reborn.id).not.toBe(project.id);
     expect(db.prepare('SELECT count(*) AS n FROM sessions').get()).toEqual({ n: 0 });

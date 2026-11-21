@@ -1,5 +1,3 @@
-// 文档读取注册表：PDF、Office 的解析组件由文档模块注册；没有注册时不接收文档附件，也不保存网页 PDF。
-
 export interface PreparedDocument {
   jobId: string;
   python: string;

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-// 即时渲染只加装饰：正文字节原样保留，光标所在行显示标记，其他行隐藏标记。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { ensureSyntaxTree } from '@codemirror/language';
@@ -33,7 +32,6 @@ function mount(doc: string, cursor: number, separator?: string) {
 }
 
 describe('markdownLivePreview', () => {
-  // 列表符号、转义、CRLF、尾部空行：所见即所得内核往返时都会改写，这里一个字节都不能变。
   const doc =
     '# 标题\r\n\r\n* 星号列表\r\n\r\n**粗体** \\*转义\\*\r\n\r\n![图](assets/a.png)\r\n\r\n';
 

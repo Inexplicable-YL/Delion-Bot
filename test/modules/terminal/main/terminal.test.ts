@@ -1,4 +1,3 @@
-// 项目内置终端的回归：跟随系统 shell、PTY 生命周期与进程回收。
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -153,7 +152,6 @@ describe.each(['win32', 'darwin'])('项目内置终端（%s）', (platform) => {
     expect(pty.write).toHaveBeenCalledWith('中文\r');
     await invoke('resize', { id, cols: 120, rows: 40 });
     expect(pty.resize).toHaveBeenCalledWith(120, 40);
-    // 输出按 8ms 合并成批发送：多条小块只产生一条 IPC，回放缓冲也只拼接一次。
     vi.useFakeTimers();
     data('输出中文');
     data('，追加');

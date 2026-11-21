@@ -6,9 +6,6 @@ import { hostPorts } from '../../core/ports';
 let database: Database.Database | null = null;
 
 const schema: string[] = [
-  // 工作区：条目身份以路径为主，只有项目与来源引用建行；笔记不落库。
-  // 远程连接：项目条目经 remote_id 指向这里，local_path 存远程绝对路径（POSIX）。
-  // Delion Bot 不保存任何 SSH 凭据：密钥、端口与跳板由 ssh 自己按 ~/.ssh/config 解析。
   `CREATE TABLE IF NOT EXISTS remotes (
     id TEXT PRIMARY KEY,
     label TEXT NOT NULL,
@@ -55,9 +52,6 @@ const schema: string[] = [
     id TEXT PRIMARY KEY,
     data TEXT NOT NULL
   )`,
-  // 会话索引：完整记录是 Pi 的 JSONL 会话文件（file 列）；项目即 kind='project' 的条目，
-  // 会话自带工作目录（通用会话是 chat-sessions 下的私有目录），cwd 为 NULL 时按条目 local_path 解析。
-  // parent_id 非空的是子 Agent 会话：不进会话列表与搜索，随父会话归档、删除。
   `CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES workspace_entries(id) ON DELETE SET NULL,

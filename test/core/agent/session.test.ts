@@ -1,5 +1,3 @@
-// 会话层：Pi 消息 → WorkspaceChat 投影；会话 cwd 取库里的 cwd 列（随聊是私有目录，资料页是课程目录），
-// cwd 为 NULL 时按项目目录/工作区根解析，项目目录缺失时报错而不换目录。
 import Database from 'better-sqlite3';
 import {
   existsSync,
@@ -94,7 +92,6 @@ vi.mock('../../../src/core/agent/environment', () => ({
     sessionOptions: async () => ({ customTools: [] }),
   }),
 }));
-// 假会话不跑工具：后台任务的工具与登记换成空壳（真实行为见 tasks.test / task-notice.test）。
 vi.mock('../../../src/core/agent/tasks', () => ({
   backgroundTools: async () => [],
   runningTasks: () => [],
@@ -372,7 +369,6 @@ it('文档附件按会话归属判断远程：本地路径落在远程项目根�
       "INSERT INTO remotes VALUES ('remote-id', 'gpu', 'root@10.0.0.5', NULL, NULL, 'x')",
     )
     .run();
-  // 远端根恰好盖住本机随聊目录：按路径判断会把本地会话误认成远程。
   state
     .db!.prepare(
       "INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, remote_id, updated_at) VALUES ('remote-project', NULL, '远程', 'project', NULL, ?, 'remote-id', 'x')",

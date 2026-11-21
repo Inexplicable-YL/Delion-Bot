@@ -1,5 +1,3 @@
-// 远端文件只读预览：字节不能整篇进内存，文本/图片只读限长片段，PDF/Office 经 delion-resource 按 Range 拉取。
-// PPTX 导出依赖本地路径，按不支持处理。
 import type { DocumentContent } from '../../workspace/contract';
 import {
   TEXT_EDIT_MAX_BYTES,
@@ -68,7 +66,6 @@ export async function readRemoteDocument(
   }
   if (format === 'pptx' || size > TEXT_PREVIEW_MAX_BYTES)
     return { title, format: 'binary', revision };
-  // 远端只读：文本同样只拉编辑上限那么多字节，再大的文件给头部并标注截断。
   const truncated = size > TEXT_EDIT_MAX_BYTES;
   const bytes = await readRemoteRange(target, path, 0, Math.min(size, TEXT_EDIT_MAX_BYTES));
   if (!isTextContent(bytes, truncated)) return { title, format: 'binary', revision };

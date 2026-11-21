@@ -1,6 +1,3 @@
-// 自带 OpenSSH 回退的离线部分：把系统的两个标准路径伪装成不存在，验证 Delion Bot 真的会换用
-// 随包分发的 ssh.exe。没有这一段，回退是否可用就只能靠手工在资源目录里试。
-// 「这个客户端能连上真机」在 bundled-ssh.remote.test.ts，由 pnpm test:remote 运行。
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
 

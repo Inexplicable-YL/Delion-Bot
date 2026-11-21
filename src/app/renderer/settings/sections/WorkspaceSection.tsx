@@ -1,20 +1,18 @@
 import { useState } from 'react';
 import { FolderIcon as Folder } from '@heroicons/react/24/outline';
 import type { WorkbenchLayout } from '../../../../modules/workspace/contract';
-import { Button } from '../../../../ui/button';
+import { Button } from '../../../../ui/Button';
 import { SectionHeader, SettingRow, SettingsGroup } from '../../../../modules/settings/view';
-import { showToast } from '../../../../ui/toast';
+import { showToast } from '../../../../ui/Toast';
 import { workspaceClient, useWorkspaceStore } from '../../../../modules/workspace/view';
 import { errorMessage } from '../../../../core/protocol/contract';
 
-/** 重置后的默认布局：单组空标签（workbench 的 createDefaultLayout 同构）。 */
 const defaultLayout: WorkbenchLayout = {
   root: { type: 'group', id: 'primary', tabs: [], active: null },
   focus: 'primary',
   maximized: null,
 };
 
-/** 当前项目 id：与 App 导航一致的 localStorage 键；空串表示无项目（通用布局）。 */
 function currentProjectId(): string | null {
   const raw =
     typeof localStorage === 'undefined' ? null : localStorage.getItem('delion.workspace.project');

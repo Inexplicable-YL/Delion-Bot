@@ -1,5 +1,3 @@
-// 远程项目的本地边界：远端路径绝不能落到本地文件系统上。
-// 用假传输层覆盖登记去重、树上不做本地扫描，以及新建/重命名/打开对远程条目的拒绝。
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -186,7 +184,6 @@ describe('远端条目身份', () => {
     expect(second.id).not.toBe(first.id);
     expect(remoteProjectOf(`${first.id}:${nodePath}`)?.id).toBe(first.id);
     expect(remoteProjectOf(`${second.id}:${nodePath}`)?.id).toBe(second.id);
-    // 裸远端路径同时落在两个项目里：不猜，直接说清。
     expect(() => remoteProjectOf(nodePath)).toThrow('同时属于多个项目');
   });
 });

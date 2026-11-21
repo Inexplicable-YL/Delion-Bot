@@ -19,10 +19,10 @@ import {
   StopIcon as Maximize,
   XMarkIcon as X,
 } from '@heroicons/react/24/outline';
-import { Sheet, SheetContent, SheetTrigger } from '../../../ui/sheet';
+import { Sheet, SheetContent, SheetTrigger } from '../../../ui/Sheet';
 import { useEditorSettings } from '../../../modules/preview/view';
 import { usePreferences } from './preferences';
-import { showToast, Toaster } from '../../../ui/toast';
+import { showToast, Toaster } from '../../../ui/Toast';
 import { DelionBotBrand } from '../../../modules/settings/view';
 import { cn } from '../../../ui/cn';
 import { useMediaQuery } from '../../../ui/use-media-query';
@@ -42,18 +42,18 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../../../ui/dropdown-menu';
+} from '../../../ui/DropdownMenu';
 import { navRow } from '../navigation/nav-styles';
-import { NewChatIcon } from '../navigation/new-chat-icon';
+import { NewChatIcon } from '../navigation/NewChatIcon';
 import { ConnectedAppIcons } from '../../../modules/connectors/view';
 import { UpdateBadge } from '../../../modules/update/view';
 import { navEntries, useVisibleNavEntries } from '../navigation/entries';
 import { pageHasDrawer } from '../../views';
-import { IconButton } from '../../../ui/icon-button';
-import { SidebarIcon } from '../../../ui/sidebar-icon';
-import { Button } from '../../../ui/button';
-import { WindowControlButton } from '../../../ui/window-control-button';
-import { Kbd } from '../../../ui/kbd';
+import { IconButton } from '../../../ui/IconButton';
+import { SidebarIcon } from '../../../ui/SidebarIcon';
+import { Button } from '../../../ui/Button';
+import { WindowControlButton } from '../../../ui/WindowControlButton';
+import { Kbd } from '../../../ui/Kbd';
 import { workspaceClient, useWorkspaceStore } from '../../../modules/workspace/view';
 import {
   Dialog,
@@ -62,7 +62,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '../../../ui/dialog';
+} from '../../../ui/Dialog';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const platform = window.delionBot?.platform === 'darwin' ? 'mac' : 'other';
@@ -200,7 +200,6 @@ export function AppShell({
   const navDrawerOpen = drawer === 'nav' || drawer === 'page';
   const [helpOpen, setHelpOpen] = useState(false);
   const [scrolledView, setScrolledView] = useState<AppView | null>(null);
-  // 远端项目的目录在远端：VS Code 是经 Remote-SSH 打开的，文案必须写明，否则会被当成开本地目录。
   const projectIsRemote = useWorkspaceStore(
     (state) => state.workspace.entries.find((item) => item.id === projectId)?.remoteId != null,
   );

@@ -1,4 +1,3 @@
-// 常驻只保留左右分屏；向下分屏与关闭等低频操作收进组菜单。
 import {
   ArrowsPointingInIcon as Minimize2,
   ArrowsPointingOutIcon as Maximize2,
@@ -8,13 +7,13 @@ import {
   XMarkIcon as X,
 } from '@heroicons/react/24/outline';
 import type { GroupNode } from '../../../modules/workspace/contract';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '../../../ui/dropdown-menu';
+} from '../../../ui/DropdownMenu';
 import { useWorkbenchLayout } from './layout-store';
 
 export function GroupToolbar({ group }: { group: GroupNode }) {

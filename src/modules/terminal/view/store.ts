@@ -1,4 +1,3 @@
-// 终端会话在渲染端的唯一副本：输出累积成回放缓冲，标签只订阅标题与退出状态，逐块输出不刷新界面。
 import { create } from 'zustand';
 import type { TerminalEvent, TerminalSession } from '../contract';
 import { onTerminalEvent, terminalClient } from './client';
@@ -12,9 +11,7 @@ interface TerminalStore {
   tabs: Record<string, TerminalMeta[]>;
   output: Record<string, Output>;
   active: Record<string, string>;
-  /** 读取清单或创建会话期间先到的事件：快照装入后按序号补上。 */
   pending: TerminalEvent[];
-  /** 在途的读取（`list:<项目>`）与创建（会话 id），决定未知会话的事件要不要先留着。 */
   inFlight: string[];
   load: (projectId: string) => Promise<TerminalSession[]>;
   create: (projectId: string) => Promise<void>;

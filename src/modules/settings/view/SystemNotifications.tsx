@@ -3,13 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BellSlashIcon as BellOff } from '@heroicons/react/24/outline';
 import type { TaskNotificationPrefs } from '../contract';
 import { notificationsClient, useNotificationState } from '../../notifications/view';
-import { Button } from '../../../ui/button';
-import { Switch } from '../../../ui/switch';
+import { Button } from '../../../ui/Button';
+import { Switch } from '../../../ui/Switch';
 import { SettingRow } from './SettingRow';
 import { SettingsGroup } from './SettingsGroup';
 import { settingsClient } from './client';
-import { showToast } from '../../../ui/toast';
-import { ErrorText } from '../../../ui/alert';
+import { showToast } from '../../../ui/Toast';
+import { ErrorText } from '../../../ui/Alert';
 import { errorMessage } from '../../../core/protocol/contract';
 
 function snoozeUntil(kind: '30m' | '1h' | 'tomorrow'): string {
@@ -25,7 +25,6 @@ function snoozeUntil(kind: '30m' | '1h' | 'tomorrow'): string {
 
 export function SystemNotifications() {
   const queryClient = useQueryClient();
-  // 未读到当前状态（data 为 undefined）时开关保持禁用，避免闪烁出错误的默认值。
   const taskQuery = useQuery({
     queryKey: ['settings', 'taskNotifications'],
     queryFn: () => settingsClient.taskNotifications(),
@@ -35,8 +34,6 @@ export function SystemNotifications() {
   const loadError = taskQuery.error;
   const snoozedUntil = useNotificationState().data?.snoozedUntil ?? null;
   const [busy, setBusy] = useState(false);
-
-  // 浏览器预览没有 preload，只维护选择态；桌面端经主进程持久化。
 
   const toggleTask = async (key: 'completed' | 'failed', next: boolean) => {
     if (busy || task === undefined) return;
@@ -75,8 +72,6 @@ export function SystemNotifications() {
   };
 
   return (
-    // 导语只对本组成立，跟着组标题放在容器上方（容器底色承担分组边界）；
-    // 「关闭≠停止收集」是防止用户以为关掉后会漏掉通知中心里的消息。
     <div className="grid gap-2">
       <SettingsGroup
         description="关闭只停用桌面弹窗，通知中心仍会收集。"

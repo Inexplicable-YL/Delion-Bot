@@ -1,4 +1,3 @@
-// 条目动作与远端上传/下载都经 props 交给接线方；远端条目只读，不参与内部拖拽与移动。
 import {
   ArchiveBoxIcon as Archive,
   ArrowDownTrayIcon as Download,
@@ -39,21 +38,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   useAfterMenuClose,
-} from '../../../ui/dropdown-menu';
+} from '../../../ui/DropdownMenu';
 import type { EntryAction } from '../workspace/entry-actions';
 import { libraryEntriesOf } from '../workspace/library-entries';
 import { remoteAccent } from '../../../modules/remotes/view';
 import { remoteTitle, useRemoteTree } from './remote-tree';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { onWorkspaceEvent, workspaceClient } from '../../../modules/workspace/view';
-import { ErrorText } from '../../../ui/alert';
-import { Spinner } from '../../../ui/spinner';
-import { IconButton } from '../../../ui/icon-button';
+import { ErrorText } from '../../../ui/Alert';
+import { Spinner } from '../../../ui/Spinner';
+import { IconButton } from '../../../ui/IconButton';
 import { errorMessage } from '../../../core/protocol/contract';
 
 export type { EntryAction };
 
-/** 热通道列一层只要几十毫秒，立刻画转圈会每次都闪；冷启动（约 3 秒）才越过它。 */
 const CONNECT_HINT_DELAY_MS = 200;
 const emptyExcludedIds: string[] = [];
 
@@ -113,7 +111,6 @@ export function ProjectFileTree({
   pending?: ExplorerPending | null;
   onActivate?: (id: string) => void;
 }) {
-  // 名称输入框空名失焦即取消，必须等菜单的焦点回收结束再建行。
   const afterMenuClose = useAfterMenuClose();
   const queryClient = useQueryClient();
   const [localError, setLocalError] = useState<string | null>(null);
@@ -200,7 +197,6 @@ export function ProjectFileTree({
       showToast({ variant: 'error', title, description: errorMessage(cause) }),
     );
   };
-  // 打开的项目工作台里项目行本身不在 visible（只有它的子条目在），远程根要单独带上。
   const remote = useRemoteTree(
     entries.filter((e) => included.has(e.id) || e.id === rootId),
     expanded,
@@ -395,7 +391,7 @@ export function ProjectFileTree({
                     打开项目
                   </DropdownMenuItem>
                 )}
-                {/* 远端项目行没有本地目录，main 对它的新建一律拒绝，入口就不必给。 */}
+
                 {item.container && !item.readOnly && (
                   <>
                     <DropdownMenuItem

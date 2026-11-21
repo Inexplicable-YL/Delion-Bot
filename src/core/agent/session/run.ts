@@ -48,7 +48,6 @@ export async function ensureLive(id: string): Promise<Live> {
   const meta = row(id);
   const choice = readySelection(meta);
   const { selection } = choice;
-  // 沿用来的选择在会话开始使用时写下，之后别的会话换模型不再影响它。
   if (!choice.stored) storeModel(id, selection.provider.id, selection.model, selection.effort);
   const cwd = sessionCwd(meta.project_id, meta.cwd);
   const options = await agentEnvironment().sessionOptions(meta.project_id, cwd);
@@ -109,12 +108,9 @@ export function hasLiveSessions(): boolean {
   return live.size > 0;
 }
 
-/** 模型或能力配置改变：空闲实例立即丢弃，运行中的轮末丢弃，下次使用时按新配置重建。
- *  给了 providerId 就只处理用这个提供商的会话。 */
 export function invalidateSessions(providerId?: string) {
   for (const [id, entry] of live) {
     if (providerId && entry.providerId !== providerId) continue;
-    // 压缩也算忙：此时丢弃会话会中止压缩（dispose 里的 abortCompaction）。
     if (!entry.run && !entry.session.isCompacting) disposeLive(id, entry);
     else {
       entry.stale = true;
@@ -259,7 +255,6 @@ export async function runSubagent(
   }
 }
 
-/** 停止时先撤回还没送达的插队消息，与 Pi 终端界面一致：它们回到输入框，不随本轮丢掉。 */
 export function cancelRun(id: string): ChatQueuedDraft | null {
   const entry = live.get(id);
   const queued = entry?.run ? queuedDraft(takeSteers(entry, entry.run)) : null;
@@ -295,11 +290,9 @@ function undeliveredNotices(entry: Live, run: Run): TaskNotice[] {
   return run.notices.filter((notice) => !delivered.has(notice.details.noticeId));
 }
 
-/** 后台任务结束的通知：运行中插进本轮，收尾中等它结束，空闲时开新一轮；wake=false（用户手动停止）只追加记录。 */
 async function deliverTaskNotice(id: string, notice: TaskNotice, wake: boolean): Promise<void> {
   const entry = await ensureLive(id);
   if (!wake) {
-    // 运行中 Pi 把它留到本轮结束再追加，不插进工具调用与结果之间。
     await entry.session.sendCustomMessage(noticeMessage(notice), { triggerTurn: false });
     return;
   }
@@ -345,7 +338,6 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
   const current = entry.run;
   if (current && !input.replaceLastUser) {
     if (!current.finishing && !current.cancelled) return steerRun(id, entry, current, input);
-    // 实例可能在轮末按新配置重建，等完从头再来。
     await current.done;
     return askSession(id, input);
   }
@@ -379,8 +371,6 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
 
 type TurnStatus = 'completed' | 'failed' | 'stopped';
 
-/** 一轮执行的记账（登记 run、快照、冻结改动、推送状态、轮末释放附件）；不经这里开的一轮界面不显示运行中。
- * 子 Agent 的改动落在父会话这一轮的快照里，自己不拍快照、不弹提醒。 */
 async function runTurn(
   id: string,
   entry: Live,
@@ -409,7 +399,6 @@ async function runTurn(
   let captureError: string | undefined;
   try {
     if (isRemoteSession(meta)) captureError = '远程会话暂不记录目录快照';
-    // 模型思考期间不会动文件：快照与请求并行，用户消息不必等它，工具执行前才等（见 beforeTool）。
     else if (!child)
       run.captured = changes.captureDirectory(entry.cwd).then(
         (snapshot) => {
@@ -419,7 +408,6 @@ async function runTurn(
           captureError = error instanceof Error ? error.message : String(error);
         },
       );
-    // 只看本轮新产生的回复：扩展命令可能一条消息都不发，不能拿上一轮的结果来判本轮成败。
     const priorCount = entry.session.messages.length;
     if (run.cancelled) status = 'stopped';
     else await start();
@@ -448,9 +436,7 @@ async function runTurn(
     } catch (error) {
       changesError = error instanceof Error ? error.message : String(error);
     }
-    // Pi 最后一次取队列之后才插进来的消息没人送达，收尾后作为新一轮发出。
     const orphaned = takeSteers(entry, run);
-    // 没送达的任务通知同样补投；用户停止了这一轮时只追加，不立刻再开一轮。
     const lostNotices = undeliveredNotices(entry, run);
     try {
       releaseChatAttachments([

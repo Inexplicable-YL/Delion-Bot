@@ -6,7 +6,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { FileChangeDetail } from '../../../../src/core/protocol/agent';
 import type { UncommittedChanges } from '../../../../src/core/protocol/changes';
 
-// 契约客户端在模块加载时取 bridge，须先于导入面板装好；各用例只重编程 handler。
 const { api, delion } = vi.hoisted(() => {
   const api = {
     readUncommittedChanges: vi.fn<(projectId: string) => Promise<UncommittedChanges>>(),
@@ -27,7 +26,7 @@ import { ProjectChanges } from '../../../../src/modules/chat/view/review/Project
 import { ReviewTab } from '../../../../src/modules/chat/view/review/ReviewTab';
 import { reviewTabId } from '../../../../src/modules/chat/view/review/tab-id';
 
-vi.mock('../../../../src/modules/chat/view/review/pierre-diff', () => ({
+vi.mock('../../../../src/modules/chat/view/review/PierreDiff', () => ({
   DiffScroller: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   PatchDiffView: () => null,
 }));
@@ -67,7 +66,6 @@ let root: Root;
 
 let queryClient: QueryClient;
 
-// 查询结果经 notifyManager 在下一个宏任务才通知组件。
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
 const onOpen = vi.fn();

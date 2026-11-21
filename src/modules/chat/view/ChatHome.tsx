@@ -1,4 +1,3 @@
-// 首页聊天可原地切换项目；会话与运行状态由 sessions 管理。
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { agentClient } from './client';
 import type { WorkspaceChat } from '../../../core/protocol/agent';
@@ -6,15 +5,12 @@ import { useSessions } from './sessions';
 import { ChatTab } from './ChatTab';
 import { errorMessage } from '../../../core/protocol/contract';
 
-/** 首页聊天请求：sessionId 打开指定历史，否则 create 决定新建还是接着上次；seq 区分同内容的再次请求。 */
 export interface HomeChatRequest {
   create: boolean;
   sessionId?: string;
   seq: number;
 }
 
-// 首页要打开的会话，优先级：指定历史 > 显式新对话 > 上次停留 > 未发送的空会话 > 新建。
-// 「上次停留」只存内存，重启后是新对话；该会话已删除时落到新对话，不卡在错误提示上。
 async function resolveHomeChat(request: HomeChatRequest | null): Promise<WorkspaceChat> {
   if (request?.sessionId) return agentClient['open-session']({ sessionId: request.sessionId });
   if (request?.create) return agentClient['create-session']({ projectId: null });
@@ -23,7 +19,6 @@ async function resolveHomeChat(request: HomeChatRequest | null): Promise<Workspa
     const reopened = await agentClient['open-session']({ sessionId: remembered }).catch(() => null);
     if (reopened) return reopened;
   }
-  // 复用未发送的空会话：连续新建不该在历史里留下空壳。
   const empty = Object.values(useSessions.getState().chats).find(
     (chat) =>
       chat.sessionId &&
@@ -45,7 +40,6 @@ export function ChatHome({ request }: { request: HomeChatRequest | null }) {
     queryFn: async () => {
       const chat = await resolveHomeChat(request);
       if (!chat.sessionId) throw new Error('会话创建失败');
-      // 已被更新的请求取代（没有视图在看这次结果）时不写镜像，免得旧结果覆盖「上次停留」。
       if (queryClient.getQueryCache().find({ queryKey })?.getObserversCount()) {
         useSessions.getState().putChat(chat.sessionId, chat);
         useSessions.setState({ homeSessionId: chat.sessionId });
@@ -57,7 +51,6 @@ export function ChatHome({ request }: { request: HomeChatRequest | null }) {
       return chat.sessionId;
     },
   });
-  // 新请求返回前不渲染旧会话，避免沿用旧输入状态或显示已完成的消息。
   if (!sessionId)
     return (
       <div

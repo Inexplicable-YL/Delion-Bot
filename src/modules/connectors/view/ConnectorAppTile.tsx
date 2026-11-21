@@ -1,6 +1,6 @@
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import type { infer as Infer } from 'zod';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { cn } from '../../../ui/cn';
 import {
   DropdownMenu,
@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '../../../ui/dropdown-menu';
+} from '../../../ui/DropdownMenu';
 import { featuredApps, type account, type app as appSchema, type toolkit } from '../contract';
 import { ConnectorAppIcon } from './ConnectorAppIcons';
 
@@ -30,7 +30,6 @@ export function ConnectorAppTile({
   onDisconnect: (id: string, label: string) => void;
 }) {
   const active = accounts.filter((item) => item.status === 'ACTIVE').length;
-  // 已连接的应用自成一类，行内不再重复状态；只有授权进行中需要提示。
   const waiting =
     active === 0 && (authorizing || accounts.some((item) => item.status === 'INITIATED'));
   const status = waiting

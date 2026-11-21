@@ -1,5 +1,3 @@
-// 自带 OpenSSH 回退的真机验证：系统没有 OpenSSH 时，随包分发的 ssh.exe 真的能连上远端。
-// 需要 DELION_REMOTE_HOST（如 root@1.2.3.4），由 pnpm test:remote 运行，不在默认 pnpm test 与 CI 里。
 import { describe, expect, it, vi } from 'vitest';
 import { join } from 'node:path';
 

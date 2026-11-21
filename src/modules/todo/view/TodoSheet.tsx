@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { useMediaQuery } from '../../../ui/use-media-query';
-import { Sheet, SheetContent } from '../../../ui/sheet';
+import { Sheet, SheetContent } from '../../../ui/Sheet';
 
 export function TodoSheet({
   title,

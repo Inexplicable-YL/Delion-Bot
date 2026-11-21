@@ -1,11 +1,9 @@
-// 只有界面用、主进程不读的偏好：一个持久化 store，写入只发生在 action 里。
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { useResizerWidth } from '../../../ui/resizer';
+import { useResizerWidth } from '../../../ui/Resizer';
 
 export type ProjectNavPreference = { pinned?: boolean; section?: string };
 
-/** 侧栏「项目」「聊天」两个列表各自的折叠、排序与显示选项。 */
 export type NavListPreference<Sort extends string> = {
   collapsed: boolean;
   sort: Sort;
@@ -72,7 +70,6 @@ export const usePreferences = create<PreferencesStore>()(
       name: storageKey,
       version: 1,
       storage: createJSONStorage(() => localStorage),
-      // 列表选项按字段合并：旧版存下的对象缺了新增字段时用默认值补齐，菜单不会出现无选中项。
       merge: (persisted, current) => {
         const saved = persisted as Partial<PreferenceValues> | undefined;
         return {

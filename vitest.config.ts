@@ -10,6 +10,8 @@ export default defineConfig({
   },
   test: {
     include: ['test/**/*.test.{ts,tsx}'],
+    // 限制并发，避免慢用例在满载时超过默认 5s 超时。
+    maxWorkers: 4,
     setupFiles: ['test/core/host-mock.ts'],
     // 单元测试不启动 Electron，也需能找到应用随包分发的搜索工具。
     env: {

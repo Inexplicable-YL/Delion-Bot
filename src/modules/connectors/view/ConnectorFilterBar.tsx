@@ -1,18 +1,17 @@
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from '../../../ui/dropdown-menu';
-import { SearchInput } from '../../../ui/search-input';
+} from '../../../ui/DropdownMenu';
+import { SearchInput } from '../../../ui/SearchInput';
 import { appCategories } from '../contract';
 
 export type AppCategory = (typeof appCategories)[number];
 
-/** 页面列宽有限，前几类直接展开，其余收进「More」。 */
 const inlineCount = 4;
 
 export function ConnectorFilterBar({

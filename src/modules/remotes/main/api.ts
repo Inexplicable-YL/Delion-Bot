@@ -1,4 +1,3 @@
-// 私钥路径随连接保存，真正的凭据始终由 ssh 从 ~/.ssh 与 agent 读取，Delion Bot 不落任何密码。
 import { randomUUID } from 'node:crypto';
 import { hostPorts } from '../../../core/ports';
 import type {
@@ -80,7 +79,6 @@ export function saveRemote(draft: RemoteDraft & { id?: string | null }): RemoteC
   return remoteById(id);
 }
 
-/** 删除连接连同名下项目按「移除项目」语义带走（会话删、远端目录留）；动态导入避开模块环。 */
 export async function removeRemote(id: string): Promise<void> {
   remoteById(id);
   const projects = hostPorts()
@@ -109,7 +107,6 @@ export async function probeConnection(draft: RemoteDraft): Promise<RemoteProbe> 
   }
 }
 
-/** 远程项目的全部能力都经 helper，它起不来这台服务器就不能用；SSH 不通由引导的探测步报出。 */
 export async function prepareRemote(
   draft: RemoteDraft,
   onProgress?: (progress: RemoteSetupProgress) => void,
@@ -138,12 +135,10 @@ export function parentOf(path: string): string | null {
   return cut <= 0 ? '/' : trimmed.slice(0, cut);
 }
 
-/** 远端路径拼接：项目根就是 `/` 时不能拼出 `//name`。 */
 export function remoteJoin(directory: string, name: string): string {
   return directory.endsWith('/') ? `${directory}${name}` : `${directory}/${name}`;
 }
 
-/** 目标路径是否就是项目根或在其之内；同为根时一律放行。渲染端构造地址时用同一份判断。 */
 export const withinRemoteRoot = withinRemotePath;
 
 export async function browseRemote(draft: RemoteDraft, path: string): Promise<RemoteBrowseResult> {

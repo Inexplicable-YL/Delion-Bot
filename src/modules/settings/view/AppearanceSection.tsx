@@ -10,14 +10,14 @@ import {
   type ZoomPreference,
 } from '../contract';
 import { cn } from '../../../ui/cn';
-import { StepperControl } from '../../../ui/stepper';
+import { StepperControl } from '../../../ui/Stepper';
 import blackLogo from '../../../../assets/DelionBot_black_bg.svg';
 import whiteLogo from '../../../../assets/DelionBot_white_bg.svg';
 import { SectionHeader } from './SectionHeader';
 import { SettingRow } from './SettingRow';
 import { SettingsGroup } from './SettingsGroup';
 import { settingsClient } from './client';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const themes: Array<{ id: ThemePreference; label: string }> = [
@@ -33,7 +33,6 @@ const icons: Array<{ id: IconPreference; label: string; src: string }> = [
 
 const zoomLabel = (zoom: ZoomPreference) => `${Math.round(zoom * 100)}%`;
 
-/** 主题卡片缩略图：靠 `theme-light` / `dark` 把卡片单独切到对应主题；「跟随系统」左右各半。 */
 function ThemePreview({ mode }: { mode: ThemePreference }) {
   const bars = (
     <>
@@ -109,7 +108,6 @@ export function AppearanceSection({
     void themeSave.save(() => onThemeChange(next));
   };
 
-  // 浏览器预览没有 preload，只维护选择态；桌面端经主进程持久化。
   const selectIcon = (next: IconPreference) => {
     if (next === icon || iconSave.busy) return;
     void iconSave.save(async () => {

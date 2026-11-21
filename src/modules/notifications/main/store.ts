@@ -9,15 +9,10 @@ import { armSystemNotifications, NOTIFICATIONS_SNOOZE_KEY, showSystemNotice } fr
 
 export interface NoticeSource {
   id: string;
-  /** 当前账号键，未登录时为 null；换账号后旧账号的通知不再显示。 */
   account(): string | null;
-  /** 抛出的错误记为该来源的刷新错误；成功时由来源自行调用 saveNotificationRefresh。 */
   refresh(account: string, force: boolean): Promise<void>;
-  /** 解释来源自己写入的 href；返回 null 的行视为损坏，不显示。 */
   link(href: Record<string, unknown>, id: string): NoticeLink | null;
-  /** 标记一条通知已读前调用，抛出时该条保持未读并记为来源错误。 */
   markRead?(id: string, account: string): void | Promise<void>;
-  /** 全部已读前调用，失败语义同 markRead。 */
   markAllRead?(account: string): Promise<void>;
 }
 
@@ -61,9 +56,7 @@ function currentAccounts(): Map<string, string> {
     try {
       const key = source.account();
       if (key) accounts.set(source.id, key);
-    } catch {
-      // 损坏的凭据视同未登录，不能连带隐藏其他来源的通知。
-    }
+    } catch {}
   }
   return accounts;
 }
@@ -72,7 +65,6 @@ function linkOf(source: string, href: object, id: string): NoticeLink | null {
   return noticeSources.get(source)?.link(href as Record<string, unknown>, id) ?? null;
 }
 
-/** 新到达通知的系统提醒；body 用于合并后的摘要，缺省不显示正文。 */
 export function systemNotifyItem(notice: StoredNotice, body = ''): void {
   const link = linkOf(notice.source, notice.href, notice.id);
   if (link) showSystemNotice(notice.id, notice.title, body, link.target);
@@ -108,7 +100,6 @@ export function notificationState(sources?: readonly string[]): NotificationStat
         },
       ];
     } catch {
-      // 损坏的行不能让整个通知中心不可用。
       return [];
     }
   });
@@ -200,7 +191,6 @@ export function refreshNotifications(force = false): Promise<NotificationState> 
         }
       }),
     );
-    // 首轮刷新构成启动基线；此后新增的通知才弹系统桌面通知。
     armSystemNotifications();
     return publishNotificationState();
   })().finally(() => {

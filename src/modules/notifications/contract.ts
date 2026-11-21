@@ -18,7 +18,6 @@ export interface NotificationState {
   items: readonly NotificationItem[];
   totalCount: number;
   unreadCount: number;
-  /** 仍在暂停期内时为到期时刻，否则为 null。 */
   snoozedUntil: string | null;
   refresh: Record<string, { lastSuccessAt: string | null; error: string | null }>;
 }

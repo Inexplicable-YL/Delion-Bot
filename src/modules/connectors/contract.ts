@@ -10,7 +10,6 @@ export const appCategories = [
   'Design',
   'Social Media',
 ] as const;
-/** 精选应用：分类与说明由我们维护，名称与图标取自 Composio 目录。 */
 export const featuredApps = {
   gmail: { category: 'Email & Calendar', description: '搜索收件箱、总结并起草邮件。' },
   outlook: { category: 'Email & Calendar', description: '收发邮件，管理日历与联系人。' },
@@ -45,7 +44,6 @@ export const featuredApps = {
   twitter: { category: 'Social Media', description: '搜索推文并发布内容。' },
   reddit: { category: 'Social Media', description: '浏览社区帖子与评论。' },
 } satisfies Record<string, { category: (typeof appCategories)[number]; description: string }>;
-/** 推荐区按此顺序取前 6 个尚未连接的应用，连接后由后面的补位。 */
 export const recommendedApps: (keyof typeof featuredApps)[] = [
   'gmail',
   'googlecalendar',

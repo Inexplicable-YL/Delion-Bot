@@ -1,9 +1,6 @@
-// Agent 协议：桌面界面与移动端共用的唯一对外契约，只做向后兼容的新增（AD-5）。
-// 默认单用户：任一端都可以取消或撤回，事件推给所有端，重连时重取快照即可。
 import { z } from 'zod';
 import { defineContract } from './contract';
 
-/** 不兼容的改动才升主版本；握手时主版本不同就拒绝连接。 */
 export const AGENT_PROTOCOL_VERSION = 1;
 
 const uuid = z.string().uuid();
@@ -15,7 +12,6 @@ export const chatCommentSchema = z.object({
   comment: z.string().max(20000),
 });
 
-/** 会话、附件与引用都按值传；@ 引用是本机路径，# 引用是同项目会话。 */
 export const chatAskInputSchema = z.object({
   text: z.string().max(20000),
   attachments: z.array(uuid).max(5),
@@ -90,7 +86,6 @@ export const chatSessionSummarySchema = z.object({
   projectId: z.string().nullable().optional(),
 });
 
-/** tokens 为 null 表示暂不可知；inputTokens 与 cachedTokens 只在提供商上报缓存时出现。 */
 export const contextUsageViewSchema = z.object({
   tokens: z.number().nullable(),
   contextWindow: z.number(),
@@ -173,7 +168,6 @@ export const runEventSchema = z.object({
   changesError: z.string().optional(),
 });
 
-/** 流式事件只带正在生成的末条消息，整条覆盖，不是文本增量。 */
 export const chatStreamEventSchema = z.object({
   sessionId: z.string(),
   message: chatMessageSchema,
@@ -257,8 +251,6 @@ export interface SubagentDetails {
   background?: true;
 }
 
-/** Delion Bot 自己实现的会话命令（对应 Pi 终端界面的同名命令）：输入以它们开头时不发给模型，
- * 优先级 Delion Bot 命令 > 扩展命令 > 提示模板 > 普通消息。 */
 export const SESSION_COMMANDS = [
   { name: 'compact', description: '压缩上下文', argumentHint: '[压缩时的说明]' },
   { name: 'reload', description: '重新加载 Skills、扩展与 AGENTS.md' },

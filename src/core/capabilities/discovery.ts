@@ -1,4 +1,3 @@
-// 项目级 Skill 发现：用 Pi 的 DefaultResourceLoader，与会话加载同一套规则。
 import { resolve } from 'node:path';
 import { isPiProjectSkill, loadPi, piAgentDir } from '../agent/pi';
 

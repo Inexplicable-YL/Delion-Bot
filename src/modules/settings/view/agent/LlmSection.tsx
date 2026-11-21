@@ -9,18 +9,18 @@ import {
   PlusIcon as Plus,
   TrashIcon as Trash2,
 } from '@heroicons/react/24/outline';
-import { StatusPill } from '../../../../ui/status-pill';
-import { Switch } from '../../../../ui/switch';
-import { Button } from '../../../../ui/button';
-import { Card } from '../../../../ui/card';
-import { Input } from '../../../../ui/input';
+import { StatusPill } from '../../../../ui/StatusPill';
+import { Switch } from '../../../../ui/Switch';
+import { Button } from '../../../../ui/Button';
+import { Card } from '../../../../ui/Card';
+import { Input } from '../../../../ui/Input';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../../../ui/select';
+} from '../../../../ui/Select';
 import { cn } from '../../../../ui/cn';
 import type {
   LlmCatalogModel,
@@ -40,9 +40,9 @@ import {
 } from '../../../../core/protocol/llm-models';
 import { SectionHeader } from '../SectionHeader';
 import { SettingsGroup } from '../SettingsGroup';
-import { showToast } from '../../../../ui/toast';
-import { ErrorText } from '../../../../ui/alert';
-import { Spinner } from '../../../../ui/spinner';
+import { showToast } from '../../../../ui/Toast';
+import { ErrorText } from '../../../../ui/Alert';
+import { Spinner } from '../../../../ui/Spinner';
 import {
   Dialog,
   DialogClose,
@@ -50,8 +50,8 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '../../../../ui/dialog';
-import { Field } from '../../../../ui/field';
+} from '../../../../ui/Dialog';
+import { Field } from '../../../../ui/Field';
 import { llmClient } from '../../../chat/view';
 import { errorMessage } from '../../../../core/protocol/contract';
 
@@ -88,7 +88,6 @@ interface ModelDialogProps {
   onSave: (settings: LlmModelSettings) => void;
 }
 
-/** 内置厂商的模型参数默认随 Pi 目录，可覆盖上下文与最大输出；自定义服务的模型参数全部可编辑。 */
 function ModelSettingsDialog({
   catalogModel,
   ...props
@@ -419,7 +418,6 @@ export function LlmSection() {
   const [selection, setSelection] = useState<Detail | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // 没有选择，或所选提供商已不在列表（首次加载、删除后），回落到当前使用中的提供商。
   const detail =
     selection && (selection.mode === 'create' || providers?.some(({ id }) => id === selection.id))
       ? selection
@@ -456,7 +454,6 @@ export function LlmSection() {
     { label: '自定义', items: (providers ?? []).filter(({ piProvider }) => !piProvider) },
   ];
 
-  /** 保存结果并入列表；只有仍停留在本次保存的详情时才切到保存后的提供商。 */
   const handleSaved = (saved: LlmProviderView, source: Detail | null) => {
     queryClient.setQueryData<LlmProviderView[]>(['llm', 'providers'], (current) =>
       current?.some(({ id }) => id === saved.id)
@@ -580,7 +577,6 @@ function ProviderDetail({
   );
   const [addingModel, setAddingModel] = useState(false);
   const [editingModel, setEditingModel] = useState<string | null>(null);
-  // result 为 null 表示检测中；带上检测时的输入，这些输入变了就不再接收结果。
   const [modelChecks, setModelChecks] = useState<
     Record<
       string,
@@ -682,7 +678,6 @@ function ProviderDetail({
     void persist({ models: imported });
   };
 
-  /** 检测顺带探出的真实 API 根（裸源地址补 /v1）直接采用：对话端点与它同前缀。 */
   const adoptApiBase = (discovered: string) => {
     setBaseUrl(discovered);
     void persist({ baseUrl: discovered });
@@ -726,7 +721,6 @@ function ProviderDetail({
     if (result.baseUrl) adoptApiBase(result.baseUrl);
   };
 
-  /** 编辑态即时保存：整体写入当前表单，next 覆盖尚未渲染出来的最新改动；创建态由「保存」显式提交。 */
   const persist = async (next: Partial<typeof form> = {}) => {
     if (creating || !window.delionBot) return;
     const d = { ...form, ...next };
@@ -748,7 +742,6 @@ function ProviderDetail({
     }
   };
 
-  /** 文本字段失焦时的免打扰保存：与已保存值相同就跳过，不因单纯切焦而写盘。 */
   const persistIfChanged = () => {
     if (creating) return;
     if (name !== provider.name || baseUrl.replace(/\/+$/, '') !== provider.baseUrl || apiKey !== '')
@@ -761,7 +754,6 @@ function ProviderDetail({
     setError(null);
     try {
       const saved = await llmClient.save(payload(form));
-      // 新建即启用；创建成功切换到该提供商的编辑态（组件按 id 重挂载，无需手动同步字段）。
       onSaved(saved);
     } catch (cause) {
       setError(errorMessage(cause));

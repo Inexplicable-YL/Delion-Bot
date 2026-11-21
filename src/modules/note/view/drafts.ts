@@ -1,9 +1,7 @@
-// 笔记草稿生命周期 store：同一文档多入口共享正文与版本，防抖与互斥语义是这份共享的关键。
-// acquire/release 以引用计数持有，最后一个引用释放时才冲盘并移除。
 import { create } from 'zustand';
 import { parseRemoteNodeId, relocateWorkspacePath } from '../../workspace/contract';
 import { workspaceClient } from '../../workspace/view';
-import type { NoteDraft } from './draft-source';
+import type { NoteDraft } from './DraftSource';
 import { errorMessage } from '../../../core/protocol/contract';
 
 type Store = {
@@ -13,7 +11,6 @@ type Store = {
   edit: (key: string, text: string) => void;
   save: (key: string) => Promise<boolean>;
   relocatePaths: (from: string, to: string) => void;
-  /** 以下四张表是命令式句柄，不驱动渲染：在途读取、在途保存、防抖定时器、每个 key 的持有入口数。 */
   loading: Record<string, Promise<void>>;
   saving: Record<string, Promise<boolean>>;
   scheduledSaves: Record<string, ReturnType<typeof setTimeout>>;
@@ -59,8 +56,6 @@ export const useNoteDrafts = create<Store>((set, get) => {
       set({ drafts });
     },
     acquire: async (key, force = false) => {
-      // force 语义是「强制重读磁盘」而非新持有入口（NoteTab 窗口聚焦刷新、App 会话终态
-      // 刷新都复用它且无配对 release）：不计数，否则草稿被永久持有、重开时复用过期快照。
       if (!force) setHandle('refcounts', key, (get().refcounts[key] ?? 0) + 1);
       if (!window.delionBot || (!force && get().drafts[key])) return;
       if (force && get().drafts[key]?.saving) {
@@ -79,7 +74,6 @@ export const useNoteDrafts = create<Store>((set, get) => {
             ? await workspaceClient.readSource(sourceId)
             : await workspaceClient.read(key);
         const current = get().drafts[key];
-        // 刷新读取期间的新编辑不能被覆盖；确认过的重载可丢弃开始时的快照，更新的编辑总是胜出。
         if (
           started &&
           current &&
@@ -123,8 +117,6 @@ export const useNoteDrafts = create<Store>((set, get) => {
       }
       const current = get().drafts[key];
       if (!current || current.saving || current.text !== current.saved) return false;
-      // 冲盘 await 期间可能被重新 acquire（切走又切回）：新持有入口在场时只冲盘不删除，
-      // 否则新入口拿不到草稿会永久停在「正在打开…」。
       if (key in get().refcounts) return true;
       set((state) => {
         const drafts = { ...state.drafts };

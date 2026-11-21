@@ -54,7 +54,6 @@ export function useAppearance() {
       enabled,
     }).data ?? initialFontSize();
 
-  // 生效主题只由 .dark / .light 表达：跟随系统时按媒体查询解析，所有 token 走同一条路径。
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const apply = () => applyResolvedTheme(theme, media.matches);
@@ -65,14 +64,12 @@ export function useAppearance() {
     return () => media.removeEventListener('change', apply);
   }, [theme, enabled]);
 
-  // 浏览器预览没有主进程缩放，用 CSS zoom 降级；桌面端由主进程 setZoomFactor 生效。
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontSize}px`;
     localStorage.setItem(fontSizeStorageKey, String(fontSize));
     if (!window.delionBot) document.documentElement.style.zoom = String(zoom);
   }, [fontSize, zoom]);
 
-  // 浏览器预览没有主进程，直接写缓存；桌面端以主进程回写的规范值为准。
   const changeTheme = async (next: ThemePreference) => {
     queryClient.setQueryData(
       ['settings', 'theme'],

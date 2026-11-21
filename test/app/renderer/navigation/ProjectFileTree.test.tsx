@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-// 文件树的行为：本地目录按展开读取与释放、远端项目身份、工具改动后的刷新。
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,7 +6,6 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { DelionBotApi } from '../../../../src/app/preload/api';
 import type { WorkspaceEntry } from '../../../../src/modules/workspace/contract';
 
-// 契约客户端在模块加载时取 bridge，须先于导入视图装好。
 const workspace = vi.hoisted(() => {
   const handlers: Record<string, (input: never) => unknown> = {};
   const remotes: Record<string, (input: never) => unknown> = {};
@@ -54,7 +52,6 @@ type RemoteListInput = { projectId: string; path: string };
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-  // Radix 的浮层要量尺寸；jsdom 没有 ResizeObserver。
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -66,9 +63,7 @@ beforeEach(() => {
   for (const name of Object.keys(workspace.handlers)) delete workspace.handlers[name];
   workspace.remotes.list = async () => [];
   workspace.remotes.helperStates = async () => [];
-  // 通道推送由 remotes 模块在加载时订阅一次，监听器不能清；只清上一条推送下来的状态。
   useRemoteState.setState({ pushedChannels: null });
-  // 取数状态是模块级 store：逐条用例清空，免得「正在连接」从上一条带过来。
   useRemoteActivity.setState({ byProject: {} });
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   container = document.createElement('div');
@@ -83,7 +78,6 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-/** 查询结果经 setTimeout(0) 通知，且子目录要等父目录回来才发请求：多让几轮。 */
 const settle = async () => {
   for (let tick = 0; tick < 4; tick += 1)
     await act(async () => {
@@ -162,7 +156,6 @@ it('reads only expanded local directories and releases children when their ances
 });
 
 it('keeps two connections on the same remote path apart', async () => {
-  // 两台服务器都开着 /home/u/proj：条目身份必须带项目，否则清单、展开态与选中态会串。
   const first: WorkspaceEntry = { ...remoteProject, id: 'p-a', name: 'a', remoteId: 'r-1' };
   const second: WorkspaceEntry = { ...remoteProject, id: 'p-b', name: 'b', remoteId: 'r-2' };
   const listRemoteDirectory = vi.fn(async ({ projectId }: RemoteListInput) =>
@@ -231,7 +224,6 @@ it('keeps two connections on the same remote path apart', async () => {
 });
 
 it('refreshes a remote directory after the tools changed it', async () => {
-  // 远端没有文件监听：AI 新建的文件只靠这条通知才会出现在树里。
   const listRemoteDirectory = vi.fn(async ({ path }: RemoteListInput) =>
     path === '/home/u/proj'
       ? [{ name: 'src', path: '/home/u/proj/src', directory: true, size: null, modifiedAt: null }]
@@ -248,14 +240,12 @@ it('refreshes a remote directory after the tools changed it', async () => {
     path: '/home/u/proj/src',
   });
 
-  // 与已缓存目录无关的变化：一次都不重读。
   await act(async () => {
     workspace.listeners.get('workspace:remoteChange')!('/elsewhere/dir');
     await new Promise((resolve) => setTimeout(resolve, 350));
   });
   expect(listRemoteDirectory).toHaveBeenCalledTimes(2);
 
-  // 子目录里多了文件（写入的是父目录）：只重读那一层。
   await act(async () => {
     workspace.listeners.get('workspace:remoteChange')!('/home/u/proj/src');
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -266,7 +256,6 @@ it('refreshes a remote directory after the tools changed it', async () => {
     path: '/home/u/proj/src',
   });
 
-  // bash 的 cwd 是项目根：根这一层（以及已展开的子树）都要重读。
   await act(async () => {
     workspace.listeners.get('workspace:remoteChange')!('/home/u/proj');
     await new Promise((resolve) => setTimeout(resolve, 350));

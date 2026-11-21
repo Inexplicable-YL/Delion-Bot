@@ -1,4 +1,3 @@
-// 快捷键纯函数：事件规范化、覆盖合并、digit 族匹配与冲突检测。
 import { describe, expect, it } from 'vitest';
 import {
   acceleratorFromEvent,
@@ -78,7 +77,6 @@ describe('matchShortcut 与 digit 族', () => {
     expect(
       matchShortcut(bindings, key('5', { altKey: true, shiftKey: true }), 'workbench'),
     ).toBeNull();
-    // macOS 上 Alt+数字输入的是别的字符，此时按物理键判定。
     expect(
       matchShortcut(bindings, { ...key('¡', { altKey: true }), code: 'Digit3' }, 'workbench'),
     ).toBe('focus-group');

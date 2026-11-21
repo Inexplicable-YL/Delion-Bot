@@ -97,7 +97,6 @@ export function usableLlmProviders(providers = llmProviders()): StoredLlmProvide
   return providers.filter(({ enabled, apiKey }) => enabled && apiKey);
 }
 
-/** 没选过默认档位时取 Pi 的默认 medium；厂商没有这一档就取比它高的最近一档。 */
 function defaultEffort(levels: string[]): string | undefined {
   const medium = reasoningEffortLevels.indexOf('medium');
   return (
@@ -159,7 +158,6 @@ export async function saveLlmProvider(input: unknown): Promise<LlmProviderView> 
   try {
     config = loadLlmConfig();
   } catch (cause) {
-    // 添加提供商可重新建立失效配置；编辑已有提供商仍需能读到原配置，不能伪造其内容。
     if (parsed.id || !(cause instanceof CredentialDecryptionError)) throw cause;
     config = { providers: [] };
   }
@@ -225,8 +223,6 @@ export function setLlmProviderEnabled(id: string, enabled: boolean): void {
   saveLlmConfig(config);
 }
 
-/** 模型列表端点候选，并带上该候选对应的 OpenAI 兼容根地址：对话端点与模型列表同前缀，
- *  所以「哪个 /models 应答了」就决定了实际该用哪个根地址发对话请求。 */
 function modelListEndpoints(baseUrl: string): { models: string; apiBase: string }[] {
   const base = baseUrl.replace(/\/+$/, '');
   return /\/v\d+$/.test(base)
@@ -237,9 +233,6 @@ function modelListEndpoints(baseUrl: string): { models: string; apiBase: string 
       ];
 }
 
-/** 兼容 OpenAI {data:[{id}]}、智谱 {models:[{slug}]} 与裸数组三种模型列表形态。
- *  形态不符返回 null 而非空列表：网关常把控制台首页以 200 返回，那不是「没有模型」，
- *  而是「这个地址不是 API 根」，必须继续试下一个候选。 */
 function parseModelList(payload: unknown): string[] | null {
   const source = Array.isArray(payload)
     ? payload
@@ -330,7 +323,6 @@ export async function verifyLlmModel(input: unknown): Promise<LlmVerifyResult> {
   if (!key) return { ok: false, message: '请先填写 API Key' };
   const piProvider = parsed.piProvider ?? null;
   if (!piProvider && !parsed.baseUrl) return { ok: false, message: '请先填写 API 地址' };
-  // 裸源地址先按模型列表端点探出真实 API 根：对话端点与它同前缀，不校正会打到网关首页上。
   const typed = parsed.baseUrl?.replace(/\/+$/, '') ?? '';
   const corrected =
     piProvider || /\/v\d+$/.test(typed)
@@ -351,8 +343,6 @@ export async function verifyLlmModel(input: unknown): Promise<LlmVerifyResult> {
       ? { ok: true, message: '模型可用', ...correction }
       : { ok: false, message: '请求完成但未返回内容，可用性待确认', ...correction };
   } catch (cause) {
-    // 只取文案开头的状态码，不回显上游报文：服务可能把认证头等敏感数据拼进错误。
-    // pi-ai 的 onResponse 只在成功时回调，失败的状态码只在这段文案里。
     const message = cause instanceof Error ? cause.message : '';
     const status = /^\s*(\d{3})\b/.exec(message)?.[1];
     return {

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-// SheetJS 的 sheet_to_html 存在富文本/自定义格式未转义的注入面，消毒函数须全部拦下。
 import { describe, expect, it } from 'vitest';
 import { sanitizeTableHtml } from '../../../../src/modules/preview/view/SheetPreview';
 
@@ -22,7 +21,6 @@ describe('sanitizeTableHtml', () => {
   });
 
   it('escapes attribute-injection payloads via DOMParser round-trip', () => {
-    // SheetJS data-z 属性逃逸：判定标准是重新解析后不产生真实元素、载荷完整留在属性值内。
     const html =
       '<table><tr><td data-z="&quot;&gt;&lt;img src=x onerror=alert(1)&gt;">x</td></tr></table>';
     const clean = sanitizeTableHtml(html);
@@ -45,7 +43,6 @@ describe('sanitizeTableHtml', () => {
   });
 
   it('blocks entity-encoded scheme smuggling that defeats a regex blacklist', () => {
-    // 实体解码后的 tab/换行会被 URL 解析从 scheme 剥掉，须按解析后的 protocol 白名单判定。
     const html =
       '<table><tr>' +
       '<td><a href="java&#9;script:alert(1)">a</a></td>' +

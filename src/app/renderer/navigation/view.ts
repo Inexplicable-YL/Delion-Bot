@@ -1,5 +1,3 @@
-// 视图路由 store：视图、back/forward 栈、当前工作台项目与一次性请求脉冲；
-// projectId 为 null 表示通用（无项目）工作台。
 import { create } from 'zustand';
 import { agentClient, type HomeChatRequest, useSessions } from '../../../modules/chat/view';
 import { useWorkbenchLayout } from '../workbench/layout-store';
@@ -10,7 +8,7 @@ import type { TabId } from '../../../modules/workspace/contract';
 import { useWorkspaceStore } from '../../../modules/workspace/view';
 import { formatByName, opensInEditor } from '../../../core/protocol/files';
 import { parseRemoteNodeId } from '../../../modules/remotes/contract';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import type { NavTarget, NavTargets } from '../../module';
 import { pageOf, views } from '../../views';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -39,7 +37,6 @@ interface NavigationState {
   openGeneralChat(create: boolean): boolean;
   newChat(projectId: string | null): Promise<string | null>;
   openChat(sessionId: string, projectId: string | null): boolean;
-  /** 总在工作台标签里打开；无项目的聊天因此开在通用工作台，而不是首页。 */
   openChatTab(sessionId: string, projectId: string | null): boolean;
   openDocument(key: string, options?: { keep?: boolean }): boolean;
   openTerminal(projectId: string): boolean;
@@ -63,9 +60,7 @@ function routeOf(state: NavigationState): NavigationRoute {
 function rememberProject(id: string | null): void {
   try {
     localStorage.setItem(projectStorageKey, id ?? '');
-  } catch {
-    /* localStorage 可用性不影响导航。 */
-  }
+  } catch {}
 }
 
 function currentProjectLive(): boolean {
@@ -76,7 +71,6 @@ function currentProjectLive(): boolean {
   );
 }
 
-/** 本地文本文件开编辑标签，远端 Markdown 开只读的编辑标签，专用格式与资料走预览。 */
 export function documentTabId(key: string): TabId {
   if (key.startsWith('source:')) return `preview:${key}`;
   const remote = parseRemoteNodeId(key);
@@ -126,7 +120,6 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
         return false;
       }
       const state = get();
-      // 同一页内再次跳转只换参数、不压栈，页面据新的 target 重置。
       if (!leaveViews(() => get().navigate(next))) return false;
       if (view === state.view) {
         if (target) set({ target });
@@ -188,15 +181,12 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       if (!get().navigate('workbench')) return false;
       useMobileDrawer.getState().setDrawer(null);
       if (get().projectId !== next) {
-        // 同视图换项目时 navigate 因视图未变而早退、不压栈，这里补记来源，否则从项目面板切走
-        // 就退不回来。来源项目已被删除（工作区自动回退通用池）时不记，避免后退跳回不存在的项目。
         if (fromWorkbench && currentProjectLive()) {
           set((state) => ({ backStack: [...state.backStack, routeOf(state)], forwardStack: [] }));
         }
         set({ projectId: next });
       }
       rememberProject(id);
-      // navigate 在同视图切换时早退不清请求；换项目后旧会话指针不该再把用户拉回去。
       set({ generalChat: null });
       return true;
     },
@@ -209,8 +199,6 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
     },
 
     newChat: async (projectId) => {
-      // 落点跟着发起处走：首页发起的随聊留在首页，工作台里发起的（项目或资料）就地开在焦点组，
-      // 不跳页、不分屏。main 对同一池复用未发送的空会话，所以连续新建不会堆出空标签。
       const onHome = projectId === null && get().view !== 'workbench';
       if (!window.delionBot || !get().navigate(onHome ? 'home' : 'workbench')) return null;
       try {

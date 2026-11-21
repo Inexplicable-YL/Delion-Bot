@@ -1,7 +1,7 @@
 import { GlobeAltIcon as Globe, PencilIcon as Feather } from '@heroicons/react/24/outline';
 import type { ReactNode } from 'react';
-import { Button } from '../../../ui/button';
-import { DelionBotBrand } from './delion-brand';
+import { Button } from '../../../ui/Button';
+import { DelionBotBrand } from './DelionBrand';
 import {
   creditSections,
   type CreditPerson,
@@ -11,7 +11,6 @@ import {
 } from './credits';
 import { SectionHeader } from './SectionHeader';
 
-// lucide 不再提供品牌图标，GitHub/知乎/B 站标记内联自 simple-icons。
 function GithubMark() {
   return (
     <svg aria-hidden="true" fill="currentColor" viewBox="0 0 24 24">

@@ -1,7 +1,3 @@
-/**
- * 远端端口预览：端口清单来自 helper；隧道是独立 ssh 进程，不随 helper 通道重连或关闭，
- * 同一远端端口复用至显式停止或退出。
- */
 import { shell } from 'electron';
 import { openPortTunnel, helperSession, type PortTunnel } from '../../../core/remote/helper';
 import { targetKey, type RemoteTarget } from '../../../core/remote/transport';

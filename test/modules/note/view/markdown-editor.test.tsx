@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-// 编辑器只回传用户改动的字节：换行符跟随文件，CRLF 文件改一处不会整篇变成 LF。
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -49,7 +48,6 @@ describe('MarkdownEditor', () => {
     );
     const view = EditorView.findFromDOM(container.querySelector('.cm-editor') as HTMLElement)!;
     expect(view.state.sliceDoc()).toBe(original);
-    // 编辑器内的位置不计 \r：在第二行行尾插入。
     const at = view.state.doc.line(2).to;
     await act(async () => view.dispatch({ changes: { from: at, insert: '!' } }));
     expect(onChange).toHaveBeenLastCalledWith(expected);

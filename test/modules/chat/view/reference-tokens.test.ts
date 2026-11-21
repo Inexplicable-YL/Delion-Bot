@@ -78,7 +78,6 @@ describe('referenceCandidates（@ 候选范围）', () => {
     updatedAt: '2026-10-09T00:00:00.000Z',
   });
 
-  // 通用池的 cwd 是工作区根，各项目目录都挂在它下面。
   const tree = [
     entry('n1', 'E:/repo/笔记.md', 'file'),
     entry('dir', 'E:/repo/课程', 'folder'),

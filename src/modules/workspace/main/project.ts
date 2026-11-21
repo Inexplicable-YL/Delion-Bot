@@ -1,5 +1,3 @@
-// 项目目录的外部操作：Git 分支查询与切换、用 VS Code 或资源管理器打开项目目录。
-// 只依赖 api.ts 解析出的项目位置，不读写工作区条目。
 import { execFile, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -9,7 +7,6 @@ import { workspaceEntryIdSchema } from '../contract';
 import { hostPorts } from '../../../core/ports';
 import { projectDirectory, projectLocation, remoteProjectOf } from './api';
 
-/** 非仓库、目录不存在、git 缺失与分离 HEAD 都算「没有分支」；symbolic-ref 让无提交的新仓库也有分支名。 */
 export async function gitBranchOf(directory: string): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
     execFile(
@@ -21,7 +18,6 @@ export async function gitBranchOf(directory: string): Promise<string | null> {
   });
 }
 
-/** 远端项目不为显示一个名字去连它。 */
 export function projectGitBranch(id: unknown): Promise<string | null> {
   const location = projectLocation(id);
   return location.kind === 'local' ? gitBranchOf(location.path) : Promise.resolve(null);
@@ -46,7 +42,6 @@ export async function gitBranchesOf(directory: string): Promise<string[]> {
   });
 }
 
-/** 失败时抛出 git 的 stderr，让人看到冲突或分支不存在的原因。 */
 export async function gitCheckout(directory: string, branch: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     execFile(
@@ -70,7 +65,6 @@ export function projectGitCheckout(id: unknown, branch: string): Promise<void> {
   return gitCheckout(location.path, branch);
 }
 
-/** VS Code 读不到 Delion Bot 的连接记录，端口与私钥须由用户在 ssh config 里给出。 */
 const remoteSshHint =
   '远端项目还需在 VS Code 中安装 Remote - SSH 扩展，并把该主机配置进 ssh config。';
 
@@ -89,7 +83,6 @@ export async function openProjectDirectory(id: unknown, target: unknown): Promis
       throw new Error(`无法打开项目目录：${error.message}`);
     });
 }
-/** remoteAuthority 非空表示远端项目：只有 `--remote ssh-remote+<目的地>` 才会让远端打开它。 */
 export async function openInVsCode(
   path: string,
   remoteAuthority: string | null = null,

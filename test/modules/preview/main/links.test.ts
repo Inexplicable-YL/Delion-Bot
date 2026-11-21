@@ -41,7 +41,6 @@ describe('office export links', () => {
     expect(readOfficeExportLink('source', 'file:1')).toBeNull();
     writeOfficeExportLink('source', 'file:1', link);
     expect(readOfficeExportLink('source', 'file:1')).toEqual(link);
-    // 键按来源隔离：workspace 同名 id 不受影响。
     expect(readOfficeExportLink('workspace', 'file:1')).toBeNull();
     writeOfficeExportLink('workspace', 'file:1', { ...link, version: 'v2' });
     expect(readOfficeExportLink('source', 'file:1')?.version).toBe('v1');
@@ -68,7 +67,6 @@ describe('office export links', () => {
       expect(
         officeExportPreviewInfo({ ...stored, path: join(dir, 'missing.pdf') }, 'v1'),
       ).toBeNull();
-      // 条目被删除（仓库约定删除条目不删磁盘文件）后回退 null，让读取方显示导出卡片。
       db.prepare('DELETE FROM workspace_entries WHERE id=?').run(link.entryId);
       expect(officeExportPreviewInfo(stored, 'v1')).toBeNull();
     } finally {

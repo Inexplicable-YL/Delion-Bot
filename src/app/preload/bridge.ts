@@ -12,7 +12,6 @@ export const bridge: Bridge = {
   },
   subscribe(channel, listener) {
     if (!eventChannels.has(channel)) throw new Error(`未登记的事件：${channel}`);
-    // 主进程只向登记过的窗口推送；重复登记无副作用，且先于随后的读取送达。
     void ipcRenderer.invoke('contract:subscribe');
     const handler = (_event: unknown, payload: unknown) => listener(payload);
     ipcRenderer.on(channel, handler);

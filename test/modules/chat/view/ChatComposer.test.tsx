@@ -5,7 +5,6 @@ import { notifyManager, QueryClient, QueryClientProvider } from '@tanstack/react
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ContextUsageView } from '../../../../src/core/protocol/agent';
 
-// 契约客户端在模块加载时取 bridge，须先于导入装好。
 vi.hoisted(() => {
   window.delionBot = {
     bridge: { invoke: async () => undefined, subscribe: () => () => {} },
@@ -14,7 +13,6 @@ vi.hoisted(() => {
 import { ChatComposer, cacheHitRateText } from '../../../../src/modules/chat/view/ChatComposer';
 import type { ComposerEditor } from '../../../../src/modules/chat/view/ComposerEditor';
 
-// 编辑器（CodeMirror）不参与本次验证：换成只回传文本变化的 textarea。
 vi.mock('../../../../src/modules/chat/view/ComposerEditor', () => ({
   ComposerEditor: ({
     value,
@@ -95,7 +93,6 @@ const usage = (patch: Partial<ContextUsageView> = {}): ContextUsageView => ({
   ...patch,
 });
 
-/** 受控输入必须绕过 React 改写的 value setter，否则事件会被当成未变化。 */
 function typeText(text: string) {
   const editor = host.querySelector<HTMLTextAreaElement>('textarea')!;
   const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
@@ -115,7 +112,6 @@ beforeEach(() => {
       disconnect() {}
     },
   );
-  // 查询通知默认走 setTimeout，act 等不到；改为微任务让一次 await 就能收敛。
   notifyManager.setScheduler(queueMicrotask);
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   host = document.createElement('div');
@@ -132,12 +128,10 @@ afterEach(async () => {
 });
 
 it('命中率文本只在拿到两个累计字段且分母大于 0 时才算数，其余留空', () => {
-  // main 未给出字段 = 提供商不上报缓存：不能显示成 0%。
   expect(cacheHitRateText(usage())).toBe('—');
   expect(cacheHitRateText(usage({ inputTokens: 100 }))).toBe('—');
   expect(cacheHitRateText(usage({ cachedTokens: 100 }))).toBe('—');
   expect(cacheHitRateText(usage({ inputTokens: 0, cachedTokens: 0 }))).toBe('—');
-  // 上报过缓存写、但当次没命中：这是真实的 0%，要和「没有数据」区分开。
   expect(cacheHitRateText(usage({ inputTokens: 1000, cachedTokens: 0 }))).toBe('0.0%');
   expect(cacheHitRateText(usage({ inputTokens: 1, cachedTokens: 2 }))).toBe('66.7%');
 });

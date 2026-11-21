@@ -7,7 +7,6 @@ import {
   walkGroups,
 } from '../../../../src/app/renderer/workbench/layout-schema';
 
-// 契约客户端在模块加载时取 bridge，须先于导入 store 装好。
 const bridge = vi.hoisted(() => {
   const bridge = { invoke: vi.fn(), subscribe: () => () => {} };
   Object.defineProperty(globalThis, 'window', {
@@ -40,7 +39,6 @@ function resetStore() {
     focus: 'primary',
     maximized: null,
     pendingReveal: null,
-    // init 对已就绪的同项目布局早退；测试统一从未就绪起步，保证每个用例都走真实加载路径。
     ready: false,
   });
 }
@@ -54,8 +52,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // 先让在途防抖回调跑完再清：clearAllTimers 不会触发回调置空 store 的 persistTimer，
-  // 残留句柄会让下一个用例的 init 冲刷误判有在途保存。
   vi.runAllTimers();
   vi.clearAllTimers();
   vi.useRealTimers();
@@ -195,7 +191,7 @@ describe('moveTab / moveTabToEdge', () => {
   it('跨组移动去重：目标组已有同 id 标签时合并为一个', () => {
     state().openTab('note:a');
     state().openTab('note:b');
-    state().splitGroup('primary', 'vertical'); // 新组复制活动标签 note:b
+    state().splitGroup('primary', 'vertical');
     const side = groups()[1]!;
     state().moveTab('note:b', 'primary', side.id, 0);
     expect(side.tabs).toEqual(['note:b']);
@@ -214,7 +210,6 @@ describe('moveTab / moveTabToEdge', () => {
     expect(root.orientation).toBe('vertical');
     expect(root.children[0]).toMatchObject({ type: 'group', tabs: ['note:a'] });
     expect(root.children[1]).toMatchObject({ type: 'group', id: 'primary', tabs: ['note:b'] });
-    // 移动而非复制：原组不再持有该标签。
     expect(walkGroups(root).flatMap((g) => g.tabs)).toEqual(['note:a', 'note:b']);
   });
 
@@ -267,11 +262,10 @@ describe('持久化', () => {
     const other = '00000000-0000-4000-8000-000000000003';
     const { save } = installLayoutApi(() => null);
     await state().init(uuid);
-    await vi.advanceTimersByTimeAsync(800); // init 自身的种子写回
+    await vi.advanceTimersByTimeAsync(800);
     expect(save).toHaveBeenCalledTimes(1);
     state().openTab('note:z');
     await state().init(other);
-    // 在途保存立即按旧项目落库；否则去抖结束后快照已是新项目状态，旧项目丢失该次变更。
     expect(save).toHaveBeenCalledTimes(2);
     expect(save).toHaveBeenNthCalledWith(2, {
       projectId: uuid,
@@ -301,7 +295,6 @@ describe('togglePin / 固定区', () => {
     for (const tab of ['note:a', 'note:b', 'note:c'] as const) state().openTab(tab);
     state().togglePin('note:a', 'primary');
 
-    // 关闭右侧不受固定区保护语义影响：锚点右侧全是未固定标签时照常关闭。
     state().closeTabs('primary', 'right', 'note:a');
     expect(findGroup(state().root, 'primary')?.tabs).toEqual(['note:a']);
 

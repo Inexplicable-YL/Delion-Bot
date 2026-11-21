@@ -1,18 +1,18 @@
 import { lazy, Suspense, useEffect, useEffectEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { Button } from '../../../ui/button';
-import { Card } from '../../../ui/card';
+import { Button } from '../../../ui/Button';
+import { Card } from '../../../ui/Card';
 import { useRootFontSize } from '../../../ui/root-font-size';
 import { sanitizeHtml } from './sanitize-html';
-import { showToast } from '../../../ui/toast';
+import { showToast } from '../../../ui/Toast';
 import type { TabId } from '../../workspace/contract';
 import { CodeViewer } from './CodeViewer';
-import { useContentLoader, type LoadedDocument } from './loader';
+import { useContentLoader, type LoadedDocument } from './Loader';
 import { OfficeExportBanner, OfficePromptCard } from './OfficePrompt';
 import { previewScrollOf, rememberPreviewScroll } from './scroll-memory';
 import { parsePreviewTabId } from './tab-id';
-import { Spinner } from '../../../ui/spinner';
+import { Spinner } from '../../../ui/Spinner';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const PdfReader = lazy(() =>
@@ -24,7 +24,6 @@ const DocxPreview = lazy(() =>
 const SheetPreview = lazy(() =>
   import('./SheetPreview').then((module) => ({ default: module.SheetPreview })),
 );
-/** 模块来源优先于格式；本地文本文件与所有 Markdown 走 note: 标签，不进这里。 */
 export type PreviewBranch =
   'source' | 'html' | 'pdf' | 'image' | 'docx' | 'xlsx' | 'pptx' | 'text' | 'binary';
 

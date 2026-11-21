@@ -5,14 +5,12 @@ import { open } from 'node:fs/promises';
 import { readyDocumentReader, type PreparedDocument } from './documents';
 import { fetchDeepSeek } from './deepseek';
 
-// 抓取的站点没有官方契约；使用桌面 Chrome UA，降低被判定为机器人的概率。
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const REQUEST_TIMEOUT_MS = 15000;
 const PAGE_BYTE_LIMIT = 2 * 1024 * 1024;
 const DOCUMENT_BYTE_LIMIT = 128 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
-// 单次返回的字符数；超出部分经 offset 续读，分页本身不截断。
 const TEXT_LIMIT = 20000;
 
 interface WebPageContent {
@@ -66,9 +64,7 @@ export async function fetchWebPage(
       const page = await fetchDeepSeek(url.toString(), deepseek.apiKey);
       if (page.text.trim())
         return finish(url, page.title, 'text/markdown', page.text.replace(/\r\n/g, '\n'), false);
-    } catch {
-      // 注册了 DeepSeek 也不该让抓取失去可用性：取不到正文（404）或临时故障时回退本地抓取。
-    }
+    } catch {}
   }
   let response: Response | null = null;
   for (let hop = 0; ; hop += 1) {
@@ -215,7 +211,6 @@ async function readCapped(response: Response): Promise<{ bytes: Uint8Array; trun
 
 function htmlToPage(html: string, origin: string): { title: string | null; text: string } {
   let title: string | null = null;
-  // 不用 minimal 的正文启发式与 Tailwind 过滤，避免无标题或定位布局的正文被误删。
   const text = htmlToMarkdown(html, {
     origin,
     clean: clean(),

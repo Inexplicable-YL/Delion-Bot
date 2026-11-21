@@ -1,14 +1,3 @@
-// 标签打开规则的唯一出处：所有「打开某样东西」的入口（目录树、资料树、侧栏会话、历史面板、
-// 深链、Agent 改动卡片）都只决定「打开什么、是否放到旁边」，落在哪个组、是否预览由这里决定。
-//
-//   动作                         落点                                  留存
-//   单击文件               已打开则聚焦；否则当前焦点组           项目工作台：预览（就地替换）
-//                                                                       通用（资料）工作台：常驻
-//   会话 / 终端 / 审阅            已打开则聚焦；否则当前焦点组           常驻
-//   aside（在侧边打开、改动卡片）  焦点组右侧的组；没有就向右分出一个      同上
-//                                会话等单例已打开时只聚焦，不开第二份
-//
-// 资料工作台的文件是并排比对着看的，每个都留标签；项目工作台是干活的地方，只看看的文件不该占栏位。
 import type { TabId } from '../../../modules/workspace/contract';
 import { findGroup, walkGroups } from './layout-schema';
 import { previewable, useWorkbenchLayout } from './layout-store';
@@ -27,8 +16,6 @@ export function openTarget(tabId: TabId, options: { aside?: boolean } = {}): voi
     store.openTab(tabId, undefined, { preview });
     return;
   }
-  // 会话、终端、审阅是单例的工作现场：已在某组打开就聚焦那里，不在旁边再开一份。
-  // 文件允许在旁边开第二份视图（对照同一文件的两处），这是 aside 的本意。
   if (!previewable(tabId) && walkGroups(store.root).some((group) => group.tabs.includes(tabId))) {
     store.openTab(tabId);
     return;
@@ -36,7 +23,6 @@ export function openTarget(tabId: TabId, options: { aside?: boolean } = {}): voi
   let target = groupRightOfFocus();
   if (!target && store.ready) {
     const focus = findGroup(store.root, store.focus);
-    // 空组不能分屏（splitGroup 要求有活动标签）：直接落进去，它本身就是空出来的位置。
     if (focus?.active) {
       store.splitGroup(focus.id, 'vertical', true);
       target = useWorkbenchLayout.getState().focus;

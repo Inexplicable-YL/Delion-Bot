@@ -1,5 +1,3 @@
-/** 远端目录 watch：渲染端交上展开的远端目录，换成 helper 的监视集合，事件转成 notifyRemoteChange。
- * 只监视展开的目录、不递归（大仓库递归要几千个 inotify watch）；通道重连后重报集合并让目录树整片重读。 */
 import { notifyRemoteChange } from './events';
 import { helperSession, type HelperSession, type WatchEvent } from './helper';
 import { targetKey, type RemoteTarget } from './transport';
@@ -15,7 +13,6 @@ interface WatchSet extends RemoteWatchInput {
   targetKey: string;
 }
 
-/** 流断开后的退避：通道在重连时 watchEvents 会排队等它回来，这里只防不可用时空转。 */
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
 
@@ -31,14 +28,12 @@ function handleEvent(key: string, event: WatchEvent): void {
     for (const path of event.paths) notifyRemoteChange(path);
     return;
   }
-  // reset（丢事件）：按根路径报一次，目录树把根以下已缓存的层全部重读。
   const affected = event.id === '*' ? setsOf(key) : [desired.get(event.id)];
   for (const set of affected) if (set) notifyRemoteChange(set.root);
 }
 
 async function apply(session: HelperSession, set: WatchSet): Promise<number> {
   const { watching, skipped } = await session.setWatch(set.projectId, set.paths);
-  // 挂不上的目录（不存在、不是目录、inotify 额度满）只影响实时性，但得能从日志查出来。
   if (skipped.length) console.warn(`[remotes] 这些目录没挂上 watch：${skipped.join(' ')}`);
   return watching;
 }
@@ -48,10 +43,7 @@ async function runStream(key: string, target: RemoteTarget, signal: AbortSignal)
   let connected = false;
   while (!signal.aborted) {
     const session = helperSession(target);
-    // 每次接上都重报：通道重连可能换了 helper 实例（远端被杀后重起），旧集合跟着旧进程一起没了。
     for (const set of setsOf(key)) await apply(session, set).catch(() => {});
-    // 断流期间没有订阅者，那段时间的事件 helper 侧直接丢掉了（队列都没有）：
-    // 重连后让目录树把根重读一遍，别指望下一轮事件把状态补齐。
     if (connected) for (const set of setsOf(key)) notifyRemoteChange(set.root);
     connected = true;
     try {
@@ -73,7 +65,6 @@ function stopStream(key: string): void {
   stream.controller.abort();
 }
 
-/** 让某个目标有事件流：有集合就起一条，已有就不动。由「通道刚被谁用了」驱动，不会在 helper 不可用时反复重试。 */
 export function syncRemoteWatch(target: RemoteTarget): void {
   const key = targetKey(target);
   if (streams.has(key) || !setsOf(key).length) return;

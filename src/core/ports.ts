@@ -1,8 +1,6 @@
-// 主进程与桌面宿主之间的端口：agent 只依赖这些接口，Electron 实现在 app 中注入。
 import type { Contract, EventPayload } from './protocol/contract';
 import type { RemoteTarget } from './remote/transport';
 
-/** 渲染进程的窗口或 WebContents 句柄；core 不解释它，原样交还给桌面实现。 */
 export type ClientHandle = object;
 
 export interface HostPorts {
@@ -13,7 +11,6 @@ export interface HostPorts {
   imageCodec: ImageCodec;
   desktop: Desktop;
   network: Network;
-  /** 宿主打开并迁移好的数据库；表结构与迁移归宿主（core 只读写 sessions 与自己的设置键）。 */
   database(): SqlDatabase;
   workspaceClient(): ClientHandle | null;
   projects: Projects;
@@ -63,7 +60,6 @@ export interface Network {
   fetch(url: string, init?: RequestInit): Promise<Response>;
 }
 
-/** 加密保存的凭据，每一类一个命名空间，互不覆盖；模块的命名空间经 registerSecretLabel 登记。 */
 export type SecretNamespace = string;
 
 export interface SecretStore {
@@ -101,7 +97,6 @@ export interface Desktop {
   sendToWindows(channel: string): void;
 }
 
-/** 密钥存在但本机无法解密（换机、钥匙串重置）；原文件由实现方保留。 */
 export class CredentialDecryptionError extends Error {
   constructor(namespace: SecretNamespace, cause: unknown) {
     super(
@@ -132,7 +127,6 @@ export function hostPorts(): HostPorts {
   return ports;
 }
 
-/** 推送契约事件给订阅过的窗口（docs/adr/0017）。 */
 export function emit<C extends Contract, K extends keyof C['events'] & string>(
   contract: C,
   name: K,

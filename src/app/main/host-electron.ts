@@ -37,7 +37,6 @@ import { workspaceProjects } from '../../modules/workspace';
 const secretPath = (namespace: SecretNamespace) =>
   join(app.getPath('userData'), `${namespace}.bin`);
 
-// 加密完成后原子替换；无法解密的旧文件先备份，不因重新配置而丢失恢复机会。
 function writeSealed(namespace: SecretNamespace, plaintext: string): void {
   if (!safeStorage.isEncryptionAvailable()) throw new Error('当前系统不支持凭据加密存储');
   const path = secretPath(namespace);
@@ -69,7 +68,6 @@ function readSealed(namespace: SecretNamespace): string | null {
   }
 }
 
-/** 开发时的位置：helper 与 OpenSSH 入库在 vendor/，rg 由 fetch:remote-rg 下载到 .build/。 */
 const bundledInRepo: Record<BundledResource, string> = {
   'delion-helper': join('vendor', 'delion-helper'),
   'remote-rg': join('.build', 'remote-rg'),
@@ -138,7 +136,6 @@ export const electronPorts: HostPorts = {
     notifyRunFinished,
     show(title, body, onClick) {
       const window = workspaceWindow();
-      // 窗口尚未创建或正被使用时不打扰；收起到托盘的窗口不聚焦，正常弹出。
       if (!Notification.isSupported() || !window || window.isFocused()) return;
       const toast = new Notification({ title, body });
       toast.on('click', () => {

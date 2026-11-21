@@ -7,16 +7,16 @@ import {
   TrashIcon as Trash2,
 } from '@heroicons/react/24/outline';
 import { agentClient, chatClient } from '../../../chat/view';
-import { Button } from '../../../../ui/button';
-import { Input } from '../../../../ui/input';
+import { Button } from '../../../../ui/Button';
+import { Input } from '../../../../ui/Input';
 import type { ChatCommandView } from '../../../../core/protocol/agent';
 import { SectionHeader } from '../SectionHeader';
 import { SettingsGroup, SettingsGroupLabel } from '../SettingsGroup';
 import { settingsClient } from '../client';
-import { showToast } from '../../../../ui/toast';
-import { ErrorText } from '../../../../ui/alert';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../../../ui/dialog';
-import { Field } from '../../../../ui/field';
+import { showToast } from '../../../../ui/Toast';
+import { ErrorText } from '../../../../ui/Alert';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '../../../../ui/Dialog';
+import { Field } from '../../../../ui/Field';
 import { errorMessage } from '../../../../core/protocol/contract';
 
 type EditState = { mode: 'create' } | { mode: 'edit'; command: ChatCommandView } | null;
@@ -31,7 +31,6 @@ export function CommandsSection() {
   const [dialog, setDialog] = useState<EditState>(null);
   const [busy, setBusy] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  // 未读到当前值（data 为 undefined）时不可编辑；edited 为 null 表示没有未保存的编辑。
   const instructionQuery = useQuery({
     queryKey: ['settings', 'instruction'],
     queryFn: () => settingsClient.instruction(),

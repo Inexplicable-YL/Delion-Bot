@@ -11,14 +11,13 @@ import {
 } from '@heroicons/react/24/outline';
 import { onTerminalEvent, terminalClient } from './client';
 import { useTerminalStore } from './store';
-import { showToast } from '../../../ui/toast';
-import { Button } from '../../../ui/button';
+import { showToast } from '../../../ui/Toast';
+import { Button } from '../../../ui/Button';
 import { cn } from '../../../ui/cn';
 import '@xterm/xterm/css/xterm.css';
-import { ErrorText } from '../../../ui/alert';
+import { ErrorText } from '../../../ui/Alert';
 import { errorMessage } from '../../../core/protocol/contract';
 
-// xterm 的配色解析器不支持 oklch；借浏览器画布转换现有主题 token。
 function terminalColor(value: string): string {
   const context = document.createElement('canvas').getContext('2d')!;
   context.fillStyle = value;
@@ -27,7 +26,6 @@ function terminalColor(value: string): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-// 选区底色在前景色上叠透明度；terminalColor 只输出 rgb，透明色直接拼 rgba 字符串。
 function withAlpha(color: string, alpha: number): string {
   return color.replace('rgb(', 'rgba(').replace(')', `, ${alpha})`);
 }
@@ -61,7 +59,6 @@ export function TerminalTab({ tabId }: { tabId: string }) {
     setCreating(false);
   };
 
-  // 打开标签时读一次清单；没有会话就新建一个。
   const opened = useQuery({
     queryKey: ['terminal', 'open', projectId],
     queryFn: async () => {
@@ -117,7 +114,6 @@ export function TerminalTab({ tabId }: { tabId: string }) {
         selectionBackground: withAlpha(foreground, 0.28),
         selectionInactiveBackground: withAlpha(foreground, 0.16),
       },
-      // ANSI 默认色板按暗色背景设计；与 VS Code 一致按 WCAG AA 自动调整对比度。
       minimumContrastRatio: 4.5,
       disableStdin: active?.exitCode !== null,
       altClickMovesCursor: true,
@@ -128,7 +124,6 @@ export function TerminalTab({ tabId }: { tabId: string }) {
     const fit = new FitAddon();
     terminal.loadAddon(fit);
     terminal.open(element);
-    // 回放旧输出时不能把旧设备查询的响应再次送给仍在运行的 Shell。
     let replaying = true;
     terminal.write(session.buffer, () => {
       replaying = false;

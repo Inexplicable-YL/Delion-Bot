@@ -1,11 +1,8 @@
-// 读 `~/.ssh/config` 的主机别名作为候选；只读别名与展示字段，不读密钥内容，认证与跳板仍由 ssh 解析。
-// 候选不落库：连上之后才保存为连接，config 里删掉的主机不会留下幽灵条目。
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import type { SshConfigHost } from '../contract';
 
-/** Include 只展开这么多层：config 互相 Include 成环时不至于死循环。 */
 const INCLUDE_DEPTH = 4;
 
 function expandHome(path: string): string {
@@ -34,7 +31,6 @@ function includeTargets(pattern: string): string[] {
   }
 }
 
-/** 跳过带通配符的 Host 与 Match 块；同名以先出现的为准，与 ssh 一致。 */
 export function parseSshConfig(text: string, depth = 0): SshConfigHost[] {
   const hosts: SshConfigHost[] = [];
   let current: SshConfigHost[] = [];

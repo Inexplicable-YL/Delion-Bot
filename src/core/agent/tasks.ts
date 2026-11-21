@@ -1,5 +1,3 @@
-/** 后台任务（后台 bash 与子 Agent）：结束时向父会话投递一条通知（只投一次）；
- * 归档、删除父会话与退出应用时全部结束，不投递，重启不恢复。 */
 import { spawn } from 'node:child_process';
 import {
   createWriteStream,
@@ -23,7 +21,6 @@ export interface TaskNotice {
   details: TaskNoticeDetails;
 }
 
-/** 任务所属的父会话：由会话运行层注入，任务层因此不依赖会话。 */
 export interface TaskParent {
   id: string;
   publish(): void;
@@ -87,7 +84,6 @@ export function trackTask(
         if (entry.stoppedBy && outcome.status !== 'completed')
           outcome = { ...outcome, status: 'stopped' };
         Object.assign(entry, { status: outcome.status, outcome, finishedAt: Date.now() });
-        // 父会话正在归档或删除：不投递，也不推快照（删除后会话已不存在）。
         if (entry.stoppedBy === 'session') return;
         entry.parent.publish();
         void entry.parent
@@ -119,12 +115,10 @@ export function stopTask(id: string, by: 'user' | 'model' | 'session') {
   task.stop();
 }
 
-/** 归档、删除父会话时结束它的全部后台任务，不投递通知。 */
 export function stopSessionTasks(parentId: string) {
   for (const task of tasks.values()) if (task.parent.id === parentId) stopTask(task.id, 'session');
 }
 
-/** 退出应用：结束全部任务并等它们落定，远端的取消要赶在隧道关掉之前送到。 */
 export async function stopAllTasks() {
   const running = [...tasks.values()].filter((task) => task.status === 'running');
   for (const task of running) stopTask(task.id, 'session');
@@ -186,9 +180,7 @@ function killTree(pid: number) {
   }
   try {
     process.kill(-pid, 'SIGKILL');
-  } catch {
-    // 进程已退出。
-  }
+  } catch {}
 }
 
 export type BashRunner = (
@@ -241,8 +233,6 @@ function localBash(
         else if (timedOut) resolve({ status: 'failed', error: `超时（${timeout} 秒）` });
         else resolve({ status: exitCode === 0 ? 'completed' : 'failed', exitCode });
       };
-      // 退出后管道可能还被不在进程树里的后代攥着（Windows 上 Git Bash 的后台进程），close 不会来：
-      // 与 Pi 的 bash 一样，shell 退出后管道静默一小段时间就算结束。
       const settle = () => {
         clearTimeout(idle);
         idle = setTimeout(() => finish(), EXIT_GRACE_MS);

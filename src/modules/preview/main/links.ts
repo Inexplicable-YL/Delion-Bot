@@ -3,7 +3,6 @@ import { basename } from 'node:path';
 import { hostPorts } from '../../../core/ports';
 import type { OfficeExportInfo } from '../../workspace/contract';
 
-/** version 为导出时源文件的 mtime-size。 */
 export interface OfficeExportLink {
   entryId: string;
   path: string;
@@ -38,7 +37,6 @@ export function officeExportPreviewInfo(
   version: string,
 ): OfficeExportInfo | null {
   try {
-    // 条目被用户删除时（磁盘文件仍在）协议会 404，返回 null 让读取方回退到确认卡片。
     if (
       !hostPorts()
         .database()

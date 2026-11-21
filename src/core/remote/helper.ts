@@ -1,5 +1,3 @@
-/** 远端 runtime（delion-helper）通道：远程项目的工具调用全经这里，没有一次性 ssh 的退路。
- * helper 在远端常驻、生命周期不随隧道：断线只让本地进入 reconnecting，远端任务不受影响。 */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
@@ -19,10 +17,8 @@ import {
   type RemoteTarget,
 } from './transport';
 
-/** 必须与 helper/main.go 的 helperVersion 一致：不匹配说明远端跑的不是这一版产物。 */
 export const HELPER_VERSION = '0.3.3';
 const PROTOCOL_VERSION = 2;
-/** 客户端每 30 秒发一次心跳；helper 连续 1 小时收不到任何请求才退出。 */
 const HEARTBEAT_MS = 30_000;
 const IDLE_TIMEOUT = '1h';
 const BOOTSTRAP_TIMEOUT_MS = 30_000;
@@ -31,18 +27,13 @@ const REQUEST_TIMEOUT_MS = 120_000;
 const TUNNEL_READY_MS = 5_000;
 const STARTUP_WAIT_MS = 20_000;
 const PROBE_TIMEOUT_MS = 3_000;
-/** 心跳连续失败几次算隧道断了：一次失败可能只是隧道被大响应占着。 */
 const HEARTBEAT_FAILURES_BEFORE_LOST = 3;
-/** 重连退避：1、2、4…秒，封顶 8 秒；整个重连窗口 60 秒，过了就判为不可用。 */
 const RECONNECT_MIN_MS = 1_000;
 const RECONNECT_MAX_MS = 8_000;
 const RECONNECT_WINDOW_MS = 60_000;
-/** 不可用之后，下一次调用距上次尝试超过这么久就自动再试一次（不定时轮询远端）。 */
 const RETRY_AFTER_MS = 30_000;
-/** 任务输出流多久没有字节算隧道半死：helper 在安静的流上每 30 秒发一条保活注释。 */
 const STREAM_IDLE_MS = 90_000;
 
-/** helper 推回来的目录事件：change 是「这几层要重读」，reset 是「丢过事件，整片重读」。 */
 export type WatchEvent =
   { type: 'change'; id: string; paths: string[] } | { type: 'reset'; id: string; reason: string };
 
@@ -57,13 +48,11 @@ export function helperArtifact(arch: string): string | null {
   return existsSync(path) ? path : null;
 }
 
-/** 随包的 Linux rg（打包时下载，仓库不提交）：开发时没准备就返回 null，helper 退回远端 PATH 里的 rg。 */
 function rgArtifact(arch: string): string | null {
   const path = join(hostPorts().paths.bundled('remote-rg'), `rg-linux-${arch}`);
   return existsSync(path) ? path : null;
 }
 
-/** 远端目录按「版本-sha8」分家：旧版本目录留着便于回退，不自动清理。 */
 function helperRemoteDir(digest: string): string {
   return `$HOME/.delion-bot/helper/${HELPER_VERSION}-${digest.slice(0, 8)}`;
 }
@@ -76,8 +65,6 @@ interface Artifact {
   digest: string;
 }
 
-/** 分类受限环境（noexec、只读挂载、SELinux）的诊断输出：表象都是 helper 起不来。
- * 这些环境不在支持范围内，分类只为告诉用户为什么用不了。 */
 export function classifyEnvironment(output: string): string | null {
   const values = new Map<string, string>();
   for (const pair of output.split('|')) {
@@ -150,7 +137,6 @@ async function openTunnel(target: RemoteTarget, remotePort: number): Promise<Tun
   }
 }
 
-/** 端口预览用的独立隧道：与 helper 通道无关，通道重连或不可用都不影响它，生命周期归调用方。 */
 export async function openPortTunnel(
   target: RemoteTarget,
   remotePort: number,
@@ -168,7 +154,6 @@ export async function openPortTunnel(
 }
 
 export interface HelperExecOptions {
-  /** 调用方要自己经 cancelTask 取消时给出；缺省时本地随机生成。 */
   id?: string;
   cwd: string;
   signal?: AbortSignal;
@@ -261,9 +246,7 @@ export interface HelperSession {
   listPorts(): Promise<HelperPort[]>;
   listTasks(): Promise<RemoteTask[]>;
   cancelTask(id: string): Promise<void>;
-  /** 目录事件流：resolve 表示流结束（隧道断/helper 退出），由调用方决定是否重连。 */
   watchEvents(onEvent: (event: WatchEvent) => void, signal?: AbortSignal): Promise<void>;
-  /** 执行命令：断线时等通道回来、按偏移接回，命令本身只执行一次。 */
   exec(command: string, options: HelperExecOptions): Promise<HelperExecResult>;
 }
 
@@ -283,8 +266,6 @@ function freePort(): Promise<number> {
   });
 }
 
-/** 隧道端口由 ssh 绑定，连得上不代表远端已在听，真正的就绪判断是随后的握手。
- * ssh 提前退出（认证失败等）时立刻失败，不等满超时。 */
 function waitForPort(port: number, timeoutMs: number, owner?: ChildProcess): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
@@ -313,7 +294,6 @@ interface HttpResponse {
   body: Buffer;
 }
 
-/** 隧道层面的失败（连不上、断在半路、超时）：重连能救。HTTP 非 2xx 不是这一类。 */
 class HelperTransportError extends Error {
   constructor(message: string) {
     super(message);
@@ -321,7 +301,6 @@ class HelperTransportError extends Error {
   }
 }
 
-/** helper 用非 2xx 回答了一个业务问题（路径不存在、参数越界）：这是结果，不是通道故障。 */
 class HelperHttpError extends Error {
   constructor(
     message: string,
@@ -356,8 +335,6 @@ function sendRequest(
   options: { body?: Buffer | string; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<HttpResponse> {
   return new Promise((resolve, reject) => {
-    // 一次请求有三个可能落定的地方（request 出错、响应读完、响应中途断掉）。
-    // 响应开始之后必须由 response 侧落定：否则隧道半死（响应头到了、正文没读完）时这个 Promise 永远不落定。
     let settled = false;
     let responded = false;
     const settle = (error?: Error, value?: HttpResponse) => {
@@ -422,13 +399,10 @@ function assertOk(response: HttpResponse, what: string): void {
   try {
     const parsed = JSON.parse(detail) as { error?: { message?: string } };
     if (parsed.error?.message) detail = parsed.error.message;
-  } catch {
-    // 不是 JSON 就原样带上
-  }
+  } catch {}
   throw new HelperHttpError(`${what}失败：${detail.slice(0, 300)}`, response.status);
 }
 
-/** 打开一条 SSE 流：非 200 按业务错误抛；安静超过 idleMs（helper 会发保活注释）判为隧道半死。 */
 function openSse(
   endpoint: Endpoint,
   path: string,
@@ -493,7 +467,7 @@ function openSse(
             try {
               value = JSON.parse(line.slice(6));
             } catch {
-              continue; // 半截 JSON 只可能是分帧异常，丢掉这一帧不影响后续
+              continue;
             }
             onFrame(value);
           }
@@ -551,7 +525,6 @@ async function uploadArtifact(
   { label, dir, file, local, digest }: Artifact,
   onProgress?: (progress: RemoteSetupProgress) => void,
 ): Promise<void> {
-  // base64 走 ssh 的 stdin：二进制内容不经过 shell 解析，落盘后再核一次 sha256。
   const body = readFileSync(local);
   onProgress?.({
     step: 'upload',
@@ -596,7 +569,6 @@ async function uploadArtifact(
   });
 }
 
-/** 共用版本化的可执行文件，运行状态按实际执行启动脚本的节点隔离。 */
 async function findOrStart(
   target: RemoteTarget,
   dir: string,
@@ -663,7 +635,6 @@ async function bootstrap(
   const artifacts: Artifact[] = [
     { label: 'helper', dir, file: 'delion-helper', local: helper, digest },
   ];
-  // rg 单独按 sha8 存：helper 换版本时不必重传这约 5MB。
   let remoteRg: string | null = null;
   if (rg) {
     const rgDigest = sha256Of(readFileSync(rg));
@@ -741,7 +712,6 @@ const connectRemote: Connector = async (target, onProgress) => {
 
 export type ChannelState = 'connecting' | 'ready' | 'reconnecting' | 'unavailable';
 
-/** 一台服务器一条通道。会话对象在通道一生中不变：重连只换隧道与端口，排队的请求回来后照常发出。 */
 class Channel {
   state: ChannelState = 'connecting';
   reason = '';
@@ -810,7 +780,6 @@ class Channel {
     };
   }
 
-  /** 引导或重连：同一时刻只跑一轮。 */
   connect(state: 'connecting' | 'reconnecting', onProgress?: (p: RemoteSetupProgress) => void) {
     if (this.connecting) return this.connecting;
     this.setState(state);
@@ -833,8 +802,6 @@ class Channel {
         return;
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
-        // 首次引导失败多半是确定性的（不支持的系统、noexec、认证失败），不必退避重试；
-        // 重连失败多半是网络还没恢复，在窗口内退避重试。
         if (this.closed || state === 'connecting' || Date.now() + backoff > deadline) {
           if (!this.closed) this.fail(reason.slice(0, 300));
           return;
@@ -885,7 +852,6 @@ class Channel {
     void this.connect('reconnecting');
   }
 
-  /** 一次请求以隧道错误失败时调用：探一次活，确实不通才进重连（别让一次超时拆掉好通道）。 */
   async suspect(endpoint: Endpoint) {
     if (this.endpoint !== endpoint) return;
     try {
@@ -913,7 +879,6 @@ class Channel {
     tunnel?.kill();
   }
 
-  /** 只做本地收尾，不向远端发退出请求：远端靠空闲超时自己退出。 */
   close() {
     if (this.closed) return;
     this.closed = true;
@@ -932,8 +897,6 @@ class Channel {
   }
 }
 
-/** 发一个可安全重发的请求：隧道错误时等通道回来再发一次。只读请求、整文件写入、
- * 监视集合替换与靠 id 去重的任务创建都属于这一类。 */
 async function retrying<T>(
   channel: Channel,
   signal: AbortSignal | undefined,
@@ -1000,7 +963,6 @@ function createSession(channel: Channel): HelperSession {
         },
       );
     },
-    // 目录与搜索一律 POST + JSON：远端路径里可能有引号或中文，不进 query。
     list: async (path, signal) =>
       (
         await json<{ entries?: RemoteDirEntry[] }>(
@@ -1035,7 +997,6 @@ function createSession(channel: Channel): HelperSession {
         `监视 ${paths.length} 个目录`,
         { id, paths },
       );
-      // skipped = 没挂上 watch 的目录（不存在、不是目录、inotify 额度满）：调用方要知道。
       return { watching: body.watching ?? 0, skipped: body.skipped ?? [] };
     },
     async clearWatch(id) {
@@ -1048,7 +1009,6 @@ function createSession(channel: Channel): HelperSession {
     async cancelTask(id) {
       await request('POST', `/v1/tasks/${encodeURIComponent(id)}/cancel`, `取消任务 ${id} `);
     },
-    // watch 流不重试：它本来就该长挂，断了由 watch.ts 自己的循环决定何时重连。
     async watchEvents(onEvent, signal) {
       const endpoint = await channel.endpointFor(signal);
       try {
@@ -1074,8 +1034,6 @@ interface TaskFrame {
   code?: number;
 }
 
-/** 跑一条命令并把输出接回来。任务 id 在本地生成：创建请求可能已落地而响应丢了，
- * 重连后同 id 再提交只会返回已有任务；输出按绝对偏移续读，被缓冲挤掉的部分记进 lost。 */
 async function runTask(
   channel: Channel,
   command: string,
@@ -1090,7 +1048,6 @@ async function runTask(
     env: Object.entries(options.env ?? {}).map(([key, value]) => `${key}=${value}`),
   });
   const signal = options.signal;
-  // 取消要显式告诉 helper：断开本地连接已经不会终止任务了。
   const cancel = () => {
     void channel
       .endpointFor()
@@ -1140,12 +1097,10 @@ async function runTask(
   }
 }
 
-/** 一个连接一条通道，一台服务器重连或不可用不影响另一台；通道在本进程内常驻。 */
 const channels = new Map<string, Channel>();
 
 let connector: Connector = connectRemote;
 
-/** 仅测试用：换掉建立连接的那一步（引导 + 隧道 + 握手），状态机与会话照常运行。 */
 export function setConnectorForTesting(next: Connector | null): void {
   connector = next ?? connectRemote;
 }
@@ -1177,7 +1132,6 @@ function channelFor(target: RemoteTarget): Channel {
   return channel;
 }
 
-/** 拿到某个连接的会话；通道不可用时它的每个调用都以 HelperUnavailableError 失败。 */
 export function helperSession(target: RemoteTarget): HelperSession {
   return channelFor(target).session;
 }
@@ -1194,8 +1148,6 @@ export async function readyHelper(target: RemoteTarget): Promise<HelperSession> 
   return channel.session;
 }
 
-/** 向导「连接」用：已连上直接返回；否则完整走一遍引导并逐步报出。
- * 不可用的通道丢掉重来，这样「重试」总能看到完整日志。 */
 export async function prepareHelper(
   target: RemoteTarget,
   onProgress?: (progress: RemoteSetupProgress) => void,
@@ -1220,7 +1172,6 @@ export async function prepareHelper(
   return result(channel);
 }
 
-/** 放掉通道：只做本地收尾，远端实例靠空闲超时退出，任务照跑到那时；不带 target 则全部关闭。 */
 export function closeHelper(target?: RemoteTarget): void {
   const keys = target ? [targetKey(target)] : [...channels.keys()];
   for (const key of keys) {

@@ -1,10 +1,7 @@
 // @vitest-environment jsdom
-// 「新建对话」与「打开会话」的落位：工作台里（项目或资料）就地在焦点组开标签，不跳页、不分屏；
-// 只有首页发起的随聊留在首页。
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { WorkspaceChat } from '../../../../src/core/protocol/agent';
 
-// 契约客户端在模块加载时取 bridge，须先于导入装好。
 const creates = vi.hoisted(() => {
   const creates: Array<{ projectId: string | null }> = [];
   const handlers: Record<string, (input: never) => unknown> = {

@@ -5,15 +5,15 @@ import {
   LockClosedIcon as Lock,
 } from '@heroicons/react/24/outline';
 import type { AgentCapabilityView } from '../../../../core/protocol/capabilities';
-import { Button } from '../../../../ui/button';
-import { Input } from '../../../../ui/input';
-import { Switch } from '../../../../ui/switch';
+import { Button } from '../../../../ui/Button';
+import { Input } from '../../../../ui/Input';
+import { Switch } from '../../../../ui/Switch';
 import { SectionHeader } from '../SectionHeader';
 import { SettingsGroup } from '../SettingsGroup';
-import { showToast } from '../../../../ui/toast';
+import { showToast } from '../../../../ui/Toast';
 import { SearchConfigDialog } from './SearchConfigDialog';
-import { ErrorText } from '../../../../ui/alert';
-import { Spinner } from '../../../../ui/spinner';
+import { ErrorText } from '../../../../ui/Alert';
+import { Spinner } from '../../../../ui/Spinner';
 import { capabilitiesClient, onWebSearchChanged } from '../../../chat/view';
 import { errorMessage } from '../../../../core/protocol/contract';
 
@@ -38,7 +38,6 @@ function SubagentLimit() {
     queryKey: ['capabilities', 'subagentLimit'],
     queryFn: () => capabilitiesClient.subagentLimit(),
   }).data;
-  // null 表示没有未保存的编辑，输入框显示已保存值。
   const [edited, setEdited] = useState<string | null>(null);
   if (saved === undefined) return null;
   const draft = edited ?? String(saved);
@@ -86,7 +85,6 @@ function SubagentLimit() {
 
 export function CapabilitiesSection() {
   const queryClient = useQueryClient();
-  // 未读到清单（data 为 undefined）时不渲染开关，避免闪烁出错误的“全开”状态。
   const list = useQuery({
     queryKey: ['capabilities', 'builtin'],
     queryFn: () => capabilitiesClient.listBuiltinCapabilities(),
@@ -139,7 +137,6 @@ export function CapabilitiesSection() {
                 const toggleable = group.items.filter((item) => !item.lockedReason);
                 const enabledCount = toggleable.filter((item) => item.enabled).length;
                 const allEnabled = enabledCount === toggleable.length && toggleable.length > 0;
-                // 常驻原因整组只说明一次；锁定行不再渲染假开关。
                 const lockedReason = group.items.find((item) => item.lockedReason)?.lockedReason;
                 return (
                   <SettingsGroup

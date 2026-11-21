@@ -1,5 +1,3 @@
-// main 与 view 之间的契约：一处声明通道与入参 schema，主进程实现、渲染端调用都从它推导类型。
-// 返回值与推送事件由主进程生成，output 与 events 只承载类型，不做运行时校验。
 import type { z } from 'zod';
 
 type Procedures = Record<string, { input: z.ZodType; output: z.ZodType }>;
@@ -8,7 +6,6 @@ type Events = Record<string, z.ZodType>;
 export interface Contract<P extends Procedures = Procedures, E extends Events = Events> {
   namespace: string;
   procedures: P;
-  /** 主进程推送的事件；与过程同名的事件推送该过程的最新结果（docs/adr/0017）。 */
   events: E;
 }
 
@@ -95,7 +92,6 @@ export function createClient<C extends Contract>(
     try {
       return await bridge.invoke(`${contract.namespace}:${name}`, input);
     } catch (error) {
-      // Electron 会给主进程抛出的错误加上「Error invoking remote method」前缀
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(message.replace(/^Error invoking remote method '[^']+': (\w*Error: )?/, ''));
     }

@@ -1,15 +1,9 @@
-/**
- * 远程工具：把 Pi 七个内置工具的执行端换到 RemoteBackend。read/write/edit/bash/ls/find 复用 Pi 的定义、
- * 只注入 operations；grep 在 Pi 内固定 spawn 本地 rg，故保留其 schema 与描述、自写 execute。
- */
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { RemoteBackend } from '../remote/operations';
 import { loadPi } from './pi';
 
 const GREP_MAX_LINE_LENGTH = 500;
 
-/** Pi 的工具定义在参数类型上是不变的，customTools 收的却是 ToolDefinition[]：
- *  这里是纯类型收窄，运行时对象原样传递。 */
 const asTool = (definition: unknown): ToolDefinition => definition as ToolDefinition;
 
 export async function remoteGrepTool(cwd: string, backend: RemoteBackend): Promise<ToolDefinition> {
@@ -71,7 +65,6 @@ export async function remoteGrepTool(cwd: string, backend: RemoteBackend): Promi
 }
 
 export async function remoteTools(cwd: string, backend: RemoteBackend): Promise<ToolDefinition[]> {
-  // Pi 是纯 ESM：主进程 CJS 产物只能动态 import，不能在文件顶部静态引入。
   const pi = await loadPi();
   return [
     pi.createReadToolDefinition(cwd, { operations: backend.read }),

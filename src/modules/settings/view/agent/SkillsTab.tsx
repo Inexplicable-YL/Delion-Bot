@@ -13,25 +13,25 @@ import type {
   SkillView,
 } from '../../../../core/protocol/capabilities';
 import type { WorkspaceEntry } from '../../../workspace/contract';
-import { Button } from '../../../../ui/button';
-import { Card } from '../../../../ui/card';
-import { DownloadProgressRow } from '../../../../ui/download-progress';
-import { Switch } from '../../../../ui/switch';
-import { SegmentedControl } from '../../../../ui/segmented-control';
+import { Button } from '../../../../ui/Button';
+import { Card } from '../../../../ui/Card';
+import { DownloadProgressRow } from '../../../../ui/DownloadProgress';
+import { Switch } from '../../../../ui/Switch';
+import { SegmentedControl } from '../../../../ui/SegmentedControl';
 import { useWorkspaceStore } from '../../../workspace/view';
-import { showToast } from '../../../../ui/toast';
+import { showToast } from '../../../../ui/Toast';
 import { cn } from '../../../../ui/cn';
 import { SectionHeader } from '../SectionHeader';
 import { SettingsGroup } from '../SettingsGroup';
-import { ErrorText } from '../../../../ui/alert';
-import { Spinner } from '../../../../ui/spinner';
+import { ErrorText } from '../../../../ui/Alert';
+import { Spinner } from '../../../../ui/Spinner';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogTitle,
-} from '../../../../ui/dialog';
+} from '../../../../ui/Dialog';
 import { capabilitiesClient } from '../../../chat/view';
 import { errorMessage } from '../../../../core/protocol/contract';
 
@@ -77,7 +77,6 @@ function groupSkills(skills: SkillView[]): SkillGroup[] {
   return groups.sort((left, right) => ORIGINS.indexOf(left.origin) - ORIGINS.indexOf(right.origin));
 }
 
-/** 目标已存在时主进程拒绝的固定前缀：据此把冲突转成覆盖确认，而不是错误。 */
 const REMOTE_EXISTS_PREFIX = '远端已存在：';
 
 const remoteProjectsOf = (entries: WorkspaceEntry[]) =>
@@ -96,7 +95,6 @@ export function SkillsTab() {
     onError: () => queryClient.invalidateQueries({ queryKey: ['capabilities', 'skills'] }),
   });
   const installing = install.isPending;
-  // 未读到列表（data 为 undefined）时不渲染空态，避免闪烁；依赖安装期间每秒重读进度。
   const list = useQuery({
     queryKey: ['capabilities', 'skills'],
     queryFn: () => capabilitiesClient.listSkills(),
@@ -122,7 +120,6 @@ export function SkillsTab() {
     });
   };
 
-  // 先 reset：用户主动取消引发的安装失败不再作为错误提示。
   const cancelInstallation = async (name: string) => {
     install.reset();
     try {
@@ -148,7 +145,6 @@ export function SkillsTab() {
     setBusy(false);
   };
 
-  // 目录可能已被删除，reveal 失败要经 toast 提示。
   const reveal = (skill: SkillView) => {
     void capabilitiesClient.revealSkill(skill.id).catch((cause) =>
       showToast({
@@ -391,7 +387,6 @@ function SkillUploadDialog({ onClose, skill }: { onClose: () => void; skill: Ski
   const projects = remoteProjectsOf(useWorkspaceStore((state) => state.workspace.entries));
   const [projectId, setProjectId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // true 表示远端已有同名技能：显示覆盖确认，点「覆盖」才用 overwrite=true 重试。
   const [conflict, setConflict] = useState(false);
   const [uploaded, setUploaded] = useState<RemoteSkillUpload | null>(null);
   const project = projects.find((entry) => entry.id === projectId);

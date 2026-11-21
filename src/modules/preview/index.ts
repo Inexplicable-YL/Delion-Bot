@@ -1,4 +1,3 @@
-// 预览：PDF 与 Office 的文档读取组件、Office 转 PDF 导出；预览界面在 view/。
 import { defineModule } from '../../app/module';
 import { registerCommandDomain } from '../../core/capabilities/commands';
 import { registerDocumentReader } from '../../core/capabilities/documents';

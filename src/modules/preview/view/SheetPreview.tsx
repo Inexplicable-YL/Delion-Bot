@@ -2,9 +2,9 @@ import { MinusIcon as Minus, PlusIcon as Plus } from '@heroicons/react/24/outlin
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import { pinchZoomRef } from './use-pinch-zoom';
-import { ErrorText } from '../../../ui/alert';
+import { ErrorText } from '../../../ui/Alert';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const SHEET_ROW_LIMIT = 2000;
@@ -18,7 +18,6 @@ interface SheetTab {
   truncated: boolean;
 }
 
-// SheetJS 的 html 输出存在未转义的注入面，经 DOMParser 清理后再上屏。
 export function sanitizeTableHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   doc
@@ -28,7 +27,6 @@ export function sanitizeTableHtml(html: string): string {
     for (const attr of Array.from(el.attributes))
       if (attr.name.startsWith('on') || attr.name === 'srcdoc') el.removeAttribute(attr.name);
   });
-  // 链接协议走 URL 白名单：`java&#9;script:` 这类实体编码会绕过正则黑名单。
   doc.querySelectorAll('a[href]').forEach((a) => {
     try {
       if (!['https:', 'http:'].includes(new URL(a.getAttribute('href')!).protocol))
@@ -59,7 +57,6 @@ export function SheetPreview({ url }: { url: string }) {
     queryFn: async ({ signal }): Promise<SheetTab[]> => {
       const response = await fetch(url, { signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      // cellHTML:false：禁用富文本 .h 生成（SheetJS 对其不做 HTML 转义），一律走转义后的显示值。
       const book = XLSX.read(new Uint8Array(await response.arrayBuffer()), {
         type: 'array',
         cellHTML: false,

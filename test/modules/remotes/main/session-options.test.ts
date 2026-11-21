@@ -1,5 +1,3 @@
-// 远程会话必须是「七个远程工具 + 本机工具（联网/MCP）」，且不能带 delion 命令桥：工具名一旦被
-// excludeTools 过滤，同名覆盖就会失效，模型会拿远端路径调用 Pi 内置工具，在 Windows 上写到本地盘。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 
@@ -102,7 +100,6 @@ describe('远程会话环境', () => {
 
   it('用户关掉的能力名单不会波及七个工具名', async () => {
     const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj');
-    // web_fetch 仍按用户设置剔除；read 是内置名，必须保留（否则同名覆盖失效）。
     expect([...options.disabledTools]).toEqual(['web_fetch']);
   });
 

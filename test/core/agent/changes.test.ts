@@ -7,7 +7,6 @@ import * as fsPromises from 'node:fs/promises';
 import { diffStatOf } from '../../../src/core/protocol/diff';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-// 逐个 spawn git 并比对真实文件，慢机器上超过默认 5s，整文件放宽到 30s。
 vi.setConfig({ testTimeout: 30_000 });
 
 const profile = vi.hoisted(() => ({ path: '' }));

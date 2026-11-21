@@ -1,5 +1,4 @@
 import { ProjectChangeTabStatus } from '../../../modules/chat/view';
-// 扁平标签栏：组内拖拽排序、跨组拖放、中键关闭、上下文菜单、激活滚动可见。
 import { useEffect, useRef, type DragEvent, type KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon as X } from '@heroicons/react/24/outline';
@@ -9,16 +8,16 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
-} from '../../../ui/context-menu';
+} from '../../../ui/ContextMenu';
 import { cn } from '../../../ui/cn';
 import { useHorizontalWheel } from '../../../ui/use-horizontal-wheel';
 import { useWorkbenchLayout } from './layout-store';
 import { kindOf, registry, titleOf } from './registry';
 import { fileIconUrl } from '../../../modules/workspace/view';
-import { ExplorerRevealButton } from './explorer-state';
+import { ExplorerRevealButton } from './ExplorerState';
 import { encodeTabDrag, hasTabDrag, parseTabDrag, setCurrentTabDrag, tabDragType } from './tab-dnd';
 import { GroupToolbar } from './GroupToolbar';
-import { IconButton } from '../../../ui/icon-button';
+import { IconButton } from '../../../ui/IconButton';
 
 export function TabBar({
   group,
@@ -82,7 +81,6 @@ export function TabBar({
     tabRefs.current.get(target)?.focus();
   };
 
-  // 标签栏自身的拖放先于组处理（排序优先于入组/分屏），两个回调都 stopPropagation。
   const onDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!hasTabDrag(event.dataTransfer)) return;
     event.preventDefault();
@@ -132,8 +130,6 @@ export function TabBar({
           return (
             <ContextMenu key={tab}>
               <ContextMenuTrigger asChild>
-                {/* 整个标签外壳即 role=tab：APG 要求 tablist 只拥有 tab；关闭钮对读屏隐藏
-                    （aria-hidden + 不进 Tab 序），键盘关闭走右键菜单的「关闭」项。 */}
                 <div
                   aria-controls={`tabpanel-${group.id}`}
                   aria-selected={active}
@@ -163,7 +159,6 @@ export function TabBar({
                   onDragEnd={() => setCurrentTabDrag(null)}
                   onAuxClick={(event) => {
                     if (event.button !== 1) return;
-                    // 固定标签防误触：中键不关闭（本地取向），关闭走右键菜单；但始终拦下中键自动滚动。
                     event.preventDefault();
                     if (!isPinned) closeTab(tab, group.id);
                   }}

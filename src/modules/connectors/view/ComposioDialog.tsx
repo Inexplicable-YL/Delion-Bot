@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { errorMessage } from '../../../core/protocol/contract';
-import { Button } from '../../../ui/button';
+import { Button } from '../../../ui/Button';
 import {
   Dialog,
   DialogClose,
@@ -10,9 +10,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../../../ui/dialog';
-import { Field } from '../../../ui/field';
-import { Input } from '../../../ui/input';
+} from '../../../ui/Dialog';
+import { Field } from '../../../ui/Field';
+import { Input } from '../../../ui/Input';
 import { connectorsClient as client } from './use-connector-accounts';
 
 export function ComposioDialog({
@@ -46,7 +46,6 @@ export function ComposioDialog({
   );
 }
 
-/** 只在弹窗打开时挂载，关闭后输入与错误随之清空。 */
 function KeyForm({ onDone }: { onDone: () => void }) {
   const cache = useQueryClient();
   const [key, setKey] = useState('');
@@ -67,6 +66,7 @@ function KeyForm({ onDone }: { onDone: () => void }) {
     >
       <Field label="项目密钥" error={setup.error ? errorMessage(setup.error) : undefined}>
         <Input
+          aria-label="Composio 项目密钥"
           autoComplete="off"
           autoFocus
           disabled={setup.isPending}

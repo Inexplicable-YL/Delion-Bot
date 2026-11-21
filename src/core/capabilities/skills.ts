@@ -1,5 +1,3 @@
-// Skills 的发现、加载与注入由 Pi 完成；这里负责写入 Delion Bot 内置 skill、给设置页列出可见 skill、维护禁用名单。
-// 设置页按来处分组：内置、本机目录、每个本地项目；项目的按 SKILL.md 路径开关。
 import { existsSync, mkdirSync, readdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
@@ -20,7 +18,6 @@ export function globalSkillDirectories(): string[] {
 }
 
 let builtinEnsured = false;
-/** 进程内首次使用时把内置 Skill 覆写到 ~/.delion-bot/skills（与 delion 命令面强绑定，用户的编辑会被还原）；先比后写，避开文件被占用。 */
 export function ensureBuiltinSkills(): void {
   if (builtinEnsured) return;
   builtinEnsured = true;
@@ -100,7 +97,6 @@ function globalSkills(): SkillView[] {
   return skills;
 }
 
-/** 每个本地项目里 Pi 会加载的项目级 Skill。远程项目的 Skill 在打开会话时从远端镜像，不在这里列。 */
 async function projectSkills(disabledPaths: Set<string>): Promise<SkillView[]> {
   const projects = hostPorts().projects.local();
   const lists = await Promise.all(
@@ -151,7 +147,6 @@ export async function setSkillEnabled(id: string, enabled: boolean): Promise<Ski
   return listSkills();
 }
 
-/** 按清单解析再读文件：渲染端传来的 id 必须是清单里的某一项，主进程不读清单外的路径。 */
 export async function findSkill(id: string): Promise<SkillView> {
   const skill = (await listSkills()).find((item) => item.id === id);
   if (!skill) throw new Error('Skill 不存在或已被移除');

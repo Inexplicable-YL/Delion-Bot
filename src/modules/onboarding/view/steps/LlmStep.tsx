@@ -8,19 +8,19 @@ import {
   QueueListIcon as ListPlus,
   XCircleIcon as CircleX,
 } from '@heroicons/react/24/outline';
-import { DesktopOnlyNotice } from '../../../../ui/desktop-only-notice';
-import { SelectItem } from '../../../../ui/select';
-import { StepButton, StepSelect, type StepButtonState } from '../step-controls';
-import { StepGuide } from '../step-guide';
-import { StepModelImportDialog } from './step-model-import';
+import { DesktopOnlyNotice } from '../../../../ui/DesktopOnlyNotice';
+import { SelectItem } from '../../../../ui/Select';
+import { StepButton, StepSelect, type StepButtonState } from '../StepControls';
+import { StepGuide } from '../StepGuide';
+import { StepModelImportDialog } from './StepModelImport';
 import { capModels } from './model-import';
 import type { LlmCatalogProvider, LlmVerifyResult } from '../../../../core/protocol/llm';
-import { ErrorText } from '../../../../ui/alert';
-import { Spinner } from '../../../../ui/spinner';
-import { IconButton } from '../../../../ui/icon-button';
-import { Button } from '../../../../ui/button';
-import { Collapse } from '../../../../ui/collapse';
-import { Input } from '../../../../ui/input';
+import { ErrorText } from '../../../../ui/Alert';
+import { Spinner } from '../../../../ui/Spinner';
+import { IconButton } from '../../../../ui/IconButton';
+import { Button } from '../../../../ui/Button';
+import { Collapse } from '../../../../ui/Collapse';
+import { Input } from '../../../../ui/Input';
 import { llmClient } from '../../../chat/view';
 import { errorMessage } from '../../../../core/protocol/contract';
 
@@ -78,7 +78,6 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
     setImportNotice(null);
   };
 
-  /** 内置厂商直接检测所选模型；自定义服务只验证连通性，哪些模型进配置由用户在弹层里勾选。 */
   const verify = async () => {
     if (!window.delionBot || verifyBusy || (vendor ? !selected : !baseUrl.trim())) return;
     setVerifyBusy(true);
@@ -116,7 +115,6 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
     if (state === 'busy' || !window.delionBot || !selected) return;
     setState('busy');
     setError(null);
-    // 引导里选的模型排到列表首位：还没有会话可以沿用时，新会话取第一个可用提供商的首个模型。
     const provider = vendor
       ? {
           name: vendor.name,
@@ -162,7 +160,6 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
               <div className="grid">
                 <StepSelect
                   disabled={catalog === null}
-                  // 目录到达时重挂载：同一实例里值与选项同时出现，表单内的原生 select 会把值清空。
                   key={catalog === null ? 'loading' : 'ready'}
                   label="服务商"
                   onValueChange={chooseVendor}
@@ -280,7 +277,6 @@ export function LlmStep({ onDone }: { onDone: () => void }) {
               <div className="grid gap-4">
                 <StepSelect
                   disabled={options.length === 0}
-                  // 空模型列表（自定义未检测）与就绪态间切换时重挂载，避免受控值 undefined 化。
                   key={options.length === 0 ? 'empty' : 'ready'}
                   label="模型"
                   onValueChange={(value) => {

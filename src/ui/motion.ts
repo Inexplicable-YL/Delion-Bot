@@ -1,5 +1,3 @@
-// dialog-in 只动 scale 属性，不会覆盖 -translate-1/2 的居中。
-
 export const overlayFade = 'animate-overlay-in';
 export const dialogIn = 'animate-dialog-in';
 

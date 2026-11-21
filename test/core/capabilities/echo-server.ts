@@ -1,6 +1,3 @@
-// 测试用最小 MCP echo 服务器（stdio：按行分隔的 JSON-RPC，无任何外部依赖）。
-// 工具：echo（正常往返）、fail（isError 结果）、die（应答后退出进程，模拟服务器崩溃）。
-// DELION_TOOL_NAME 可重命名 echo 工具（构造归一化同名冲突场景），缺省 'echo'。
 import process from 'node:process';
 
 const echoToolName = process.env.DELION_TOOL_NAME ?? 'echo';
@@ -109,9 +106,7 @@ process.stdin.on('data', (chunk: string) => {
     if (line) {
       try {
         handle(JSON.parse(line) as JsonRpcRequest);
-      } catch {
-        // 畸形行忽略：测试服务器只服务最小握手
-      }
+      } catch {}
     }
     newline = buffer.indexOf('\n');
   }

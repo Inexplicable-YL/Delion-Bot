@@ -1,6 +1,3 @@
-// 笔记图片引用的共享约定：主进程解析、renderer 生成展示 URL 共用。
-
-/** Markdown 图片引用 `![alt](path "title")`；alt 与 title 内不再容忍括号换行。 */
 const markdownImageRefRe = /!\[([^\]\n]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 
 interface MarkdownImageRef {
@@ -27,7 +24,6 @@ export function isRelativeAssetPath(path: string): boolean {
   return true;
 }
 
-/** 正文里的路径可能是 URI 编码的（空格写成 %20）：找磁盘文件前先解码，坏编码按原样。 */
 export function decodeAssetPath(path: string): string {
   try {
     return decodeURI(path).replace(/%28/gi, '(').replace(/%29/gi, ')');

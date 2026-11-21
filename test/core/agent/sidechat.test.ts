@@ -1,5 +1,3 @@
-// 旁问：真实 Pi 会话加本地 mock 模型。旁问带着主会话的上下文提问，不写文件也不进数据库；
-// 保留后成为带「旁问：」前缀的新会话。
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -104,7 +102,6 @@ it('旁问沿用主会话的系统提示与历史，不写文件、不进数据�
     '顺便问一下',
     'side answer',
   ]);
-  // 主会话那次请求的全部消息（含系统提示）是旁问请求的前缀：提供商的前缀缓存能命中。
   const mainSent = sent(main.requests[0]!);
   expect(sent(side.requests[0]!).slice(0, mainSent.length)).toEqual(mainSent);
   expect(sent(side.requests[0]!).join('')).toContain('main answer');

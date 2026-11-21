@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TodoItem, TodoSaveInput, TodoState } from '../../../../src/modules/todo/contract';
 import { useTodoPreferences } from '../../../../src/modules/todo/view/preferences';
 
-// 契约客户端在模块加载时取 bridge，须先于导入视图装好。
 const api = vi.hoisted(() => {
   const handlers: Record<string, (input: unknown) => Promise<unknown>> = {};
   window.delionBot = {
