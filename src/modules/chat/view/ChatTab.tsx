@@ -229,27 +229,10 @@ function ChatSessionView({
         .catch(() => false),
   });
 
-  // busy 涵盖「已发送但推送未到」的瞬间：点击发送立即进入会话态。
-  // 不用 Boolean() 包裹，保留 TS 对 conversation 真值与 chat 非空的别名收窄。
   // 子 Agent 的会话只读：没有输入框，不能编辑重发、分支或旁问。
   const subagent = chat?.subagent;
   const conversation = chat && (busy || chat.messages.length > 0 || chat.running || subagent);
-  const projectSessionCount = useSessions((state) =>
-    projectId === null ? undefined : state.lists[poolKey(projectId)]?.length,
-  );
-  const { data: archived } = useQuery({
-    queryKey: ['chat', 'archived'],
-    queryFn: () => chatClient.archived(),
-    enabled: Boolean(
-      project && chat && !conversation && projectSessionCount === 0 && window.delionBot,
-    ),
-  });
-  const showProjectSetup =
-    project &&
-    !conversation &&
-    projectSessionCount === 0 &&
-    archived !== undefined &&
-    !archived.some((item) => item.projectId === projectId);
+  const showProjectSetup = chat && project?.kind === 'project' && !conversation;
 
   const saveConversation = async () => {
     if (!window.delionBot) return;
@@ -363,7 +346,9 @@ function ChatSessionView({
             </h1>
             {composer(true)}
             {modelSetup}
-            {showProjectSetup && <ProjectSetup key={project.id} project={project} />}
+            {showProjectSetup && (
+              <ProjectSetup key={project.id} project={project} onOpenSession={openSession} />
+            )}
           </div>
         </div>
       )}

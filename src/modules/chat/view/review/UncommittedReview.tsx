@@ -1,26 +1,45 @@
-// 未提交改动聚合审阅：会话工作目录相对 Git HEAD 的净变化（含未跟踪文件）。
-// 数据按请求时点重算、会随工作区过期，因此提供手动刷新而不轮询；已查看文件仅在当前面板缓存，刷新后失效。
 import { useState, type ReactNode } from 'react';
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowPathIcon as RefreshCw,
   ArrowsRightLeftIcon as GitCompare,
+  DocumentTextIcon,
   ExclamationTriangleIcon as TriangleAlert,
 } from '@heroicons/react/24/outline';
 import type { FileChangeDetail } from '../../../../core/protocol/agent';
 import { chatClient } from '../client';
 import { DiffScroller, PatchDiffView } from './pierre-diff';
-import { FileIcon } from '../../../../ui/file-icon';
 import { Centered, STATUS_TEXT, basenameOf, dirnameOf } from './view-utils';
 import { IconButton } from '../../../../ui/icon-button';
 import { PanelHeader } from '../../../../ui/panel-header';
 import { errorMessage } from '../../../../core/protocol/contract';
+import { fileIconUrl } from '../../../workspace/view';
 
 const REASON_TEXT = {
   'not-git': '此目录不是 Git 仓库',
   'git-unavailable': '未找到 Git 命令，无法读取改动',
   remote: '远程项目的改动在另一台机器上，请在远端查看',
 } as const;
+
+const STATUS_MARK = {
+  added: { letter: 'U', color: 'text-success' },
+  modified: { letter: 'M', color: 'text-warning' },
+  deleted: { letter: 'D', color: 'text-danger' },
+} as const;
+
+function ChangeStatus({ status }: { status: FileChangeDetail['status'] }) {
+  const { letter, color } = STATUS_MARK[status];
+  const label = STATUS_TEXT[status];
+  return (
+    <span
+      className={`w-4 shrink-0 text-center text-ui-subhead font-semibold ${color}`}
+      title={label}
+    >
+      <span aria-hidden="true">{letter}</span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
 
 type ReviewDetail = Omit<FileChangeDetail, 'before' | 'after'>;
 type CachedDetail = { detail: ReviewDetail; bytes: number };
@@ -146,25 +165,33 @@ export function UncommittedReview({ sessionId }: { sessionId: string }) {
         aria-label="改动文件列表"
         className="w-60 shrink-0 overflow-y-auto border-r border-line py-1"
       >
-        {files.map((file) => (
-          <button
-            aria-current={selected === file.path ? 'true' : undefined}
-            className={`flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left text-ui-body transition-colors duration-fast hover:bg-hover ${
-              selected === file.path ? 'bg-hover' : ''
-            }`}
-            key={file.path}
-            onClick={() => setPicked(file.path)}
-            title={file.path}
-            type="button"
-          >
-            <FileIcon path={file.path} />
-            <span className="shrink-0 truncate">{basenameOf(file.path)}</span>
-            <span className="min-w-0 flex-1 truncate text-ui-subhead text-ink-2">
-              {dirnameOf(file.path)}
-            </span>
-            <span className="shrink-0 text-ui-subhead text-ink-2">{STATUS_TEXT[file.status]}</span>
-          </button>
-        ))}
+        {files.map((file) => {
+          const name = basenameOf(file.path);
+          const iconUrl = fileIconUrl(name);
+          return (
+            <button
+              aria-current={selected === file.path ? 'true' : undefined}
+              className={`flex w-full min-w-0 items-center gap-2 px-3 py-1.5 text-left text-ui-body transition-colors duration-fast hover:bg-hover ${
+                selected === file.path ? 'bg-hover' : ''
+              }`}
+              key={file.path}
+              onClick={() => setPicked(file.path)}
+              title={file.path}
+              type="button"
+            >
+              {iconUrl ? (
+                <img alt="" className="size-4 shrink-0" draggable={false} src={iconUrl} />
+              ) : (
+                <DocumentTextIcon aria-hidden className="size-4 shrink-0 text-ink-2" />
+              )}
+              <span className="min-w-0 truncate">{name}</span>
+              <span className="min-w-0 flex-1 truncate text-ui-subhead text-ink-2">
+                {dirnameOf(file.path)}
+              </span>
+              <ChangeStatus status={file.status} />
+            </button>
+          );
+        })}
       </aside>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {detailError ? (
@@ -173,9 +200,7 @@ export function UncommittedReview({ sessionId }: { sessionId: string }) {
           <>
             <div className="flex shrink-0 items-center gap-2 px-3 py-2">
               <span className="text-ui-headline">{basenameOf(detail.path)}</span>
-              <span className="shrink-0 text-ui-subhead text-ink-2">
-                · {STATUS_TEXT[detail.status]}
-              </span>
+              <ChangeStatus status={detail.status} />
               {detail.note && (
                 <span className="min-w-0 truncate text-ui-subhead text-ink-2">{detail.note}</span>
               )}

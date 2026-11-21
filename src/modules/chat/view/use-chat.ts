@@ -8,6 +8,7 @@ import type {
   WorkspaceChat,
 } from '../../../core/protocol/agent';
 import type { LlmProviderView } from '../../../core/protocol/llm';
+import { llmModelSettings } from '../../../core/protocol/llm-models';
 import { parseSessionCommand } from '../../../core/protocol/agent';
 import {
   CHAT_ATTACHMENT_MAX,
@@ -315,17 +316,20 @@ export function useChat(
 
   const selectModel = (provider: LlmProviderView, model: string) => {
     if (!window.delionBot) return;
+    const { effort, effortLevels } = llmModelSettings(provider, model);
     optimisticChat({
+      effort: effort ?? null,
+      effortLevels,
       providerId: provider.id,
       providerName: provider.name,
       model,
       modelUnavailable: false,
     });
     void agentClient['set-model']({ sessionId, providerId: provider.id, model })
-      .then(() => refresh())
       .catch((e) =>
         showToast({ variant: 'error', title: '切换模型失败', description: errorMessage(e) }),
-      );
+      )
+      .finally(refresh);
   };
 
   const selectEffort = (level: string) => {

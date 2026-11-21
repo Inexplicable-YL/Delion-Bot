@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowUpTrayIcon,
+  ChatBubbleLeftIcon,
   DocumentPlusIcon,
   DocumentTextIcon,
   PencilIcon,
@@ -31,19 +32,43 @@ import { IconButton } from '../../../ui/icon-button';
 import { SegmentedControl } from '../../../ui/segmented-control';
 import { Textarea } from '../../../ui/textarea';
 import { showToast } from '../../../ui/toast';
+import { useNow } from '../../../ui/use-now';
 import type { WorkspaceEntry } from '../../workspace/contract';
 import { explorerDragType, localPathsOf } from '../../workspace/view';
 import { useChatTabSource } from './chat-source';
 import { chatClient } from './client';
+import { useSessions } from './sessions';
 
-const panels = ['suggestions', 'instructions', 'files'] as const;
-const labels = { suggestions: '建议', instructions: '说明', files: '文件' };
+const standardPanels = ['suggestions', 'instructions', 'files'] as const;
+const historyPanels = ['suggestions', 'recent', 'instructions', 'files'] as const;
+const labels = { suggestions: '建议', recent: '近期', instructions: '说明', files: '文件' };
 
-export function ProjectSetup({ project }: { project: WorkspaceEntry }) {
+function formatSessionTime(value: string, now: number) {
+  const date = new Date(value);
+  const minutes = Math.floor((now - date.getTime()) / 60_000);
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes} 分钟前`;
+  if (minutes < 1_440) return `${Math.floor(minutes / 60)} 小时前`;
+  if (minutes < 10_080) return `${Math.floor(minutes / 1_440)} 天前`;
+  return date.toLocaleDateString('zh-CN');
+}
+
+export function ProjectSetup({
+  project,
+  onOpenSession,
+}: {
+  project: WorkspaceEntry;
+  onOpenSession: (sessionId: string) => void;
+}) {
   const { workbench } = useChatTabSource();
   const queryClient = useQueryClient();
   const { defer, onCloseAutoFocus } = useAfterMenuClose();
-  const [panel, setPanel] = useState<(typeof panels)[number]>('suggestions');
+  const sessions = useSessions((state) => state.lists[project.id]);
+  const recent = sessions?.toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 3);
+  const panels = recent?.length ? historyPanels : standardPanels;
+  const [selectedPanel, setPanel] = useState<(typeof historyPanels)[number]>('suggestions');
+  const panel = selectedPanel === 'recent' && !recent?.length ? 'suggestions' : selectedPanel;
+  const now = useNow(60_000, panel === 'recent');
   const [draft, setDraft] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const queryKey = ['chat', 'project-context', project.id];
@@ -89,9 +114,10 @@ export function ProjectSetup({ project }: { project: WorkspaceEntry }) {
 
   return (
     <section aria-label="项目设置" className="@container min-w-0 space-y-app-gap pl-1">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <SegmentedControl
           aria-label="项目设置面板"
+          className="[&>button]:px-4"
           labels={labels}
           options={panels}
           value={panel}
@@ -179,6 +205,30 @@ export function ProjectSetup({ project }: { project: WorkspaceEntry }) {
             <div aria-hidden className="aspect-4/3" />
           )}
         </div>
+
+        {panel === 'recent' && (
+          <ul aria-label="近期会话" className="absolute inset-0 space-y-1 overflow-y-auto">
+            {recent?.map((session) => (
+              <li key={session.id}>
+                <Button
+                  variant="ghost"
+                  className="w-full min-w-0 justify-start rounded-control text-left"
+                  title={session.title}
+                  onClick={() => onOpenSession(session.id)}
+                >
+                  <ChatBubbleLeftIcon aria-hidden className="text-ink-2" />
+                  <span className="min-w-0 flex-1 truncate">{session.title || '新对话'}</span>
+                  <time
+                    dateTime={session.updatedAt}
+                    className="shrink-0 text-ui-subhead text-ink-2"
+                  >
+                    {formatSessionTime(session.updatedAt, now)}
+                  </time>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {panel === 'instructions' && (
           <div className="absolute inset-0 flex flex-col">

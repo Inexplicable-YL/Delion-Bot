@@ -24,6 +24,7 @@ import { toasts } from '../../../../src/ui/toast';
 import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
 import {
   ChatHome,
+  ChatTab,
   ChatTabSourceProvider,
   useChatDrafts,
   useSessions,
@@ -128,6 +129,8 @@ beforeEach(() => {
   Object.assign(api, {
     'agent:create-session': async () => emptyChat('first'),
     'agent:list-sessions': async () => [],
+    'chat:projectContext': async () => ({ instruction: '', files: [] }),
+    'chat:uncommittedAvailability': async () => ({ available: false }),
     'agent:open-session': async ({ sessionId }: { sessionId: string }) =>
       useSessions.getState().chats[sessionId]!,
     'agent:ask': async ({ sessionId, text }: { sessionId: string; text: string }) => ({
@@ -219,6 +222,72 @@ it('首页新对话切换归属后在原处显示项目名并发送同一份草�
   expect(useNavigationStore.getState().view).toBe('home');
   expect(useSessions.getState().homeSessionId).toBe('first');
   expect(noChatTab()).toBe(true);
+});
+
+it('项目新会话始终显示项目面板，近期只打开当前项目的历史会话', async () => {
+  const projectId = 'project';
+  const cwd = 'D:/workspace/project';
+  useWorkspaceStore.setState({
+    workspace: {
+      directory: 'D:/workspace',
+      entries: [
+        {
+          id: projectId,
+          kind: 'project',
+          name: '测试项目',
+          parentId: null,
+          sourceId: null,
+          updatedAt: '',
+          path: cwd,
+        },
+      ],
+    },
+  });
+  useSessions.getState().putChat('new', { ...emptyChat('new'), projectId, cwd });
+  const source = {
+    navigate: useNavigationStore.getState().navigate,
+    workbench: { open: () => {}, openDocument: () => {}, close: () => {} },
+    opensLink: () => false,
+  };
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <ChatTabSourceProvider source={source}>
+          <ChatTab tabId="chat:new" groupId="group" />
+        </ChatTabSourceProvider>
+      </QueryClientProvider>,
+    ),
+  );
+  const panel = host.querySelector('[aria-label="项目设置面板"]')!;
+  const tabs = () => [...panel.querySelectorAll('button')].map((button) => button.textContent);
+  expect(tabs()).toEqual(['建议', '说明', '文件']);
+
+  const summary = (id: string, title: string, updatedAt: string, pool: string | null) => ({
+    id,
+    title,
+    updatedAt,
+    projectId: pool,
+    createdAt: updatedAt,
+    pinned: false,
+  });
+  await act(async () =>
+    useSessions.setState({
+      lists: {
+        [projectId]: [
+          summary('older', '较早会话', '2026-11-20T12:00:00Z', projectId),
+          summary('latest', '最近会话', '2026-11-21T12:00:00Z', projectId),
+        ],
+        general: [summary('general', '通用会话', '2026-11-21T13:00:00Z', null)],
+      },
+    }),
+  );
+  expect(tabs()).toEqual(['建议', '近期', '说明', '文件']);
+  await act(async () => panel.querySelectorAll('button')[1]!.click());
+  const rows = [...host.querySelectorAll<HTMLButtonElement>('[aria-label="近期会话"] button')];
+  expect(rows.map((row) => row.title)).toEqual(['最近会话', '较早会话']);
+  await act(async () => rows[0]!.click());
+  expect(useNavigationStore.getState().projectId).toBe(projectId);
+  expect(useWorkbenchLayout.getState().pendingReveal?.tabId).toBe('chat:latest');
 });
 
 it('回到首页接着上次会话，清空运行内存（重启）后才是新对话', async () => {

@@ -1,6 +1,7 @@
 // 工作区的渲染端出口：目录树组件、条目镜像与客户端；标签与工作台仍在外壳（renderer/workbench）。
 export { Explorer, explorerDragType, type ExplorerItem, type ExplorerPending } from './explorer';
 export { onWorkspaceEvent, workspaceClient } from './client';
+export { fileIconUrl } from './file-icons';
 export { useWorkspaceStore } from './store';
 
 export function localPathsOf(files: File[]): string[] {

@@ -3,13 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDaysIcon,
   ChatBubbleLeftIcon as MessageSquare,
-  ChevronDownIcon as ChevronDown,
-  CpuChipIcon as Bot,
   DocumentTextIcon as FileText,
   EnvelopeIcon,
   FolderOpenIcon,
   GlobeAltIcon as Globe,
-  InformationCircleIcon as Info,
   LinkIcon,
   ListBulletIcon,
 } from '@heroicons/react/24/outline';
@@ -23,6 +20,7 @@ import { cn } from '../../../ui/cn';
 import { Button } from '../../../ui/button';
 import type { ComposerContext } from './composer-context';
 import { ChatComposerMenu } from './ChatComposerMenu';
+import { ChatModelPicker } from './ChatModelPicker';
 import { ReplyCommentRail } from './reply-comment';
 import { formatDuration } from './ToolTimeline';
 import { openSubagent } from './tool-views';
@@ -35,15 +33,10 @@ import {
   PromptInputMenu,
   PromptInputMenuItem,
   PromptInputNotice,
-  PromptInputOption,
-  PromptInputOptionCheck,
-  PromptInputSetup,
   PromptInputSubmit,
   PromptInputToolbar,
-  PromptInputTrigger,
 } from '../../../ui/agent/prompt-input';
 import { QueuedMessages } from '../../../ui/agent/queued-messages';
-import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/popover';
 import { useChatTabSource } from './chat-source';
 import type {
   BackgroundTaskView,
@@ -65,13 +58,7 @@ import type { ChatReference } from './use-chat';
 import { ComposerEditor, type ComposerEditorHandle } from './ComposerEditor';
 import { connectorPrompt } from './connector-tokens';
 import { releaseChatMedia, setChatMediaPreview } from './media';
-import {
-  agentClient,
-  capabilitiesClient,
-  chatClient,
-  llmClient,
-  onWebSearchChanged,
-} from './client';
+import { agentClient, capabilitiesClient, chatClient, onWebSearchChanged } from './client';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const todoPrompt = '帮我查看还未完成的个人待办';
@@ -250,22 +237,6 @@ export function ChatComposer({
     queryKey: ['settings', 'commands'],
     queryFn: () => agentClient['list-commands']({}),
   }).data;
-  // 两列模型面板：打开时重读设置配置保证新鲜；focusedId 是左列手动查看的提供商，空则跟随当前使用项。
-  const [modelPickerOpen, setModelPickerOpen] = useState(false);
-  const providerQuery = useQuery({
-    queryKey: ['llm', 'providers'],
-    queryFn: () => llmClient.list(),
-    enabled: Boolean(window.delionBot) && modelPickerOpen,
-  });
-  const providers = providerQuery.data?.filter((view) => view.enabled) ?? null;
-  const providersFailed = providerQuery.isError;
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  const focused =
-    providers?.find((provider) => provider.id === focusedId) ??
-    providers?.find((provider) => provider.id === providerId) ??
-    providers?.[0] ??
-    null;
-  const [effortPickerOpen, setEffortPickerOpen] = useState(false);
   const searchQuery = useQuery({
     queryKey: webSearchOptionsKey,
     queryFn: () => capabilitiesClient.listWebSearchOptions(),
@@ -563,11 +534,6 @@ export function ChatComposer({
   // 主会话运行中输入框有内容就是插队发送；旁问不插队，运行中始终是停止。
   const stoppable = busy && (sidechat || !canSend);
 
-  const openModelPicker = (open: boolean) => {
-    setModelPickerOpen(open);
-    if (open) setFocusedId(null);
-  };
-
   const selectSearchEntry = async (id: string | null) => {
     if (!window.delionBot) return;
     try {
@@ -694,134 +660,16 @@ export function ChatComposer({
             <ContextIndicator cacheHitRate={cacheHitRateText(contextUsage)} usage={contextUsage} />
           )}
           {configured && !sidechat && (
-            <Popover onOpenChange={openModelPicker} open={modelPickerOpen}>
-              <PopoverTrigger asChild>
-                <PromptInputTrigger
-                  aria-label="模型服务"
-                  className={cn(
-                    '@max-[220px]:px-1.5',
-                    'max-w-40',
-                    modelUnavailable && 'text-danger hover:text-danger',
-                  )}
-                  title={modelUnavailable ? `${model}（已停用或被移除，请另选模型）` : model}
-                >
-                  <span className="truncate @max-[220px]:hidden">
-                    {modelUnavailable ? `${model} · 已停用` : model}
-                  </span>
-                  <Bot className="hidden size-4 @max-[220px]:block" />
-                  <ChevronDown className="size-4 @max-[220px]:hidden" />
-                </PromptInputTrigger>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-80" side="bottom">
-                {providers === null ? (
-                  providersFailed ? (
-                    <p className="px-2 py-3 text-ui-subhead text-ink-2">模型列表加载失败</p>
-                  ) : (
-                    <p className="px-2 py-3 text-ui-subhead text-ink-2">正在加载模型列表…</p>
-                  )
-                ) : providers.length === 0 ? (
-                  <PromptInputSetup
-                    actionLabel="打开设置 › 模型服务"
-                    message="还没有启用的模型供应商，可在设置 › 模型服务 中添加或启用。"
-                    onAction={() => {
-                      setModelPickerOpen(false);
-                      navigate({ page: 'settings', section: 'providers' });
-                    }}
-                  />
-                ) : (
-                  <div className="flex gap-0.5">
-                    <ul aria-label="模型服务" className="max-h-64 w-28 shrink-0 overflow-y-auto">
-                      {providers.map((provider) => (
-                        <li key={provider.id}>
-                          <PromptInputOption
-                            active={provider.id === focused?.id}
-                            onClick={() => setFocusedId(provider.id)}
-                          >
-                            <span className="truncate">{provider.name}</span>
-                            {provider.id === providerId && (
-                              <span
-                                aria-label="本会话使用"
-                                className="ms-auto size-1.5 shrink-0 rounded-full bg-success"
-                                title="本会话使用"
-                              />
-                            )}
-                          </PromptInputOption>
-                        </li>
-                      ))}
-                    </ul>
-                    <ul
-                      aria-label="模型"
-                      className="max-h-64 min-w-0 flex-1 overflow-y-auto border-l border-line pl-1.5"
-                    >
-                      {focused?.models.map((item) => (
-                        <li key={item}>
-                          <PromptInputOption
-                            active={focused.id === providerId && model === item}
-                            onClick={() => {
-                              setModelPickerOpen(false);
-                              onModelSelect(focused, item);
-                            }}
-                          >
-                            <span className="truncate">{item}</span>
-                            {focused.id === providerId && model === item && (
-                              <PromptInputOptionCheck />
-                            )}
-                          </PromptInputOption>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </PopoverContent>
-            </Popover>
-          )}
-          {configured && !sidechat && (
-            <Popover onOpenChange={setEffortPickerOpen} open={effortPickerOpen}>
-              <PopoverTrigger asChild>
-                <PromptInputTrigger
-                  aria-label="思考强度"
-                  className="@max-[260px]:px-1.5 @max-[160px]:hidden"
-                  title="思考强度"
-                >
-                  <span className="truncate @max-[260px]:hidden">{effort ?? 'default'}</span>
-                  <Info className="hidden size-4 @max-[260px]:block" />
-                  <ChevronDown className="size-4 @max-[260px]:hidden" />
-                </PromptInputTrigger>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                className={effortLevels.length ? 'w-32' : 'w-80'}
-                side="bottom"
-              >
-                {effortLevels.length === 0 ? (
-                  <PromptInputSetup
-                    actionLabel="打开设置 › 模型服务"
-                    message="当前模型尚未配置可选的思考强度档位。在设置中编辑当前模型，勾选其支持的档位并保存。"
-                    onAction={() => {
-                      setEffortPickerOpen(false);
-                      navigate({ page: 'settings', section: 'providers' });
-                    }}
-                  />
-                ) : (
-                  <ul aria-label="思考强度">
-                    {effortLevels.map((level) => (
-                      <li key={level}>
-                        <PromptInputOption
-                          active={level === effort}
-                          onClick={() => {
-                            setEffortPickerOpen(false);
-                            onEffortSelect(level);
-                          }}
-                        >
-                          <span className="truncate">{level}</span>
-                          {level === effort && <PromptInputOptionCheck />}
-                        </PromptInputOption>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </PopoverContent>
-            </Popover>
+            <ChatModelPicker
+              effort={effort}
+              effortLevels={effortLevels}
+              model={model}
+              modelUnavailable={modelUnavailable}
+              onEffortSelect={onEffortSelect}
+              onModelSelect={onModelSelect}
+              providerId={providerId}
+              side={hero ? 'bottom' : 'top'}
+            />
           )}
           <PromptInputSubmit
             onSend={onSend}
