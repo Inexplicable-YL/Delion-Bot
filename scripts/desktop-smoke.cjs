@@ -122,7 +122,10 @@ async function run(window) {
               rect.left >= layout.overlay.x - 1,
               `导航覆盖原生窗口按钮: ${JSON.stringify({ width, factor, font, layout })}`,
             );
-            assert.ok(rect.top >= -1 && rect.bottom <= layout.header.bottom + 1, '导航超出标题栏');
+            assert.ok(
+              rect.top >= -1 && rect.bottom <= layout.header.bottom + 1,
+              `导航超出标题栏: ${JSON.stringify({ width, factor, font, layout, button: { rect, drag } })}`,
+            );
             assert.ok(rect.right <= layout.header.right + 1, '导航超出窗口');
             assert.equal(drag, 'no-drag');
           }
