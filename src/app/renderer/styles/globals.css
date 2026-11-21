@@ -157,7 +157,7 @@ svg[viewBox='0 0 24 24'][data-slot='icon']:is(.size-5, .size-6),
 
 .app-toolbar button,
 .app-toolbar .glass {
-  max-height: 100%;
+  max-height: env(titlebar-area-height, var(--spacing-toolbar));
 }
 
 .app-toolbar button > svg {
