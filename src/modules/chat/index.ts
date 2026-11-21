@@ -2,6 +2,7 @@
 import { defineModule } from '../../app/module';
 import { statSync } from 'node:fs';
 import { isAbsolute, normalize } from 'node:path';
+import { readUncommittedChanges, readUncommittedFileChange } from '../../core/agent/changes';
 import { deleteChatCommand, saveChatCommand } from '../../core/agent/chat-commands';
 import { getProjectChatContext, setProjectChatContext } from '../../core/agent/instruction';
 import { stageChatMediaFiles } from '../../core/agent/media';
@@ -14,10 +15,7 @@ import {
 import {
   locateSessionFile,
   openSessionFile,
-  readSessionUncommittedChanges,
-  readSessionUncommittedFileChange,
   revealSessionFile,
-  uncommittedAvailability,
 } from '../../core/agent/session/files';
 import { archivedSessions, preloadPi } from '../../core/agent/session/store';
 import { invalidateSessions } from '../../core/agent/session/run';
@@ -42,6 +40,14 @@ function updateProjectContext(
   const context = setProjectChatContext(projectId, patch);
   invalidateSessions();
   return context;
+}
+
+function localProjectDirectory(projectId: string): string {
+  const projects = hostPorts().projects;
+  const directory = projects.find(projectId)?.path;
+  if (!directory) throw new Error('项目目录不存在');
+  if (projects.remoteOf(projectId)) throw new Error('远程项目暂不支持变更审阅');
+  return directory;
 }
 
 export const chatModule = defineModule({
@@ -96,9 +102,8 @@ export const chatModule = defineModule({
     openInVsCode: ({ sessionId, path }) => openInVsCode(locateSessionFile(sessionId, path)),
     revealFile: ({ sessionId, path }) => revealSessionFile(sessionId, path),
     openFile: ({ sessionId, path }) => openSessionFile(sessionId, path),
-    readUncommittedChanges: readSessionUncommittedChanges,
-    readUncommittedFileChange: ({ sessionId, path }) =>
-      readSessionUncommittedFileChange(sessionId, path),
-    uncommittedAvailability,
+    readUncommittedChanges: (projectId) => readUncommittedChanges(localProjectDirectory(projectId)),
+    readUncommittedFileChange: ({ projectId, path }) =>
+      readUncommittedFileChange(localProjectDirectory(projectId), path),
   }),
 });

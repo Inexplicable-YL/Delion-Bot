@@ -1,3 +1,4 @@
+import { ProjectChangeTabStatus } from '../../../modules/chat/view';
 // 扁平标签栏：组内拖拽排序、跨组拖放、中键关闭、上下文菜单、激活滚动可见。
 import { useEffect, useRef, type DragEvent, type KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -12,7 +13,8 @@ import {
 import { cn } from '../../../ui/cn';
 import { useHorizontalWheel } from '../../../ui/use-horizontal-wheel';
 import { useWorkbenchLayout } from './layout-store';
-import { iconOf, titleOf } from './registry';
+import { kindOf, registry, titleOf } from './registry';
+import { fileIconUrl } from '../../../modules/workspace/view';
 import { ExplorerRevealButton } from './explorer-state';
 import { encodeTabDrag, hasTabDrag, parseTabDrag, setCurrentTabDrag, tabDragType } from './tab-dnd';
 import { GroupToolbar } from './GroupToolbar';
@@ -124,8 +126,9 @@ export function TabBar({
           const active = group.active === tab;
           const isPinned = group.pinned?.includes(tab) ?? false;
           const isPreview = group.preview === tab;
-          const Icon = iconOf(tab);
+          const { icon: Icon, file } = registry[kindOf(tab)];
           const title = titleOf(tab, queryClient);
+          const fileIcon = file ? fileIconUrl(title) : null;
           return (
             <ContextMenu key={tab}>
               <ContextMenuTrigger asChild>
@@ -165,17 +168,24 @@ export function TabBar({
                     if (!isPinned) closeTab(tab, group.id);
                   }}
                 >
-                  <Icon className="size-4 shrink-0" />
-                  <span
-                    className={cn(
-                      'min-w-0 flex-1 truncate px-0.5 text-left text-ui-subhead',
-                      isPreview && 'italic',
-                      unfocused && 'text-ink-2',
-                    )}
-                    title={isPreview ? `${title}（预览，双击保留）` : title}
-                  >
-                    {title}
-                  </span>
+                  {fileIcon ? (
+                    <img alt="" className="size-4 shrink-0" draggable={false} src={fileIcon} />
+                  ) : (
+                    <Icon className="size-4 shrink-0" />
+                  )}
+                  <div className="flex min-w-0 flex-1 items-center gap-1">
+                    <span
+                      className={cn(
+                        'min-w-0 truncate px-0.5 text-left text-ui-subhead',
+                        isPreview && 'italic',
+                        unfocused && 'text-ink-2',
+                      )}
+                      title={isPreview ? `${title}（预览，双击保留）` : title}
+                    >
+                      {title}
+                    </span>
+                    <ProjectChangeTabStatus tabId={tab} />
+                  </div>
                   {!isPinned && (
                     <IconButton
                       size="xs"

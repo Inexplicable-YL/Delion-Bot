@@ -63,12 +63,10 @@ export const chatContract = defineContract('chat', {
   openInVsCode: { input: sessionFile, output: z.void() },
   revealFile: { input: sessionFile, output: z.void() },
   openFile: { input: sessionFile, output: z.void() },
-  readUncommittedChanges: { input: sessionId, output: z.custom<UncommittedChanges>() },
-  readUncommittedFileChange: { input: sessionFile, output: z.custom<FileChangeDetail>() },
-  /** 轻探测：两次 git 调用，不扫描文件。 */
-  uncommittedAvailability: {
-    input: sessionId,
-    output: z.custom<Pick<UncommittedChanges, 'available' | 'reason'>>(),
+  readUncommittedChanges: { input: projectId, output: z.custom<UncommittedChanges>() },
+  readUncommittedFileChange: {
+    input: z.object({ projectId, path: filePath }),
+    output: z.custom<FileChangeDetail>(),
   },
 });
 

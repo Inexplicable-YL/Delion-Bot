@@ -588,15 +588,3 @@ export async function readUncommittedFileChange(
   }
   return detail(file);
 }
-
-/** 顶层探测：只判断会话目录能否做未提交改动审阅，不做文件扫描。
- *  供打开审阅入口的可见性判定使用——全量扫描的代价不该花在「要不要显示按钮」上。 */
-export async function probeUncommitted(
-  cwd: string,
-): Promise<{ available: boolean; reason: 'not-git' | 'git-unavailable' | null }> {
-  const repo = await repository(cwd);
-  return {
-    available: !!repo.root,
-    reason: repo.root ? null : repo.missing ? 'git-unavailable' : 'not-git',
-  };
-}

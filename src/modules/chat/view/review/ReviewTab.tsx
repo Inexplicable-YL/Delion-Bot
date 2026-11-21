@@ -1,5 +1,3 @@
-// 改动审阅标签的分发：轮次单文件 diff（数据冻结，读一次）与未提交改动聚合审阅
-// （按请求时点重算，手动刷新）共用一个标签类型，载荷由 tab-id 区分。
 import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -9,9 +7,9 @@ import {
 import type { TabId } from '../../../../app/module';
 import { diffStatOf } from '../../../../core/protocol/diff';
 import { PanelHeader } from '../../../../ui/panel-header';
-import { agentClient } from '../client';
+import type { FileChangeDetail } from '../../../../core/protocol/agent';
+import { agentClient, chatClient } from '../client';
 import { parseReviewTabId } from './tab-id';
-import { UncommittedReview } from './UncommittedReview';
 import { Centered, STATUS_TEXT, basenameOf, dirnameOf } from './view-utils';
 import { DiffScroller, PatchDiffView } from './pierre-diff';
 import { errorMessage } from '../../../../core/protocol/contract';
@@ -19,7 +17,7 @@ import { errorMessage } from '../../../../core/protocol/contract';
 export function ReviewTab({ tabId }: { tabId: TabId; groupId: string }) {
   const target = parseReviewTabId(tabId);
   if (target?.kind === 'uncommitted')
-    return <UncommittedReview key={target.sessionId} sessionId={target.sessionId} />;
+    return <UncommittedFileReview projectId={target.projectId} path={target.path} />;
   if (target?.kind === 'turn')
     return (
       <TurnFileReview path={target.path} sessionId={target.sessionId} turnId={target.turnId} />
@@ -31,7 +29,6 @@ export function ReviewTab({ tabId }: { tabId: TabId; groupId: string }) {
   );
 }
 
-/** 轮次单文件审阅：冻结记录写后不变，只读一次；记录被清理或无此文件时给出原因。 */
 function TurnFileReview({
   sessionId,
   turnId,
@@ -47,6 +44,35 @@ function TurnFileReview({
     staleTime: Infinity,
   });
 
+  return <FileReview detail={detail} error={error} />;
+}
+
+function UncommittedFileReview({ projectId, path }: { projectId: string; path: string }) {
+  const { data: detail, error } = useQuery({
+    queryKey: ['chat', 'uncommitted-file', projectId, path],
+    queryFn: async () => {
+      const {
+        before: _before,
+        after: _after,
+        ...detail
+      } = await chatClient.readUncommittedFileChange({
+        projectId,
+        path,
+      });
+      return detail;
+    },
+    gcTime: 0,
+  });
+  return <FileReview detail={detail} error={error} />;
+}
+
+function FileReview({
+  detail,
+  error,
+}: {
+  detail: Omit<FileChangeDetail, 'before' | 'after'> | undefined;
+  error: Error | null;
+}) {
   if (error)
     return (
       <Shell>

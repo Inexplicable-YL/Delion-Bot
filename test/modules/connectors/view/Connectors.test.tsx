@@ -14,7 +14,7 @@ const invoke = vi.hoisted(() => {
 
 import { connectorsView } from '../../../../src/modules/connectors/view';
 
-it('同一应用汇总多个账户，重复打开待授权链接时复用原链接', async () => {
+it('已连接应用单列一类，推荐区补位保持 6 个，重复打开待授权链接时复用原链接', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const open = vi.spyOn(window, 'open').mockReturnValue(null);
   const host = document.createElement('div');
@@ -28,7 +28,15 @@ it('同一应用汇总多个账户，重复打开待授权链接时复用原链�
       case 'connectors:configured':
         return true;
       case 'connectors:catalog':
-        return ['gmail', 'notion'].map((slug) => ({
+        return [
+          'gmail',
+          'googlecalendar',
+          'googledrive',
+          'notion',
+          'github',
+          'slack',
+          'outlook',
+        ].map((slug) => ({
           slug,
           name: slug,
           logo: `https://logos.test/${slug}`,
@@ -53,11 +61,20 @@ it('同一应用汇总多个账户，重复打开待授权链接时复用原链�
         </QueryClientProvider>,
       );
     });
-    const gmail = () => host.querySelector('[role="group"][aria-label="gmail"]');
-    await vi.waitFor(() => expect(gmail()?.textContent).toContain('已连接 2 个账户'));
-    expect(Array.from(gmail()!.querySelectorAll('button'), (button) => button.textContent)).toEqual(
-      ['管理'],
-    );
+    const section = (title: string) =>
+      Array.from(host.querySelectorAll(`section[aria-label="${title}"] [role="group"]`), (item) =>
+        item.getAttribute('aria-label'),
+      );
+    await vi.waitFor(() => expect(section('Connected')).toEqual(['gmail']));
+    expect(section('Recommended')).toEqual([
+      'googlecalendar',
+      'googledrive',
+      'notion',
+      'github',
+      'slack',
+      'outlook',
+    ]);
+    expect(host.querySelectorAll('[role="group"][aria-label="gmail"]')).toHaveLength(1);
 
     const notion = () =>
       host.querySelector<HTMLButtonElement>('[role="group"][aria-label="notion"] button')!;
@@ -68,6 +85,17 @@ it('同一应用汇总多个账户，重复打开待授权链接时复用原链�
     expect(invoke.mock.calls.filter(([channel]) => channel === 'connectors:connect')).toHaveLength(
       1,
     );
+
+    const development = Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Development',
+    )!;
+    await act(async () => development.click());
+    expect(
+      Array.from(host.querySelectorAll('section[aria-label]'), (item) =>
+        item.getAttribute('aria-label'),
+      ).filter((title) => title !== 'Composio'),
+    ).toEqual(['Development']);
+    expect(section('Development')).toEqual(['github']);
   } finally {
     await act(async () => root.unmount());
     queries.clear();

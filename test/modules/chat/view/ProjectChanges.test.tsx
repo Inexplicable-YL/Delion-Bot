@@ -9,9 +9,9 @@ import type { UncommittedChanges } from '../../../../src/core/protocol/changes';
 // 契约客户端在模块加载时取 bridge，须先于导入面板装好；各用例只重编程 handler。
 const { api, delion } = vi.hoisted(() => {
   const api = {
-    readUncommittedChanges: vi.fn<(sessionId: string) => Promise<UncommittedChanges>>(),
+    readUncommittedChanges: vi.fn<(projectId: string) => Promise<UncommittedChanges>>(),
     readUncommittedFileChange:
-      vi.fn<(input: { sessionId: string; path: string }) => Promise<FileChangeDetail>>(),
+      vi.fn<(input: { projectId: string; path: string }) => Promise<FileChangeDetail>>(),
   };
   const delion = {
     bridge: {
@@ -23,14 +23,16 @@ const { api, delion } = vi.hoisted(() => {
   window.delionBot = delion;
   return { api, delion };
 });
-import { UncommittedReview } from '../../../../src/modules/chat/view/review/UncommittedReview';
+import { ProjectChanges } from '../../../../src/modules/chat/view/review/ProjectChanges';
+import { ReviewTab } from '../../../../src/modules/chat/view/review/ReviewTab';
+import { reviewTabId } from '../../../../src/modules/chat/view/review/tab-id';
 
 vi.mock('../../../../src/modules/chat/view/review/pierre-diff', () => ({
   DiffScroller: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   PatchDiffView: () => null,
 }));
 
-const sessionId = '0197d5a2-7b1e-7cc2-9f3a-5e6d1c2b3a4d';
+const projectId = '0197d5a2-7b1e-7cc2-9f3a-5e6d1c2b3a4d';
 
 const detailOf = (path: string): FileChangeDetail => ({
   path,
@@ -68,16 +70,16 @@ let queryClient: QueryClient;
 // 查询结果经 notifyManager 在下一个宏任务才通知组件。
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
+const onOpen = vi.fn();
+
 async function render() {
   await act(async () =>
     root.render(
       <QueryClientProvider client={queryClient}>
-        <UncommittedReview sessionId={sessionId} />
+        <ProjectChanges projectId={projectId} activeTab={null} onOpen={onOpen} />
       </QueryClientProvider>,
     ),
   );
-  // 列表读取与首文件详情是两段链路，各自落定一次。
-  await settle();
   await settle();
 }
 
@@ -107,17 +109,15 @@ it('非 Git 目录不读取文件详情', async () => {
   expect(api.readUncommittedFileChange).not.toHaveBeenCalled();
 });
 
-it('刷新重读列表；选中文件被移除时回落到第一个', async () => {
-  // 前一个用例的 mockResolvedValue 会覆盖默认实现，这里显式恢复两文件基线。
-  api.readUncommittedChanges.mockImplementation(async () => summaryFixture());
+it('点击文件才打开对应的 diff 标签，刷新列表不会打开其他标签', async () => {
   await render();
+  expect(api.readUncommittedFileChange).not.toHaveBeenCalled();
+
   await act(async () => {
-    host
-      .querySelector<HTMLButtonElement>('[aria-label="改动文件列表"] button:nth-child(2)')!
-      .click();
+    host.querySelector<HTMLButtonElement>('[title="new.py"]')!.click();
   });
-  await settle();
-  expect(api.readUncommittedFileChange).toHaveBeenLastCalledWith({ sessionId, path: 'new.py' });
+  const tabId = reviewTabId({ kind: 'uncommitted', projectId, path: 'new.py' });
+  expect(onOpen).toHaveBeenCalledExactlyOnceWith(tabId);
 
   api.readUncommittedChanges.mockResolvedValue(
     summaryFixture({
@@ -128,8 +128,19 @@ it('刷新重读列表；选中文件被移除时回落到第一个', async () =
   );
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="刷新改动"]')!.click());
   await settle();
+  expect(host.querySelector('[title="gone.log"]')).not.toBeNull();
+  expect(onOpen).toHaveBeenCalledTimes(1);
+
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <ReviewTab groupId="primary" tabId={tabId} />
+      </QueryClientProvider>,
+    ),
+  );
   await settle();
-  // 原选中项已不在列表：回落到第一个文件，而不是停留在一个无详情的失效选择上。
-  expect(host.querySelector('[aria-current="true"]')?.textContent).toContain('gone.log');
-  expect(api.readUncommittedFileChange).toHaveBeenLastCalledWith({ sessionId, path: 'gone.log' });
+  expect(api.readUncommittedFileChange).toHaveBeenCalledExactlyOnceWith({
+    projectId,
+    path: 'new.py',
+  });
 });

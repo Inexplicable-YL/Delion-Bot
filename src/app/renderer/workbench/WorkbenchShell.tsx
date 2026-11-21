@@ -294,7 +294,9 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
               ) : (
                 <>
                   <WorkbenchExplorer
+                    key={projectId}
                     activeDocKey={activeDocKey}
+                    activeTab={activeTab}
                     onAction={openDialog}
                     onCreated={onCreated}
                     onOpenDocument={(key) => void useNavigationStore.getState().openDocument(key)}

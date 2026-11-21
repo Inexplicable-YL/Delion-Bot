@@ -15,7 +15,7 @@ const { api, desktop } = vi.hoisted(() => {
     bridge: {
       // 远程连接与通道状态随目录树加载，这里的用例不依赖它们。
       invoke: async (channel: string, input: never) =>
-        channel.startsWith('remotes:') ? [] : handlers[channel.slice('workspace:'.length)]?.(input),
+        channel.startsWith('remotes:') ? [] : handlers[channel.split(':')[1]!]?.(input),
       subscribe,
     },
   } as unknown as NonNullable<typeof window.delionBot>;
@@ -64,7 +64,7 @@ const remoteProject: WorkspaceEntry = {
 };
 
 const localProject: WorkspaceEntry = {
-  id: 'p-local',
+  id: '0197d5a2-7b1e-7cc2-9f3a-5e6d1c2b3a4d',
   parentId: null,
   name: '本地项目',
   kind: 'project',
@@ -76,7 +76,7 @@ const localProject: WorkspaceEntry = {
 
 const localFolder: WorkspaceEntry = {
   id: 'f-local',
-  parentId: 'p-local',
+  parentId: localProject.id,
   name: '资料',
   kind: 'folder',
   sourceId: null,
@@ -111,7 +111,7 @@ afterEach(async () => {
 
 const newButton = () => document.querySelector<HTMLElement>('[aria-label="新建"]');
 const collapseButton = () => document.querySelector('[aria-label="全部收起"]');
-const blank = () => document.querySelector<HTMLElement>('#workspace-explorer > .overflow-y-auto')!;
+const blank = () => document.querySelector<HTMLElement>('#workspace-explorer .overflow-y-auto')!;
 
 const nameInput = () => document.querySelector<HTMLInputElement>('[aria-label="新文件名称"]');
 
@@ -123,6 +123,7 @@ async function render(projectId: string | null, activeDocKey: string | null = nu
       <QueryClientProvider client={new QueryClient()}>
         <WorkbenchExplorer
           activeDocKey={activeDocKey}
+          activeTab={null}
           onAction={onAction}
           onCreated={onCreated}
           onOpenDocument={() => {}}
@@ -224,4 +225,42 @@ it('hides remote and external projects from the library tree', async () => {
   expect(treeRow('远端项目')).toBeUndefined();
   expect(treeRow('外部项目')).toBeUndefined();
   expect(treeRow('外部资料')).toBeUndefined();
+});
+
+it('switches the project sidebar and reuses the diff tab for the same file', async () => {
+  const { useWorkbenchLayout } =
+    await import('../../../../src/app/renderer/workbench/layout-store');
+  const { walkGroups } = await import('../../../../src/app/renderer/workbench/layout-schema');
+  window.delionBot = desktop;
+  const read = vi.fn(async () => ({
+    available: true,
+    warnings: [],
+    files: [{ path: 'src/app.ts', status: 'modified' }],
+  }));
+  api.readUncommittedChanges = read;
+  await render(localProject.id);
+  const toggle = (name: string) =>
+    Array.from(
+      container.querySelectorAll<HTMLButtonElement>('[aria-label="项目侧栏内容"] button'),
+    ).find((button) => button.getAttribute('aria-label') === name)!;
+
+  expect(read).not.toHaveBeenCalled();
+  await act(async () => toggle('修改').click());
+  await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  expect(read).toHaveBeenCalledExactlyOnceWith(localProject.id);
+  const fileFilter = () => container.querySelector('[aria-label="筛选已同步内容"]')!;
+  expect(fileFilter().closest('[hidden]')).not.toBeNull();
+
+  const file = container.querySelector<HTMLButtonElement>('button[title="src/app.ts"]')!;
+  await act(async () => {
+    file.click();
+    file.click();
+  });
+  expect(walkGroups(useWorkbenchLayout.getState().root).flatMap((group) => group.tabs)).toEqual([
+    `review:${localProject.id}:uncommitted:src/app.ts`,
+  ]);
+
+  await act(async () => toggle('文件').click());
+  expect(fileFilter().closest('[hidden]')).toBeNull();
+  expect(container.querySelector('[aria-label="筛选改动"]')).toBeNull();
 });

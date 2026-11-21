@@ -20,6 +20,7 @@ export {
 } from './chat-source';
 export { registerChatAttachmentCheck, saveChatDrafts, useChatDrafts } from './drafts';
 export { referenceEntryCandidates } from './reference-tokens';
+export { ProjectChanges, ProjectChangeTabStatus } from './review/ProjectChanges';
 export { reviewTabTitle } from './review/tab-id';
 export { runBadge, useRuns, useSessionRunStatus } from './runs';
 export {

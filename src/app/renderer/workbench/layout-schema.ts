@@ -25,14 +25,16 @@ export {
 } from '../../../modules/workspace/contract';
 
 function normalizeGroup(group: GroupNode): GroupNode {
-  const pinned = [...new Set(group.pinned ?? [])].filter((tab) => group.tabs.includes(tab));
+  const tabs = group.tabs.filter((tab) => !/^review:[0-9a-f-]{36}:uncommitted$/.test(tab));
+  const pinned = [...new Set(group.pinned ?? [])].filter((tab) => tabs.includes(tab));
   const preview =
-    group.preview && group.tabs.includes(group.preview) && !pinned.includes(group.preview)
+    group.preview && tabs.includes(group.preview) && !pinned.includes(group.preview)
       ? group.preview
       : undefined;
   return {
     ...group,
-    tabs: [...pinned, ...group.tabs.filter((tab) => !pinned.includes(tab))],
+    tabs: [...pinned, ...tabs.filter((tab) => !pinned.includes(tab))],
+    active: group.active && !tabs.includes(group.active) ? (tabs[0] ?? null) : group.active,
     pinned: pinned.length ? pinned : undefined,
     preview,
   };

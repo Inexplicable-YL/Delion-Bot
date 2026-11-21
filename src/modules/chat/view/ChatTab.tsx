@@ -1,9 +1,8 @@
 import { cn } from '../../../ui/cn';
 import { useState, type ReactNode } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import {
   ArrowDownTrayIcon as Download,
-  ArrowsRightLeftIcon as GitCompare,
   ClockIcon as History,
   PencilSquareIcon as SquarePen,
   QuestionMarkCircleIcon as MessageCircleQuestion,
@@ -29,7 +28,6 @@ import { referenceContext, sessionReferences } from './reference-tokens';
 import { exportSessionArchive, poolKey, updateSession, useSessions } from './sessions';
 import { useWorkspaceStore } from '../../workspace/view';
 import { showToast } from '../../../ui/toast';
-import { reviewTabId } from './review/tab-id';
 import { SidechatPanel } from './SidechatPanel';
 import { openSidechat, useSidechats } from './sidechat-store';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -215,20 +213,6 @@ function ChatSessionView({
   const [exporting, setExporting] = useState(false);
   const sidechatOpen = useSidechats((state) => Boolean(state.views[active]));
   const sidechatFromQuote = (quote: string) => void openSidechat(active, { quote });
-  // 工作区改动入口的可见性：轻探测会话目录是否为可审阅的 Git 仓库
-  // （非仓库、缺 Git、远程项目都不显示，随聊无项目目录同样不显示）。
-  const { data: reviewReady = false } = useQuery({
-    queryKey: ['chat-uncommitted-availability', active, projectId],
-    enabled: projectId !== null && Boolean(window.delionBot),
-    staleTime: Infinity,
-    gcTime: 0,
-    queryFn: () =>
-      chatClient
-        .uncommittedAvailability(active)
-        .then((value) => value.available)
-        .catch(() => false),
-  });
-
   // 子 Agent 的会话只读：没有输入框，不能编辑重发、分支或旁问。
   const subagent = chat?.subagent;
   const conversation = chat && (busy || chat.messages.length > 0 || chat.running || subagent);
@@ -293,19 +277,6 @@ function ChatSessionView({
         <IconButton aria-label="新对话" onClick={startNewChat} title="新对话">
           <SquarePen />
         </IconButton>
-        {reviewReady && (
-          <IconButton
-            aria-label="工作区改动"
-            onClick={() =>
-              workbench.open(reviewTabId({ kind: 'uncommitted', sessionId: active }), {
-                aside: true,
-              })
-            }
-            title="查看工作区未提交的改动"
-          >
-            <GitCompare />
-          </IconButton>
-        )}
         <div className="flex-1" />
         {chat && chat.messages.length > 0 && (
           <IconButton

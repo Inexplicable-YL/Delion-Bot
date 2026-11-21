@@ -1,5 +1,3 @@
-// 会话内文件的定位、打开与改动审阅入口。
-import type { UncommittedChanges } from '../../protocol/changes';
 import { hostPorts } from '../../ports';
 import * as changes from '../changes';
 import { resolveSessionFile } from '../session-path';
@@ -36,35 +34,4 @@ export function readSessionTurnChanges(id: string, turnId: string, includeStats 
 export function readSessionTurnFileChange(id: string, turnId: string, path: string) {
   row(id);
   return changes.readTurnFileChange(id, turnId, path);
-}
-
-export function readSessionUncommittedChanges(id: string) {
-  const meta = row(id);
-  const cwd = sessionCwd(meta.project_id, meta.cwd);
-  if (isRemoteSession(meta))
-    return Promise.resolve({
-      available: false,
-      reason: 'remote' as const,
-      cwd,
-      repositoryRoot: null,
-      head: null,
-      warnings: [],
-      files: [],
-    });
-  return changes.readUncommittedChanges(cwd);
-}
-
-export function readSessionUncommittedFileChange(id: string, path: string) {
-  const meta = row(id);
-  if (isRemoteSession(meta)) throw new Error('远程项目暂不支持变更审阅');
-  return changes.readUncommittedFileChange(sessionCwd(meta.project_id, meta.cwd), path);
-}
-
-export async function uncommittedAvailability(
-  id: string,
-): Promise<Pick<UncommittedChanges, 'available' | 'reason'>> {
-  const meta = row(id);
-  const cwd = sessionCwd(meta.project_id, meta.cwd);
-  if (isRemoteSession(meta)) return { available: false, reason: 'remote' };
-  return changes.probeUncommitted(cwd);
 }

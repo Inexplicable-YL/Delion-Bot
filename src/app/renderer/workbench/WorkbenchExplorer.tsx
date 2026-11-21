@@ -2,20 +2,25 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArchiveBoxIcon as Archive,
+  ArrowsRightLeftIcon,
   ArrowUpTrayIcon as Upload,
   ChevronDoubleLeftIcon as PanelLeftClose,
   ChevronDoubleUpIcon as ChevronsDownUp,
   DocumentArrowUpIcon as FileInput,
   DocumentPlusIcon as FilePlus2,
+  FolderIcon,
   FolderPlusIcon as FolderPlus,
   GlobeAltIcon as Globe,
   PlusIcon as Plus,
 } from '@heroicons/react/24/outline';
+import type { TabId } from '../../module';
+import { ProjectChanges } from '../../../modules/chat/view';
 import { workspaceArchiveId, type WorkspaceEntry } from '../../../modules/workspace/contract';
 import { parseRemoteNodeId } from '../../../modules/remotes/contract';
 import { Button } from '../../../ui/button';
 import { CollapseChevron } from '../../../ui/collapse';
 import { PanelHeader } from '../../../ui/panel-header';
+import { SegmentedControl } from '../../../ui/segmented-control';
 import { SearchInput } from '../../../ui/search-input';
 import { Resizer } from '../../../ui/resizer';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ui/tooltip';
@@ -45,6 +50,7 @@ import {
 import { usePreferenceWidth, usePreferences } from '../shell/preferences';
 import { useMobileDrawer } from '../shell/mobile-drawer';
 import { RemotePortsDialog } from '../workspace/remote-ports-dialog';
+import { openTarget } from './open-target';
 import { useExplorerState } from './explorer-state';
 import { useViewportWidth } from '../../../ui/use-viewport-width';
 import { cn } from '../../../ui/cn';
@@ -88,6 +94,7 @@ export function currentContainerOf(activeKey: string | null, rootId: string | nu
 export function WorkbenchExplorer({
   projectId,
   activeDocKey,
+  activeTab,
   onAction,
   onOpenDocument,
   onOpenToSide,
@@ -95,6 +102,7 @@ export function WorkbenchExplorer({
 }: {
   projectId: string | null;
   activeDocKey: string | null;
+  activeTab: TabId | null;
   onAction: (action: EntryAction | 'link', id: string | null) => void;
   onOpenDocument: (key: string) => void;
   onOpenToSide: (key: string) => void;
@@ -119,6 +127,9 @@ export function WorkbenchExplorer({
   const narrow = useExplorerState((s) => s.narrow);
   const viewportWidth = useViewportWidth();
   const drawerRef = useRef<HTMLElement>(null);
+  const [mode, setMode] = useState<'files' | 'changes'>('files');
+  const changesProjectId = root?.kind === 'project' && root.path && !remoteRoot ? root.id : null;
+  const showChanges = changesProjectId !== null && mode === 'changes';
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [draggingEntry, setDraggingEntry] = useState(false);
 
@@ -232,6 +243,7 @@ export function WorkbenchExplorer({
   // 窄屏抽屉只看 mobileOpen：忽略宽屏折叠残留，否则折叠目录后缩窗会永远打不开目录。
   const visible = narrow ? mobileOpen : !collapsed;
   const effectiveWidth = Math.min(width, Math.max(200, Math.round(viewportWidth * 0.28)));
+  const wrapHeaderActions = !narrow && changesProjectId !== null && effectiveWidth < 220;
   const sectionClass = 'flex h-8 items-center gap-1 px-3 text-ui-subhead text-ink-2';
   const eyebrowClass = 'px-3 pt-3 pb-1 text-ui-subhead text-ink-2';
 
@@ -271,7 +283,7 @@ export function WorkbenchExplorer({
           )}
           style={narrow ? undefined : { width: effectiveWidth }}
         >
-          <PanelHeader variant="plain">
+          <PanelHeader className={cn(wrapHeaderActions && 'flex-wrap')} variant="plain">
             <IconButton
               aria-controls="workspace-explorer"
               aria-expanded={visible}
@@ -289,7 +301,7 @@ export function WorkbenchExplorer({
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
-                  className="min-w-0 flex-1 truncate text-left text-ui-subhead text-ink-2 transition-colors duration-base hover:text-ink"
+                  className="min-w-0 truncate text-left text-ui-subhead font-semibold uppercase text-ink"
                   onClick={() => useTreeState.getState().select(rootId)}
                   title={
                     remoteRoot ? undefined : projectId ? (root?.name ?? '项目与文件夹') : '资料'
@@ -309,7 +321,25 @@ export function WorkbenchExplorer({
                 </TooltipContent>
               )}
             </Tooltip>
-            <div className="flex shrink-0 items-center gap-0.5">
+            {changesProjectId && (
+              <SegmentedControl
+                aria-label="项目侧栏内容"
+                className="ml-2.5 shrink-0"
+                compact
+                icons={{ files: FolderIcon, changes: ArrowsRightLeftIcon }}
+                labels={{ files: '文件', changes: '修改' }}
+                onChange={setMode}
+                options={['files', 'changes']}
+                value={mode}
+              />
+            )}
+            <div
+              className={cn(
+                'ml-auto shrink-0 items-center gap-0.5',
+                showChanges ? 'hidden' : 'flex',
+                wrapHeaderActions && 'basis-full justify-end pb-1',
+              )}
+            >
               {remoteRoot && rootId && (
                 <>
                   <Button
@@ -399,105 +429,118 @@ export function WorkbenchExplorer({
             </div>
           </PanelHeader>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col" id="workspace-explorer">
-            <SearchInput
-              aria-label="筛选已同步内容"
-              className="mx-2 mb-1"
-              onChange={(e) => useTreeState.getState().setQuery(e.target.value)}
-              placeholder="筛选已同步内容…"
-              value={query}
-            />
-            <div
-              className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
-              // 点空白处回到项目根：之后的新建落在二级，而不是沿用上次选中的子文件夹。
-              onClick={(event) => {
-                if (event.target === event.currentTarget) useTreeState.getState().select(rootId);
-              }}
-              onDoubleClick={(event) => {
-                if (remoteRoot) return;
-                if (event.target === event.currentTarget) startCreate('file', container());
-              }}
-              onDragOver={(event) => {
-                if (event.dataTransfer.types.includes('Files')) {
+            {showChanges && visible && (
+              <ProjectChanges
+                activeTab={activeTab}
+                onOpen={(tabId) => {
+                  openTarget(tabId);
+                  if (narrow) useMobileDrawer.getState().setDrawer(null);
+                }}
+                projectId={changesProjectId}
+              />
+            )}
+            {/* 切到改动时只隐藏不卸载：卸载会释放已展开目录，切回要重新读盘。 */}
+            <div className="flex min-h-0 flex-1 flex-col" hidden={showChanges}>
+              <SearchInput
+                aria-label="筛选已同步内容"
+                className="mx-2 mb-1"
+                onChange={(e) => useTreeState.getState().setQuery(e.target.value)}
+                placeholder="筛选已同步内容…"
+                value={query}
+              />
+              <div
+                className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+                // 点空白处回到项目根：之后的新建落在二级，而不是沿用上次选中的子文件夹。
+                onClick={(event) => {
+                  if (event.target === event.currentTarget) useTreeState.getState().select(rootId);
+                }}
+                onDoubleClick={(event) => {
+                  if (remoteRoot) return;
+                  if (event.target === event.currentTarget) startCreate('file', container());
+                }}
+                onDragOver={(event) => {
+                  if (event.dataTransfer.types.includes('Files')) {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'copy';
+                    return;
+                  }
+                  if (event.target !== event.currentTarget) return;
+                  if (!event.dataTransfer.types.includes('application/x-delion-entry')) return;
                   event.preventDefault();
-                  event.dataTransfer.dropEffect = 'copy';
-                  return;
-                }
-                if (event.target !== event.currentTarget) return;
-                if (!event.dataTransfer.types.includes('application/x-delion-entry')) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = 'move';
-              }}
-              onDrop={(event) => {
-                if (event.dataTransfer.types.includes('Files')) {
-                  if (event.defaultPrevented) return;
+                  event.dataTransfer.dropEffect = 'move';
+                }}
+                onDrop={(event) => {
+                  if (event.dataTransfer.types.includes('Files')) {
+                    if (event.defaultPrevented) return;
+                    event.preventDefault();
+                    importDroppedAnywhere(Array.from(event.dataTransfer.files), null);
+                    return;
+                  }
+                  if (event.target !== event.currentTarget) return;
                   event.preventDefault();
-                  importDroppedAnywhere(Array.from(event.dataTransfer.files), null);
-                  return;
-                }
-                if (event.target !== event.currentTarget) return;
-                event.preventDefault();
-                const drag = event.dataTransfer.getData('application/x-delion-entry');
-                if (drag) move(drag, null);
-              }}
-            >
-              <div className={eyebrowClass}>文件</div>
-              {visible && (
-                <ProjectFileTree
-                  canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}
-                  entries={entries}
-                  expanded={expanded}
-                  pending={pending}
-                  onAction={treeAction}
-                  onExpand={expand}
-                  onImportFiles={rootId ? importDroppedAnywhere : undefined}
-                  onMove={remoteRoot ? undefined : move}
-                  onOpenProject={openProject}
-                  onOpenToSide={openToSide}
-                  onActivate={keepDocument}
-                  libraryRoot={projectId === null ? libraryRoot : undefined}
-                  onRemoteAction={remoteAction}
-                  onSelect={selectEntry}
-                  query={query}
-                  rootId={rootId}
-                  selected={activeDocKey ?? selected}
-                />
-              )}
-            </div>
-            <div className="shrink-0 border-t border-line">
-              <button
-                aria-expanded={archiveOpen || Boolean(query.trim())}
-                className={cn(
-                  sectionClass,
-                  'w-full transition-colors duration-base hover:text-ink-2',
-                )}
-                onClick={() => setArchiveOpen((value) => !value)}
-                type="button"
+                  const drag = event.dataTransfer.getData('application/x-delion-entry');
+                  if (drag) move(drag, null);
+                }}
               >
-                <CollapseChevron open={archiveOpen || Boolean(query.trim())} />
-                <Archive className="size-4" />
-                归档
-              </button>
-              {(archiveOpen || query.trim()) && (
-                <div className="max-h-56 overflow-y-auto pb-1">
-                  {visible && (
-                    <ProjectFileTree
-                      archived
-                      canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}
-                      entries={entries}
-                      expanded={expanded}
-                      onAction={treeAction}
-                      onExpand={expand}
-                      onMove={move}
-                      onOpenProject={openProject}
-                      onOpenToSide={openToSide}
-                      onSelect={selectEntry}
-                      query={query}
-                      rootId={workspaceArchiveId}
-                      selected={activeDocKey ?? selected}
-                    />
+                <div className={eyebrowClass}>文件</div>
+                {visible && (
+                  <ProjectFileTree
+                    canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}
+                    entries={entries}
+                    expanded={expanded}
+                    pending={pending}
+                    onAction={treeAction}
+                    onExpand={expand}
+                    onImportFiles={rootId ? importDroppedAnywhere : undefined}
+                    onMove={remoteRoot ? undefined : move}
+                    onOpenProject={openProject}
+                    onOpenToSide={openToSide}
+                    onActivate={keepDocument}
+                    libraryRoot={projectId === null ? libraryRoot : undefined}
+                    onRemoteAction={remoteAction}
+                    onSelect={selectEntry}
+                    query={query}
+                    rootId={rootId}
+                    selected={activeDocKey ?? selected}
+                  />
+                )}
+              </div>
+              <div className="shrink-0 border-t border-line">
+                <button
+                  aria-expanded={archiveOpen || Boolean(query.trim())}
+                  className={cn(
+                    sectionClass,
+                    'w-full transition-colors duration-base hover:text-ink-2',
                   )}
-                </div>
-              )}
+                  onClick={() => setArchiveOpen((value) => !value)}
+                  type="button"
+                >
+                  <CollapseChevron open={archiveOpen || Boolean(query.trim())} />
+                  <Archive className="size-4" />
+                  归档
+                </button>
+                {(archiveOpen || query.trim()) && (
+                  <div className="max-h-56 overflow-y-auto pb-1">
+                    {visible && (
+                      <ProjectFileTree
+                        archived
+                        canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}
+                        entries={entries}
+                        expanded={expanded}
+                        onAction={treeAction}
+                        onExpand={expand}
+                        onMove={move}
+                        onOpenProject={openProject}
+                        onOpenToSide={openToSide}
+                        onSelect={selectEntry}
+                        query={query}
+                        rootId={workspaceArchiveId}
+                        selected={activeDocKey ?? selected}
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

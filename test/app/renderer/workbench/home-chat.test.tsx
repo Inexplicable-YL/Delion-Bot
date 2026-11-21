@@ -130,7 +130,6 @@ beforeEach(() => {
     'agent:create-session': async () => emptyChat('first'),
     'agent:list-sessions': async () => [],
     'chat:projectContext': async () => ({ instruction: '', files: [] }),
-    'chat:uncommittedAvailability': async () => ({ available: false }),
     'agent:open-session': async ({ sessionId }: { sessionId: string }) =>
       useSessions.getState().chats[sessionId]!,
     'agent:ask': async ({ sessionId, text }: { sessionId: string; text: string }) => ({

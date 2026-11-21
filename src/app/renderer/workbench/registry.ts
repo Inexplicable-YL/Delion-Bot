@@ -2,7 +2,6 @@
 import type { ComponentType } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
 import {
-  ArrowsRightLeftIcon as GitCompare,
   ChatBubbleLeftIcon as MessageSquare,
   CommandLineIcon as SquareTerminal,
   DocumentTextIcon as FileText,
@@ -24,6 +23,8 @@ export interface TabDescriptor {
   component: ComponentType<TabComponentProps>;
   icon: ComponentType<{ className?: string }>;
   title: (tabId: TabId, client: QueryClient) => string;
+  /** 标题即文件名：标签图标与目录侧栏一致，按文件类型取图标。 */
+  file?: true;
 }
 
 function chatTitleOf(sessionId: string): string {
@@ -48,13 +49,15 @@ export const registry: Record<TabKind, TabDescriptor> = {
     component: NoteTab,
     icon: FileText,
     title: (tabId, client) => entryTitleOf(payloadOf(tabId), client),
+    file: true,
   },
   preview: {
     component: PreviewTab,
     icon: Eye,
     title: (tabId, client) => entryTitleOf(payloadOf(tabId), client),
+    file: true,
   },
-  review: { component: ReviewTab, icon: GitCompare, title: reviewTabTitle },
+  review: { component: ReviewTab, icon: FileText, title: reviewTabTitle, file: true },
   terminal: { component: TerminalTab, icon: SquareTerminal, title: () => 'Terminal' },
 };
 
@@ -64,8 +67,4 @@ export function kindOf(tabId: TabId): TabKind {
 
 export function titleOf(tabId: TabId, client: QueryClient): string {
   return registry[kindOf(tabId)].title(tabId, client);
-}
-
-export function iconOf(tabId: TabId): ComponentType<{ className?: string }> {
-  return registry[kindOf(tabId)].icon;
 }

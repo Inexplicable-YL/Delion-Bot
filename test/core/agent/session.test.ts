@@ -112,7 +112,6 @@ import {
 import {
   listSessionTurnChanges,
   readSessionTurnFileChange,
-  readSessionUncommittedChanges,
 } from '../../../src/core/agent/session/files';
 import { projectMessages, contextUsageView } from '../../../src/core/agent/session/projection';
 import { askSession, invalidateSessions, cancelRun } from '../../../src/core/agent/session/run';
@@ -242,10 +241,6 @@ it('真实 ask 生命周期冻结文件变化并将 turnId 持久化到消息元
   expect(
     await readSessionTurnFileChange(chat.sessionId!, turns[0]!.turnId, 'output.txt'),
   ).toMatchObject({ before: 'before', after: 'after' });
-  expect(await readSessionUncommittedChanges(chat.sessionId!)).toMatchObject({
-    available: false,
-    reason: 'not-git',
-  });
 });
 
 it('prompt 失败仍冻结此前的文件修改，不吞掉原始错误', async () => {
@@ -282,7 +277,7 @@ it('用户停止仍冻结已产生的文件，并在删除会话时清理快照'
   expect(existsSync(join(state.root, 'chat-changes', chat.sessionId!))).toBe(false);
 });
 
-it('远程会话不读取同名本地目录，接口明确返回不可用', async () => {
+it('远程会话的轮次改动快照标记为不可用', async () => {
   state.configured = true;
   state
     .db!.prepare(
@@ -300,10 +295,6 @@ it('远程会话不读取同名本地目录，接口明确返回不可用', asyn
     attachments: [],
     context: [],
     comments: [],
-  });
-  expect(await readSessionUncommittedChanges(chat.sessionId!)).toMatchObject({
-    available: false,
-    reason: 'remote',
   });
   expect(await listSessionTurnChanges(chat.sessionId!)).toMatchObject([
     { state: 'unavailable', files: [] },

@@ -18,10 +18,9 @@ describe('reviewTabId / parseReviewTabId', () => {
   });
 
   it('未提交改动变体往返无损，与轮次变体无歧义', () => {
-    const tabId = reviewTabId({ kind: 'uncommitted', sessionId });
-    expect(tabId).toBe(`review:${sessionId}:uncommitted`);
-    expect(parseReviewTabId(tabId)).toEqual({ kind: 'uncommitted', sessionId });
-    // 轮次解析不吞掉聚合变体，反之亦然。
+    const tabId = reviewTabId({ kind: 'uncommitted', projectId: sessionId, path });
+    expect(tabId).toBe(`review:${sessionId}:uncommitted:${path}`);
+    expect(parseReviewTabId(tabId)).toEqual({ kind: 'uncommitted', projectId: sessionId, path });
     expect(parseReviewTabId(reviewTabId({ kind: 'turn', sessionId, turnId, path }))).toEqual({
       kind: 'turn',
       sessionId,

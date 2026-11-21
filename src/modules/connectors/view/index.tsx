@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { SquaresPlusIcon as Blocks } from '@heroicons/react/24/outline';
 import { defineView } from '../../../app/module';
 import { errorMessage } from '../../../core/protocol/contract';
 import { Button } from '../../../ui/button';
+import { cn } from '../../../ui/cn';
 import { ConfirmDialog } from '../../../ui/dialog';
-import { Input } from '../../../ui/input';
 import { ErrorText } from '../../../ui/alert';
-import { McpTab, SettingsGroup, SettingsGroupLabel, SectionHeader } from '../../settings/view';
+import { McpTab, SettingsGroupLabel, SectionHeader } from '../../settings/view';
 import { appCategories, featuredApps, recommendedApps, toolkit } from '../contract';
+import { ComposioDialog } from './ComposioDialog';
 import { ConnectorAppTile } from './ConnectorAppTile';
+import { type AppCategory, ConnectorFilterBar } from './ConnectorFilterBar';
 import {
   authorizationCompleted,
   connectorsClient as client,
@@ -23,32 +25,47 @@ export { useConnectorAccounts, useConnectorCatalog };
 export type { ConnectorApp } from './use-connector-accounts';
 
 function Connectors() {
-  const cache = useQueryClient();
-  const [key, setKey] = useState('');
-  const [editing, setEditing] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
   const [confirm, setConfirm] = useState<{ id: string; app: string; label: string } | null>(null);
   const [waiting, setWaiting] = useState<ConnectorAuthorization[]>([]);
   const { configured, accounts } = useConnectorAccounts(waiting);
   const catalog = useConnectorCatalog(configured.data === true);
-  const listed = (slugs: readonly string[]) =>
-    catalog.data?.filter((item) => slugs.includes(item.slug)) ?? [];
+  const connected = new Set(
+    accounts.data?.filter((item) => item.status === 'ACTIVE').map((item) => item.toolkit.slug),
+  );
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<AppCategory | null>(null);
+  const keyword = query.trim().toLowerCase();
+  const listed = (slugs: readonly (typeof toolkit.options)[number][]) =>
+    slugs.flatMap((slug) => catalog.data?.filter((item) => item.slug === slug) ?? []);
+  const filtered = (slugs: readonly (typeof toolkit.options)[number][]) =>
+    listed(
+      slugs.filter((slug) => category === null || featuredApps[slug].category === category),
+    ).filter((item) =>
+      `${item.name} ${featuredApps[item.slug].description}`.toLowerCase().includes(keyword),
+    );
+  const available = toolkit.options.filter((slug) => !connected.has(slug));
+  const browsing = category === null && !keyword;
   const sections = [
-    { title: '推荐', apps: listed(recommendedApps) },
-    ...appCategories.map((category) => ({
-      title: category,
-      apps: listed(toolkit.options.filter((slug) => featuredApps[slug].category === category)),
-    })),
-  ];
-  const setup = useMutation({
-    mutationFn: () => client.setup(key),
-    onSuccess: async () => {
-      setKey('');
-      setEditing(false);
-      await cache.invalidateQueries({ queryKey: ['connectors'] });
+    { title: 'Connected', apps: filtered(toolkit.options.filter((slug) => connected.has(slug))) },
+    // 推荐只在浏览全部时出现；筛选或搜索时它会和分类结果重复。
+    {
+      title: 'Recommended',
+      apps: browsing
+        ? listed(
+            [...new Set([...recommendedApps, ...toolkit.options])].filter((slug) =>
+              available.includes(slug),
+            ),
+          ).slice(0, 6)
+        : [],
     },
-  });
+    ...appCategories.map((title) => ({
+      title,
+      apps: filtered(available.filter((slug) => featuredApps[slug].category === title)),
+    })),
+  ].filter((section) => section.apps.length > 0);
   const action = useMutation({ mutationFn: (run: () => Promise<void>) => run() });
-  const busy = action.isPending || setup.isPending;
+  const busy = action.isPending;
   const failure =
     (confirm ? null : action.error) ?? configured.error ?? accounts.error ?? catalog.error;
   const pending = waiting.filter((link) => !authorizationCompleted(link, accounts.data));
@@ -73,128 +90,101 @@ function Connectors() {
   };
   return (
     <div className="min-w-0 flex-1 overflow-y-auto bg-page">
-      <div className="mx-auto grid w-full max-w-reading gap-app-gap p-app">
+      <div className="mx-auto grid w-full max-w-reading gap-10 px-app pt-app pb-8">
         <SectionHeader title="连接器" />
-        {configured.data !== undefined && (!configured.data || editing) ? (
-          <SettingsGroup
-            title="连接 Composio"
-            description="在 Composio 的 Project Settings → API Keys 获取项目密钥。"
-          >
-            <form
-              className="grid gap-3 py-3"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!busy && key.trim()) setup.mutate();
-              }}
-            >
-              <a
-                className="text-ui-body underline"
-                href="https://dashboard.composio.dev/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                前往 Composio 获取项目密钥 ↗
-              </a>
-              <Input
-                type="password"
-                aria-label="Composio 项目密钥"
-                aria-invalid={setup.isError || undefined}
-                aria-describedby={setup.isError ? 'composio-setup-error' : undefined}
-                autoComplete="off"
-                placeholder="粘贴项目 API Key"
-                value={key}
-                disabled={setup.isPending}
-                onChange={(e) => {
-                  setKey(e.target.value);
-                  if (setup.isError) setup.reset();
-                }}
-              />
-              {setup.error && (
-                <ErrorText id="composio-setup-error" size="sm">
-                  {errorMessage(setup.error)}
-                </ErrorText>
-              )}
-              <details className="text-ui-subhead text-ink-2">
-                <summary className="cursor-pointer">受限项目密钥需要哪些权限？</summary>
-                <ul className="grid gap-1 py-2">
-                  <li>Session management · Write only</li>
-                  <li>Session tool execution · Write only</li>
-                  <li>Connected accounts · Read and write</li>
-                  <li>Toolkits · Read only</li>
-                </ul>
-              </details>
-              <div>
-                <Button disabled={busy || !key.trim()} type="submit" variant="accent">
-                  {setup.isPending ? '正在验证…' : '验证并保存'}
-                </Button>{' '}
-                {editing && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={setup.isPending}
-                    onClick={() => {
-                      setKey('');
-                      setup.reset();
-                      setEditing(false);
-                    }}
-                  >
-                    取消
-                  </Button>
-                )}
-              </div>
-            </form>
-          </SettingsGroup>
-        ) : null}
-        {configured.data && (
-          <section className="grid gap-app-gap">
+        {configured.data !== undefined && (
+          <section className="grid gap-6">
             <SettingsGroupLabel
-              title="应用"
-              description="选择应用，在浏览器完成授权。也可以在聊天中要求 Agent 连接应用。"
+              title="Composio"
+              description={
+                configured.data
+                  ? '选择应用，在浏览器完成授权。也可以在聊天中要求 Agent 连接应用。'
+                  : '填入 Composio 项目密钥后，即可连接 Gmail、GitHub 等应用。'
+              }
               action={
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => accounts.refetch()}
-                  >
-                    刷新账户
+                configured.data ? (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => accounts.refetch()}
+                    >
+                      刷新账户
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => setConfiguring(true)}>
+                      更换项目密钥
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" variant="accent" onClick={() => setConfiguring(true)}>
+                    配置 Composio
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-                    更换项目密钥
-                  </Button>
-                </div>
+                )
               }
             />
-            {catalog.isPending && <p className="text-ui-callout text-ink-2">正在读取应用目录…</p>}
-            {catalog.isSuccess &&
-              sections.map((section) => (
-                <section aria-label={section.title} className="grid gap-1" key={section.title}>
-                  <h3 className="text-ui-headline text-ink">{section.title}</h3>
-                  <div className="grid gap-x-8 sm:grid-cols-2">
-                    {section.apps.map((item) => (
-                      <ConnectorAppTile
-                        accounts={
-                          accounts.data?.filter((account) => account.toolkit.slug === item.slug) ??
-                          []
-                        }
-                        app={item}
-                        authorizing={pending.some((link) => link.slug === item.slug)}
-                        busy={busy}
-                        canAuthorize={!busy && !accounts.isLoading}
-                        key={item.slug}
-                        onAuthorize={authorize}
-                        onDisconnect={(id, label) => {
-                          action.reset();
-                          setConfirm({ id, app: item.name, label });
-                        }}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
+            {configured.data && catalog.isPending && (
+              <p className="text-ui-callout text-ink-2">正在读取应用目录…</p>
+            )}
+            {configured.data && catalog.isSuccess && (
+              <ConnectorFilterBar
+                category={category}
+                onCategoryChange={setCategory}
+                onQueryChange={setQuery}
+                query={query}
+              />
+            )}
+            {configured.data && catalog.isSuccess && sections.length === 0 && (
+              <p className="text-ui-callout text-ink-2">没有匹配的应用。</p>
+            )}
+            {configured.data && catalog.isSuccess && sections.length > 0 && (
+              <div className="grid gap-8">
+                {sections.map((section, index) => (
+                  <section
+                    aria-label={section.title}
+                    className={cn(
+                      'grid gap-2',
+                      // 已连接与下方可添加的应用之间只用一道通栏细线分区，行的左右边缘保持对齐。
+                      section.title === 'Connected' &&
+                        index < sections.length - 1 &&
+                        'border-b border-line pb-8',
+                    )}
+                    key={section.title}
+                  >
+                    <h3 className="flex items-baseline gap-2 text-ui-headline text-ink">
+                      {section.title}
+                      {section.title === 'Connected' && (
+                        <span className="text-ui-callout text-ink-3">{section.apps.length}</span>
+                      )}
+                    </h3>
+                    <div className="grid gap-x-8 gap-y-1 sm:grid-cols-2">
+                      {section.apps.map((item) => (
+                        <ConnectorAppTile
+                          accounts={
+                            accounts.data?.filter(
+                              (account) => account.toolkit.slug === item.slug,
+                            ) ?? []
+                          }
+                          app={item}
+                          authorizing={pending.some((link) => link.slug === item.slug)}
+                          busy={busy}
+                          canAuthorize={!busy && !accounts.isLoading}
+                          key={item.slug}
+                          onAuthorize={authorize}
+                          onDisconnect={(id, label) => {
+                            action.reset();
+                            setConfirm({ id, app: item.name, label });
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
           </section>
         )}
+        <ComposioDialog open={configuring} onOpenChange={setConfiguring} />
         {failure && <ErrorText>{errorMessage(failure)}</ErrorText>}
         <ConfirmDialog
           open={confirm !== null}
