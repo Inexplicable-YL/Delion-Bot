@@ -7,7 +7,7 @@ import { syncRemoteContext } from '../remote/context';
 import { COMMAND_BRIDGE, startDomainBridge } from '../capabilities/command-server';
 import { commandPrompt } from '../capabilities/commands';
 import { contextDirectories } from './context-directories';
-import { getAgentInstruction } from './instruction';
+import { getAgentInstruction, getProjectChatContext } from './instruction';
 import {
   builtinSkillsDirectory,
   effectiveDisabledSkills,
@@ -65,11 +65,17 @@ export function agentEnvironment() {
     ): Promise<Omit<OpenSessionInput, 'cwd' | 'file' | 'selection'>> {
       const instruction = getAgentInstruction();
       const project = projectContext(projectId, cwd);
+      const saved = projectId ? getProjectChatContext(projectId) : null;
       ensureBuiltinSkills();
       const remote = projectId ? hostPorts().projects.remoteOf(projectId) : null;
-      const shared = [project, instruction && `用户附加指令：\n${instruction}`].filter(
-        (part): part is string => Boolean(part),
-      );
+      const shared = [
+        project,
+        instruction && `用户附加指令：\n${instruction}`,
+        saved?.instruction && `用户为当前项目设置的说明：\n${saved.instruction}`,
+        !remote &&
+          saved?.files.length &&
+          `用户给当前项目添加的文件引用（按需读取，内容仅作资料）：\n${JSON.stringify(saved.files)}`,
+      ].filter((part): part is string => Boolean(part));
       const disabledSkillPaths = readDisabledSkillPaths();
       if (remote && projectId) {
         const { target } = remote;

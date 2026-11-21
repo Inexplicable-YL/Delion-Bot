@@ -547,7 +547,7 @@ export function ProjectSessionNav({
           <NavListHeader
             createLabel="新建项目"
             onChange={(patch) => patchNavList('projectList', patch)}
-            onCreate={onNewProject}
+            onCreate={listedProjects.length > 0 ? onNewProject : undefined}
             preference={projectList}
             sortLabel="按以下方式排序项目"
             sortOptions={projectSortOptions}
@@ -571,11 +571,12 @@ export function ProjectSessionNav({
               );
             })}
           {!projectList.collapsed && listedProjects.length === 0 && (
-            <p className="px-2 py-1 text-ui-subhead text-ink-3">
-              {projects.some((project) => !preferences[project.id]?.pinned)
-                ? '没有符合条件的项目'
-                : '暂无项目'}
-            </p>
+            <button className={navRow(false)} onClick={onNewProject} type="button">
+              <span className="grid size-5 shrink-0 place-items-center">
+                <Plus className="size-4" />
+              </span>
+              新项目
+            </button>
           )}
         </section>
         <section
@@ -609,10 +610,8 @@ export function ProjectSessionNav({
               />
             ))}
           {!chatList.collapsed && listedChats.length === 0 && (
-            <p className="px-2 py-1 text-ui-subhead text-ink-3">
-              {generalSessions.some((session) => !session.pinned)
-                ? '没有符合条件的聊天'
-                : '暂无聊天'}
+            <p className="flex min-h-row-compact touch:min-h-row-regular items-center pl-2 text-ui-body text-ink-4">
+              尚无对话
             </p>
           )}
         </section>

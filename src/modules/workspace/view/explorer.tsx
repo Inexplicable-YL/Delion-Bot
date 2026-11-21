@@ -38,7 +38,7 @@ export interface ExplorerItem {
   importable?: boolean;
 }
 
-const explorerDragType = 'application/x-delion-entry';
+export const explorerDragType = 'application/x-delion-entry';
 
 export interface ExplorerPending {
   parentId: string | null;
@@ -313,7 +313,7 @@ export function Explorer({
             if (!onMove) return;
             setDropTarget(null);
             setExternalDropTarget(null);
-            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.effectAllowed = 'copyMove';
             event.dataTransfer.setData(explorerDragType, item.id);
             event.dataTransfer.setData('text/plain', item.name);
             setDragId(item.id);

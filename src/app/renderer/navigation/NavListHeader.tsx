@@ -62,7 +62,8 @@ export function NavListHeader<Sort extends string>({
   preference: NavListPreference<Sort>;
   onChange: (patch: Partial<NavListPreference<Sort>>) => void;
   createLabel: string;
-  onCreate: () => void;
+  /** 列表为空时由列表内的新建行代替，标题栏不再放「+」。 */
+  onCreate?: () => void;
 }) {
   const open = !preference.collapsed;
   return (
@@ -117,9 +118,11 @@ export function NavListHeader<Sort extends string>({
             />
           </DropdownMenuContent>
         </DropdownMenu>
-        <IconButton size="sm" aria-label={createLabel} onClick={onCreate} title={createLabel}>
-          <Plus />
-        </IconButton>
+        {onCreate && (
+          <IconButton size="sm" aria-label={createLabel} onClick={onCreate} title={createLabel}>
+            <Plus />
+          </IconButton>
+        )}
       </div>
     </div>
   );

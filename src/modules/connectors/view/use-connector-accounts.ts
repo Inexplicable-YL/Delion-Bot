@@ -44,3 +44,13 @@ export function useConnectorAccounts(waiting?: readonly ConnectorAuthorization[]
   });
   return { configured, accounts };
 }
+
+/** 应用名称与图标很少变动，读一次后整个进程内复用；换密钥时随 connectors 前缀一起失效。 */
+export function useConnectorCatalog(enabled: boolean) {
+  return useQuery({
+    queryKey: ['connectors', 'catalog'],
+    queryFn: () => connectorsClient.catalog(),
+    enabled,
+    staleTime: Infinity,
+  });
+}

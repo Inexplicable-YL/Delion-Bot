@@ -4,7 +4,7 @@ import { defineModule } from '../../app/module';
 import { hostPorts, registerSecretLabel } from '../../core/ports';
 import { implement } from '../../core/protocol/contract';
 import { provideManagedMcp } from '../../core/capabilities/mcp';
-import { account, apps, connectorsContract } from './contract';
+import { account, connectorsContract, toolkit } from './contract';
 
 const session = z.object({
   session_id: z.string(),
@@ -14,6 +14,11 @@ const session = z.object({
   }),
 });
 const config = z.object({ key: z.string(), user: z.string(), id: z.uuid(), session });
+const listedToolkit = z.object({
+  slug: z.string(),
+  name: z.string(),
+  meta: z.object({ logo: z.string() }),
+});
 function saved() {
   const raw = hostPorts().secrets.read('composio');
   return raw ? config.parse(JSON.parse(raw)) : null;
@@ -44,11 +49,13 @@ async function request(key: string, path: string, method = 'GET', body?: unknown
       const reason =
         path === 'tool_router/session'
           ? '项目密钥可以读取账户，但 Composio 拒绝创建会话。请为项目密钥启用 Session management 的写入权限。'
-          : path.startsWith('tool_router/session/')
-            ? 'Composio 拒绝生成授权链接。请检查项目密钥是否有效，以及 Session management 是否允许写入。'
-            : method === 'DELETE'
-              ? 'Composio 拒绝断开账户。请检查 Connected accounts 是否允许写入。'
-              : 'Composio 拒绝读取账户。请从 Project Settings 复制项目 API Key，并确认 Connected accounts 允许读取。';
+          : path.startsWith('toolkits')
+            ? 'Composio 拒绝读取应用目录。请为项目密钥启用 Toolkits 的读取权限。'
+            : path.startsWith('tool_router/session/')
+              ? 'Composio 拒绝生成授权链接。请检查项目密钥是否有效，以及 Session management 是否允许写入。'
+              : method === 'DELETE'
+                ? 'Composio 拒绝断开账户。请检查 Connected accounts 是否允许写入。'
+                : 'Composio 拒绝读取账户。请从 Project Settings 复制项目 API Key，并确认 Connected accounts 允许读取。';
       throw new Error(`${reason}（HTTP ${response.status}）${trace}`);
     }
     throw new Error(`Composio 请求失败（HTTP ${response.status}），请稍后重试。${trace}`);
@@ -69,6 +76,19 @@ async function accounts() {
     cursor = page.next_cursor ?? null;
   } while (cursor);
   return items;
+}
+async function catalog() {
+  const { key } = configured();
+  const { items } = z.object({ items: z.array(listedToolkit) }).parse(
+    await request(key, 'toolkits/multi', 'POST', {
+      toolkits: toolkit.options,
+      limit: toolkit.options.length,
+    }),
+  );
+  return toolkit.options.flatMap((slug) => {
+    const item = items.find((value) => value.slug === slug);
+    return item ? [{ slug, name: item.name, logo: item.meta.logo }] : [];
+  });
 }
 export const connectorsModule = defineModule({
   id: 'connectors',
@@ -99,7 +119,7 @@ export const connectorsModule = defineModule({
       const result = session.parse(
         await request(key, 'tool_router/session', 'POST', {
           user_id: user,
-          toolkits: { enable: Object.keys(apps) },
+          toolkits: { enable: toolkit.options },
           instant: false,
           manage_connections: { enable: true },
           workbench: { enable: false },
@@ -110,6 +130,7 @@ export const connectorsModule = defineModule({
         JSON.stringify({ key, user, id: randomUUID(), session: result }),
       );
     },
+    catalog,
     accounts,
     async connect(toolkit) {
       const value = configured();

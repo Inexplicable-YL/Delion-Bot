@@ -27,6 +27,12 @@ it('同一应用汇总多个账户，重复打开待授权链接时复用原链�
     switch (channel) {
       case 'connectors:configured':
         return true;
+      case 'connectors:catalog':
+        return ['gmail', 'notion'].map((slug) => ({
+          slug,
+          name: slug,
+          logo: `https://logos.test/${slug}`,
+        }));
       case 'connectors:accounts':
         return [
           { id: 'first', toolkit: { slug: 'gmail' }, status: 'ACTIVE' },
@@ -47,14 +53,14 @@ it('同一应用汇总多个账户，重复打开待授权链接时复用原链�
         </QueryClientProvider>,
       );
     });
-    const gmail = () => host.querySelector('[data-setting-id="gmail"]');
+    const gmail = () => host.querySelector('[role="group"][aria-label="gmail"]');
     await vi.waitFor(() => expect(gmail()?.textContent).toContain('已连接 2 个账户'));
     expect(Array.from(gmail()!.querySelectorAll('button'), (button) => button.textContent)).toEqual(
-      ['管理账户'],
+      ['管理'],
     );
 
     const notion = () =>
-      host.querySelector<HTMLButtonElement>('[data-setting-id="notion"] button')!;
+      host.querySelector<HTMLButtonElement>('[role="group"][aria-label="notion"] button')!;
     await act(async () => notion().click());
     await vi.waitFor(() => expect(notion().textContent).toBe('打开授权页'));
     await act(async () => notion().click());

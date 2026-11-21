@@ -1,28 +1,21 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDownIcon, SquaresPlusIcon as Blocks } from '@heroicons/react/24/outline';
+import { SquaresPlusIcon as Blocks } from '@heroicons/react/24/outline';
 import { defineView } from '../../../app/module';
 import { errorMessage } from '../../../core/protocol/contract';
 import { Button } from '../../../ui/button';
 import { ConfirmDialog } from '../../../ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '../../../ui/dropdown-menu';
-import { StatusPill } from '../../../ui/status-pill';
 import { Input } from '../../../ui/input';
 import { ErrorText } from '../../../ui/alert';
-import { McpTab, SettingsGroup, SectionHeader, SettingRow } from '../../settings/view';
-import { apps, toolkit } from '../contract';
-import { ConnectorAppIcon } from './ConnectorAppIcons';
+import { McpTab, SettingsGroup, SettingsGroupLabel, SectionHeader } from '../../settings/view';
+import { appCategories, featuredApps, recommendedApps, toolkit } from '../contract';
+import { ConnectorAppTile } from './ConnectorAppTile';
 import {
   authorizationCompleted,
   connectorsClient as client,
   type ConnectorAuthorization,
   useConnectorAccounts,
+  useConnectorCatalog,
 } from './use-connector-accounts';
 
 export { ConnectedAppIcons } from './ConnectorAppIcons';
@@ -35,6 +28,16 @@ function Connectors() {
   const [confirm, setConfirm] = useState<{ id: string; app: string; label: string } | null>(null);
   const [waiting, setWaiting] = useState<ConnectorAuthorization[]>([]);
   const { configured, accounts } = useConnectorAccounts(waiting);
+  const catalog = useConnectorCatalog(configured.data === true);
+  const listed = (slugs: readonly string[]) =>
+    catalog.data?.filter((item) => slugs.includes(item.slug)) ?? [];
+  const sections = [
+    { title: '推荐', apps: listed(recommendedApps) },
+    ...appCategories.map((category) => ({
+      title: category,
+      apps: listed(toolkit.options.filter((slug) => featuredApps[slug].category === category)),
+    })),
+  ];
   const setup = useMutation({
     mutationFn: () => client.setup(key),
     onSuccess: async () => {
@@ -45,7 +48,8 @@ function Connectors() {
   });
   const action = useMutation({ mutationFn: (run: () => Promise<void>) => run() });
   const busy = action.isPending || setup.isPending;
-  const failure = (confirm ? null : action.error) ?? configured.error ?? accounts.error;
+  const failure =
+    (confirm ? null : action.error) ?? configured.error ?? accounts.error ?? catalog.error;
   const pending = waiting.filter((link) => !authorizationCompleted(link, accounts.data));
   if (pending.length !== waiting.length) setWaiting(pending);
   const authorize = (slug: ConnectorAuthorization['slug']) => {
@@ -115,6 +119,7 @@ function Connectors() {
                   <li>Session management · Write only</li>
                   <li>Session tool execution · Write only</li>
                   <li>Connected accounts · Read and write</li>
+                  <li>Toolkits · Read only</li>
                 </ul>
               </details>
               <div>
@@ -139,107 +144,55 @@ function Connectors() {
             </form>
           </SettingsGroup>
         ) : null}
-        {configured.data !== undefined && (
-          <SettingsGroup
-            title="应用"
-            description="选择应用，在浏览器完成授权。也可以在聊天中要求 Agent 连接应用。"
-          >
-            {toolkit.options.map((slug) => {
-              const items = accounts.data?.filter((account) => account.toolkit.slug === slug) ?? [];
-              const active = items.filter((account) => account.status === 'ACTIVE').length;
-              const pendingAuthorization = pending.some((link) => link.slug === slug);
-              const canAuthorize = !busy && configured.data && !accounts.isLoading;
-              return (
-                <SettingRow
-                  settingId={slug}
-                  key={slug}
-                  title={apps[slug]}
-                  leading={<ConnectorAppIcon slug={slug} />}
-                >
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {active > 0 ? (
-                      <StatusPill tone="green" dot={false}>
-                        {active === 1 ? '已连接' : `已连接 ${active} 个账户`}
-                      </StatusPill>
-                    ) : pendingAuthorization ||
-                      items.some((account) => account.status === 'INITIATED') ? (
-                      <StatusPill tone="neutral" dot={false}>
-                        等待授权
-                      </StatusPill>
-                    ) : null}
-                    {items.length > 0 && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            aria-label={`管理 ${apps[slug]} 账户`}
-                            size="sm"
-                            variant="secondary"
-                            disabled={busy}
-                          >
-                            管理账户
-                            <ChevronDownIcon />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {items.map((account, index) => {
-                            const label = account.alias?.trim() || `账户 ${index + 1}`;
-                            return (
-                              <DropdownMenuItem
-                                key={account.id}
-                                variant="destructive"
-                                onSelect={() => {
-                                  action.reset();
-                                  setConfirm({ id: account.id, app: apps[slug], label });
-                                }}
-                              >
-                                断开 {label}
-                              </DropdownMenuItem>
-                            );
-                          })}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            disabled={!canAuthorize}
-                            onSelect={() => authorize(slug)}
-                          >
-                            {pendingAuthorization
-                              ? '打开授权页'
-                              : active > 0
-                                ? '连接其他账户'
-                                : '重新授权'}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                    {items.length === 0 && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={!canAuthorize}
-                        onClick={() => authorize(slug)}
-                      >
-                        {pendingAuthorization ? '打开授权页' : '连接'}
-                      </Button>
-                    )}
+        {configured.data && (
+          <section className="grid gap-app-gap">
+            <SettingsGroupLabel
+              title="应用"
+              description="选择应用，在浏览器完成授权。也可以在聊天中要求 Agent 连接应用。"
+              action={
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => accounts.refetch()}
+                  >
+                    刷新账户
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+                    更换项目密钥
+                  </Button>
+                </div>
+              }
+            />
+            {catalog.isPending && <p className="text-ui-callout text-ink-2">正在读取应用目录…</p>}
+            {catalog.isSuccess &&
+              sections.map((section) => (
+                <section aria-label={section.title} className="grid gap-1" key={section.title}>
+                  <h3 className="text-ui-headline text-ink">{section.title}</h3>
+                  <div className="grid gap-x-8 sm:grid-cols-2">
+                    {section.apps.map((item) => (
+                      <ConnectorAppTile
+                        accounts={
+                          accounts.data?.filter((account) => account.toolkit.slug === item.slug) ??
+                          []
+                        }
+                        app={item}
+                        authorizing={pending.some((link) => link.slug === item.slug)}
+                        busy={busy}
+                        canAuthorize={!busy && !accounts.isLoading}
+                        key={item.slug}
+                        onAuthorize={authorize}
+                        onDisconnect={(id, label) => {
+                          action.reset();
+                          setConfirm({ id, app: item.name, label });
+                        }}
+                      />
+                    ))}
                   </div>
-                </SettingRow>
-              );
-            })}
-            {configured.data && (
-              <div className="flex gap-2 py-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => accounts.refetch()}
-                >
-                  刷新账户
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
-                  更换项目密钥
-                </Button>
-              </div>
-            )}
-          </SettingsGroup>
+                </section>
+              ))}
+          </section>
         )}
         {failure && <ErrorText>{errorMessage(failure)}</ErrorText>}
         <ConfirmDialog

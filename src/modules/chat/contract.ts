@@ -12,8 +12,28 @@ import { defineContract } from '../../core/protocol/contract';
 const sessionId = z.uuid();
 /** 会话内文件：相对路径按会话 cwd 解析，主进程要求文件真实存在。 */
 const sessionFile = z.object({ sessionId, path: z.string().min(1).max(32_767) });
+const projectId = z.uuid();
+const filePath = z.string().min(1).max(32_767);
+const projectContext = z.object({ instruction: z.string(), files: z.array(filePath) });
 
 export const chatContract = defineContract('chat', {
+  projectContext: { input: projectId, output: projectContext },
+  setProjectInstruction: {
+    input: z.object({ projectId, instruction: z.string().trim().max(2000) }),
+    output: projectContext,
+  },
+  addProjectFiles: {
+    input: z.object({
+      projectId,
+      files: z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('pick') }),
+        z.object({ kind: z.literal('paths'), paths: z.array(filePath).min(1).max(100) }),
+        z.object({ kind: z.literal('entry'), id: filePath }),
+      ]),
+    }),
+    output: projectContext,
+  },
+  removeProjectFile: { input: z.object({ projectId, path: filePath }), output: projectContext },
   archived: { input: z.undefined(), output: z.custom<ChatSessionSummary[]>() },
   update: {
     input: z.object({

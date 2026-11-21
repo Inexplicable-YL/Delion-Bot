@@ -17,6 +17,7 @@ import { ChatComposer } from './ChatComposer';
 import { composerContext } from './composer-context';
 import { ChatSessions } from './ChatSessions';
 import { ChatThread } from './ChatThread';
+import { ProjectSetup } from './ProjectSetup';
 import {
   NoReferenceEntries,
   useChatTabSource,
@@ -83,6 +84,7 @@ function ChatComposerArea({
   sessionId,
   hero = false,
   home = false,
+  hideAgentActions = false,
 }: {
   /** 会话快照；IPC 返回前为 null，模型信息按空值降级。 */
   chat: WorkspaceChat | null;
@@ -92,6 +94,7 @@ function ChatComposerArea({
   sessionId: string;
   hero?: boolean;
   home?: boolean;
+  hideAgentActions?: boolean;
 }) {
   const { prompt, comments = noComments } = useChatDraft(sessionId);
   const referenceOptions = useReferenceOptions(files, chat);
@@ -127,6 +130,7 @@ function ChatComposerArea({
     <div className={cn('mx-auto w-full max-w-reading shrink-0', !hero && 'px-app pb-app')}>
       <ChatComposer
         hero={hero}
+        hideAgentActions={hideAgentActions}
         attachments={chatState.attachments}
         comments={comments}
         onCommentsChange={chatState.setComments}
@@ -201,8 +205,8 @@ function ChatSessionView({
   const openSession = (id: string) => navigate({ page: 'chat', projectId, sessionId: id });
   const chatState = useChat(active, referenceSource, startNewChat);
   const { chat, busy, editLast, fork } = chatState;
-  const projectName = useWorkspaceStore(
-    (state) => state.workspace.entries.find((entry) => entry.id === projectId)?.name,
+  const project = useWorkspaceStore((state) =>
+    state.workspace.entries.find((entry) => entry.id === projectId),
   );
   const [greeting] = useState(
     () => chatGreetings[Math.floor(Math.random() * chatGreetings.length)],
@@ -230,6 +234,22 @@ function ChatSessionView({
   // 子 Agent 的会话只读：没有输入框，不能编辑重发、分支或旁问。
   const subagent = chat?.subagent;
   const conversation = chat && (busy || chat.messages.length > 0 || chat.running || subagent);
+  const projectSessionCount = useSessions((state) =>
+    projectId === null ? undefined : state.lists[poolKey(projectId)]?.length,
+  );
+  const { data: archived } = useQuery({
+    queryKey: ['chat', 'archived'],
+    queryFn: () => chatClient.archived(),
+    enabled: Boolean(
+      project && chat && !conversation && projectSessionCount === 0 && window.delionBot,
+    ),
+  });
+  const setupLayout =
+    project &&
+    !conversation &&
+    !projectSessionCount &&
+    !archived?.some((item) => item.projectId === projectId);
+  const showProjectSetup = setupLayout && projectSessionCount === 0 && archived !== undefined;
 
   const saveConversation = async () => {
     if (!window.delionBot) return;
@@ -258,6 +278,7 @@ function ChatSessionView({
         sessionId={active}
         hero={hero}
         home={home}
+        hideAgentActions={Boolean(showProjectSetup)}
       />
     ));
 
@@ -336,11 +357,17 @@ function ChatSessionView({
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-app py-app">
-          <div className="mx-auto my-auto grid w-full max-w-reading gap-6">
+          <div
+            className={cn(
+              'mx-auto grid w-full max-w-reading gap-6',
+              setupLayout ? 'mt-16 @max-sm:mt-8' : 'my-auto',
+            )}
+          >
             <h1 className="wrap-anywhere text-center text-ui-large-title text-ink">
-              {projectId === null ? greeting : projectName}
+              {projectId === null ? greeting : project?.name}
             </h1>
             {composer(true)}
+            {showProjectSetup && <ProjectSetup key={project.id} project={project} />}
             {modelSetup}
           </div>
         </div>

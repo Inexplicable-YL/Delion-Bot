@@ -20,7 +20,6 @@ import { useConnectorAccounts } from '../../connectors/view';
 import { cn } from '../../../ui/cn';
 import { Button } from '../../../ui/button';
 import type { ComposerContext } from './composer-context';
-import { ComposerBranchPicker } from './composer-context-bar';
 import { NewChatMenu } from './NewChatMenu';
 import { ReplyCommentRail } from './reply-comment';
 import { formatDuration } from './ToolTimeline';
@@ -187,6 +186,7 @@ export function ChatComposer({
   context = null,
   onSelectProject,
   projectSwitching = false,
+  hideAgentActions = false,
   sidechat = false,
   queued = [],
   onWithdrawQueued,
@@ -203,6 +203,7 @@ export function ChatComposer({
   context?: ComposerContext | null;
   onSelectProject?: (projectId: string | null) => void;
   projectSwitching?: boolean;
+  hideAgentActions?: boolean;
   notice?: string | null;
   onDismissNotice?: () => void;
   value: string;
@@ -270,7 +271,7 @@ export function ChatComposer({
   const searchEntries = searchQuery.data?.entries ?? null;
   const searchSelectedId = searchQuery.data?.selectedId ?? null;
   const searchFailed = searchQuery.isError;
-  const showAgentActions = hero && configured && !modelUnavailable;
+  const showAgentActions = hero && configured && !modelUnavailable && !hideAgentActions;
   const { configured: connectorsConfigured, accounts } = useConnectorAccounts(
     undefined,
     showAgentActions,
@@ -914,7 +915,6 @@ export function ChatComposer({
           ))}
         </div>
       )}
-      {context && <ComposerBranchPicker context={context} />}
     </div>
   );
 }
