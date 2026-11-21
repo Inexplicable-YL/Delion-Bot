@@ -83,7 +83,7 @@ afterAll(async () => {
 });
 
 it('运行中发送的消息插进本轮：当前回复结束后送达模型，沿用本轮 turnId，附件到轮末才释放', async () => {
-  const id = newSession(null).sessionId!;
+  const id = (await newSession(null)).sessionId!;
   const note = stageChatMedia('note.txt', Buffer.from('附件内容'));
   const { turn: first } = await startSlowTurn(id);
   server.enqueue(reply('second'));
@@ -103,7 +103,7 @@ it('运行中发送的消息插进本轮：当前回复结束后送达模型，�
 }, 30_000);
 
 it('停止时还没送达的插队消息连同附件、评论交回输入框，不发给模型', async () => {
-  const id = newSession(null).sessionId!;
+  const id = (await newSession(null)).sessionId!;
   const note = stageChatMedia('note.txt', Buffer.from('附件内容'));
   const comments = [{ quote: '原文', comment: '改一下' }];
   const { turn: first } = await startSlowTurn(id);
@@ -126,7 +126,7 @@ it('停止时还没送达的插队消息连同附件、评论交回输入框，�
 }, 30_000);
 
 it('撤回插队消息后本轮照常答完', async () => {
-  const id = newSession(null).sessionId!;
+  const id = (await newSession(null)).sessionId!;
   const { turn: first } = await startSlowTurn(id);
   await askSession(id, input('顺便做 B'));
   await askSession(id, input('再做 C'));

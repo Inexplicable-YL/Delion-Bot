@@ -275,8 +275,7 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
     },
   };
 
-  if (!loaded && workspaceError === null && window.delionBot)
-    // 工作区镜像载入前不渲染：布局种子与标题解析都依赖条目树。
+  if (!home && !loaded && workspaceError === null && window.delionBot)
     return <div className="min-h-0 flex-1 bg-surface" />;
 
   return (

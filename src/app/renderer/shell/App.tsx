@@ -65,6 +65,18 @@ function ModulePage({ target, drawer }: { target: NavTarget; drawer: PageDrawer 
   return <Page drawer={drawer} navigate={navigate} target={target} />;
 }
 
+function prewarmAgentAfterPaint(element: HTMLDivElement | null) {
+  const desktop = window.delionBot;
+  if (!element || !desktop) return;
+  // 两次帧回调给首屏留出一次绘制机会，再通知主进程预热。
+  let frame = requestAnimationFrame(() => {
+    frame = requestAnimationFrame(() => {
+      desktop.window.contentReady();
+    });
+  });
+  return () => cancelAnimationFrame(frame);
+}
+
 export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [drawerSlot, setDrawerSlot] = useState<HTMLElement | null>(null);
@@ -233,6 +245,7 @@ export default function App() {
             className="flex min-h-0 flex-1 animate-view-in flex-col motion-reduce:animate-none"
             // home 与工作台共用装配壳和 key：打开项目或资料时复用宿主，避免整壳重挂。
             key={view === 'home' || view === 'workbench' ? 'workspace' : view}
+            ref={view !== 'home' || homeSessionId ? prewarmAgentAfterPaint : undefined}
           >
             <ErrorBoundary title="此视图遇到错误">
               {(view === 'workbench' || view === 'home') && (

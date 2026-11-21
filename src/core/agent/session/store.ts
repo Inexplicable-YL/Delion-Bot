@@ -311,12 +311,13 @@ export function insertSubagentSession(parentId: string, description: string, cwd
 }
 
 let piSync: typeof import('@earendil-works/pi-coding-agent') | undefined;
-/** 读历史不能等异步加载：启动时先 preloadPi，之后同步取用。 */
+/** 读取历史的入口先加载 Pi，生成会话快照时同步取用。 */
 export function requirePiSync() {
   if (!piSync) throw new Error('Pi 尚未加载');
   return piSync;
 }
 export async function preloadPi() {
+  if (piSync) return;
   const { loadPi } = await import('../pi');
   piSync = await loadPi();
 }

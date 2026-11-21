@@ -7,6 +7,7 @@ export const windowApi = {
   close: () => send('window:close'),
   quit: () => send('window:quit'),
   getState: () => invoke('window:get-state'),
+  contentReady: () => send('window:content-ready'),
   onStateChange: (listener: (state: WindowState) => void) =>
     on<WindowState>('window:state', listener),
   onTrayAction: (listener: (action: TrayAction) => void) =>

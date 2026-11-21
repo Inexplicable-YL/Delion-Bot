@@ -27,7 +27,6 @@ import { implement } from '../../core/protocol/contract';
 import { openInVsCode, workspaceFilePath } from '../workspace';
 import { chatContract } from './contract';
 
-/** 会话列表读写依赖 Pi 的会话存储，首次调用前要先装载。 */
 function withPi<I, O>(fn: (input: I) => O | Promise<O>): (input: I) => Promise<O> {
   return async (input) => {
     await preloadPi();
@@ -77,7 +76,7 @@ export const chatModule = defineModule({
       updateProjectContext(projectId, {
         files: getProjectChatContext(projectId).files.filter((file) => file !== path),
       }),
-    archived: withPi(() => archivedSessions()),
+    archived: archivedSessions,
     update: withPi(({ id, patch }) => updateSessionVisibility(id, patch)),
     move: withPi(({ id, projectId }) => moveSession(id, projectId)),
     archiveProject: withPi(archiveProjectSessions),

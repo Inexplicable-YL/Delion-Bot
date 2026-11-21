@@ -89,7 +89,7 @@ afterAll(async () => {
 });
 
 it('旁问沿用主会话的系统提示与历史，不写文件、不进数据库，关闭即丢弃', async () => {
-  const parent = newSession(null).sessionId!;
+  const parent = (await newSession(null)).sessionId!;
   server.enqueue(reply('main answer'));
   const main = await capture(() => askSession(parent, input('主问题')));
   const before = readFileSync(fileOf(parent), 'utf8');
@@ -121,7 +121,7 @@ it('旁问沿用主会话的系统提示与历史，不写文件、不进数据�
 });
 
 it('保留旁问：成为带「旁问：」前缀的新会话，含借来的历史与旁问内容，之后各自继续', async () => {
-  const parent = newSession(null).sessionId!;
+  const parent = (await newSession(null)).sessionId!;
   server.enqueue(reply('main answer'));
   await askSession(parent, input('主问题'));
   await openSidechat(parent);
@@ -146,7 +146,7 @@ it('保留旁问：成为带「旁问：」前缀的新会话，含借来的历�
 });
 
 it.each(['停用', '删除'] as const)('%s提供商后，已有旁问拒绝新请求并保留内容', async (action) => {
-  const parent = newSession(null).sessionId!;
+  const parent = (await newSession(null)).sessionId!;
   server.enqueue(reply('main answer'));
   await askSession(parent, input('主问题'));
   await openSidechat(parent);

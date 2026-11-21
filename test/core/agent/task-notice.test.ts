@@ -84,7 +84,7 @@ afterAll(async () => {
 });
 
 it('父会话空闲时自动开一轮处理通知，界面显示运行中；只投递一次，会话读取里自成一轮', async () => {
-  const parent = newSession(null).sessionId!;
+  const parent = (await newSession(null)).sessionId!;
   const requests: RecordedRequest[] = [];
   let runningAtWake = false;
   const stop = server.onRequest((request) => {
@@ -123,7 +123,7 @@ it('父会话空闲时自动开一轮处理通知，界面显示运行中；只�
 });
 
 it('主对话停止不影响后台任务，之后正常结束的任务仍会唤醒父会话', async () => {
-  const parent = newSession(null).sessionId!;
+  const parent = (await newSession(null)).sessionId!;
   const { requests, stop } = recorded();
   server.enqueue(backgroundBash('sleep 1; echo 迟到的结果'));
   server.enqueue(reply('慢慢说', 3000));

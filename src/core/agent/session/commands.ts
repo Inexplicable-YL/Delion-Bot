@@ -16,6 +16,7 @@ import {
   emptySessionId,
   insertSession,
   modelChoice,
+  preloadPi,
   removeSession,
   row,
   sessionCwd,
@@ -25,9 +26,13 @@ import {
   storeVisibility,
 } from './store';
 
-export function newSession(projectId: string | null): WorkspaceChat {
+export async function newSession(projectId: string | null): Promise<WorkspaceChat> {
   if (projectId !== null) sessionCwd(projectId, null);
-  const empty = emptySessionId(projectId);
+  let empty = emptySessionId(projectId);
+  if (empty && !live.get(empty) && existsSync(row(empty).file)) {
+    await preloadPi();
+    empty = emptySessionId(projectId);
+  }
   if (empty && !live.get(empty)?.run) return snapshot(empty);
   return snapshot(insertSession(projectId));
 }

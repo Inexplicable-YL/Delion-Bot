@@ -23,6 +23,7 @@ import {
 } from '../../modules/workspace';
 import { closeAllTerminals, locateBash, prependRuntimePath } from '../../modules/terminal';
 import { closeHelper } from '../../core/remote/helper';
+import { preloadPi } from '../../core/agent/session/store';
 import { closeAllPortTunnels, closeRemoteOpens } from '../../modules/remotes';
 import { closeRemoteWatch } from '../../core/remote/watch';
 import { registerSearchProvider } from '../../modules/search';
@@ -80,6 +81,11 @@ ipcMain.on('window:quit', (event) => {
 ipcMain.handle('window:get-state', (event) => ({
   maximized: BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false,
 }));
+
+ipcMain.on('window:content-ready', (event) => {
+  if (event.sender === mainWindow?.webContents && event.senderFrame === event.sender.mainFrame)
+    void preloadPi().catch(console.error);
+});
 
 const terminalSmokeTest = process.argv.includes('--terminal-smoke-test');
 const smokeTest = process.argv.includes('--smoke-test') || terminalSmokeTest;

@@ -202,7 +202,7 @@ it.each([false, true])('移除项目会删除名下全部会话与条目行 (rem
       'INSERT INTO workspace_entries (id, name, kind, local_path, remote_id, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
     )
     .run(id, 'project', 'project', directory, remoteId, 'now');
-  const chat = newSession(id);
+  const chat = await newSession(id);
   state
     .db!.prepare(
       'INSERT INTO sessions (id, project_id, file, archived, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)',
@@ -218,7 +218,7 @@ it.each([false, true])('移除项目会删除名下全部会话与条目行 (rem
 
 it('真实 ask 生命周期冻结文件变化并将 turnId 持久化到消息元数据', async () => {
   state.configured = true;
-  const chat = newSession(null);
+  const chat = await newSession(null);
   const path = join(chat.cwd!, 'output.txt');
   writeFileSync(path, 'before');
   state.onPrompt = async () => {
@@ -250,7 +250,7 @@ it('真实 ask 生命周期冻结文件变化并将 turnId 持久化到消息元
 
 it('prompt 失败仍冻结此前的文件修改，不吞掉原始错误', async () => {
   state.configured = true;
-  const chat = newSession(null);
+  const chat = await newSession(null);
   state.onPrompt = async () => {
     await state.beforeTool?.();
     writeFileSync(join(chat.cwd!, 'partial.txt'), 'partial');
@@ -266,7 +266,7 @@ it('prompt 失败仍冻结此前的文件修改，不吞掉原始错误', async 
 
 it('用户停止仍冻结已产生的文件，并在删除会话时清理快照', async () => {
   state.configured = true;
-  const chat = newSession(null);
+  const chat = await newSession(null);
   state.onPrompt = async () => {
     await state.beforeTool?.();
     writeFileSync(join(chat.cwd!, 'stopped.txt'), 'partial');
@@ -294,7 +294,7 @@ it('远程会话不读取同名本地目录，接口明确返回不可用', asyn
       "INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, remote_id, updated_at) VALUES ('remote-project', NULL, '远程', 'project', NULL, '/remote/project', 'remote-id', 'x')",
     )
     .run();
-  const chat = newSession('remote-project');
+  const chat = await newSession('remote-project');
   await askSession(chat.sessionId!, {
     text: '读取远程',
     attachments: [],
@@ -312,7 +312,7 @@ it('远程会话不读取同名本地目录，接口明确返回不可用', asyn
 
 it('快照失败不阻止模型运行，结果明确标记 unavailable', async () => {
   state.configured = true;
-  const chat = newSession(null);
+  const chat = await newSession(null);
   vi.spyOn(changes, 'captureDirectory').mockRejectedValueOnce(new Error('scan failed'));
   await askSession(chat.sessionId!, {
     text: '继续回答',
@@ -328,7 +328,7 @@ it('快照失败不阻止模型运行，结果明确标记 unavailable', async (
 
 it('模型请求不等目录快照，工具执行前才等它拍完', async () => {
   state.configured = true;
-  const chat = newSession(null);
+  const chat = await newSession(null);
   let finishCapture!: () => void;
   vi.spyOn(changes, 'captureDirectory').mockReturnValueOnce(
     new Promise((resolve) => {
@@ -356,7 +356,7 @@ it('sends document-only messages as file references instead of decoding binary b
   const document = stageChatMedia('汇报.pptx.pptx', bytes);
   const attachment = readChatAttachment(document.id);
   if (!('path' in attachment)) throw new Error('expected document file');
-  const chat = newSession(null);
+  const chat = await newSession(null);
   const response = await askSession(chat.sessionId!, {
     text: '',
     attachments: [document.id],
@@ -394,16 +394,16 @@ it('文档附件按会话归属判断远程：本地路径落在远程项目根�
       context: [],
       comments: [],
     });
-  await ask(newSession(null).sessionId!);
+  await ask((await newSession(null)).sessionId!);
   expect(state.prompts[0]).toContain('document-reading skill');
-  await expect(ask(newSession('remote-project').sessionId!)).rejects.toThrow(
+  await expect(ask((await newSession('remote-project')).sessionId!)).rejects.toThrow(
     '文档附件目前只支持本机会话',
   );
 });
 
 it('只带回复评论也能发送：评论进 prompt，历史消息还原为结构化评论', async () => {
   state.configured = true;
-  const chat = newSession(null);
+  const chat = await newSession(null);
   const comments = [
     { quote: '复杂度是 O(n²)', comment: '为什么不是 O(n log n)？' },
     { quote: '用哈希表', comment: '' },
@@ -423,7 +423,7 @@ it('只带回复评论也能发送：评论进 prompt，历史消息还原为结
 
 it('# 引用的会话只把 id 交给模型，由它按需 session_read；历史消息带回引用', async () => {
   state.configured = true;
-  const chat = newSession(null);
+  const chat = await newSession(null);
   const sessions = [{ id: 's-1', title: '复习计划' }];
   const response = await askSession(chat.sessionId!, {
     text: '接着 #复习计划 做',
@@ -519,28 +519,28 @@ describe('projectMessages', () => {
 });
 
 describe('会话归属与 cwd', () => {
-  it('项目会话的 cwd 是项目目录；空会话入口每个项目只有一个', () => {
+  it('项目会话的 cwd 是项目目录；空会话入口每个项目只有一个', async () => {
     state
       .db!.prepare(
         "INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, remote_id, updated_at) VALUES ('p1', NULL, '课题', 'project', NULL, ?, NULL, 'x')",
       )
       .run(state.root);
-    const first = newSession('p1');
+    const first = await newSession('p1');
     expect(first).toMatchObject({ projectId: 'p1', cwd: state.root });
-    expect(newSession('p1').sessionId).toBe(first.sessionId);
+    expect((await newSession('p1')).sessionId).toBe(first.sessionId);
     expect(openSession(first.sessionId!).projectId).toBe('p1');
   });
 
-  it('随聊会话的 cwd 是存储目录下 chat-sessions/<id> 的私有目录，目录随即建好', () => {
-    const chat = newSession(null);
+  it('随聊会话的 cwd 是存储目录下 chat-sessions/<id> 的私有目录，目录随即建好', async () => {
+    const chat = await newSession(null);
     const dir = join(state.root, 'Delion Bot', 'chat-sessions', chat.sessionId!);
     expect(chat.cwd).toBe(dir);
     expect(statSync(dir).isDirectory()).toBe(true);
-    expect(newSession(null).sessionId).toBe(chat.sessionId);
+    expect((await newSession(null)).sessionId).toBe(chat.sessionId);
     expect(openSession(chat.sessionId!).cwd).toBe(dir);
   });
 
-  it('工作目录不同或未设置的空会话都不复用', () => {
+  it('工作目录不同或未设置的空会话都不复用', async () => {
     const otherDir = join(state.root, 'other-session-workdir');
     state
       .db!.prepare(
@@ -548,19 +548,19 @@ describe('会话归属与 cwd', () => {
          VALUES ('old-null', NULL, '', NULL, 'x', 'x'), ('other-cwd', NULL, '', ?, 'x', 'x')`,
       )
       .run(otherDir);
-    const chat = newSession(null);
+    const chat = await newSession(null);
     expect(['old-null', 'other-cwd']).not.toContain(chat.sessionId);
     expect(chat.cwd).toBe(join(state.root, 'Delion Bot', 'chat-sessions', chat.sessionId!));
-    expect(newSession(null).sessionId).toBe(chat.sessionId);
+    expect((await newSession(null)).sessionId).toBe(chat.sessionId);
   });
 
-  it('新项目会话的 cwd 仍解析到项目目录，库里的 cwd 保持 NULL', () => {
+  it('新项目会话的 cwd 仍解析到项目目录，库里的 cwd 保持 NULL', async () => {
     state
       .db!.prepare(
         "INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, remote_id, updated_at) VALUES ('p1', NULL, '课题', 'project', NULL, ?, NULL, 'x')",
       )
       .run(state.root);
-    const session = newSession('p1');
+    const session = await newSession('p1');
     expect(session.cwd).toBe(state.root);
     expect(state.db!.prepare('SELECT cwd FROM sessions WHERE id=?').get(session.sessionId)).toEqual(
       { cwd: null },
@@ -590,7 +590,7 @@ describe('会话归属与 cwd', () => {
         "INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, remote_id, updated_at) VALUES ('p1', NULL, '课题', 'project', NULL, ?, NULL, 'x')",
       )
       .run(state.root);
-    const id = newSession(null).sessionId!;
+    const id = (await newSession(null)).sessionId!;
     const privateDir = join(state.root, 'Delion Bot', 'chat-sessions', id);
     await askSession(id, { text: '你好', attachments: [], context: [], comments: [] });
 
@@ -609,13 +609,13 @@ describe('会话归属与 cwd', () => {
     await ask;
   });
 
-  it('项目目录不存在时拒绝新建会话，不回退到其他目录', () => {
+  it('项目目录不存在时拒绝新建会话，不回退到其他目录', async () => {
     state
       .db!.prepare(
         "INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, remote_id, updated_at) VALUES ('p2', NULL, '丢失', 'project', NULL, ?, NULL, 'x')",
       )
       .run(join(state.root, 'missing'));
-    expect(() => newSession('p2')).toThrow('项目目录不存在');
+    await expect(newSession('p2')).rejects.toThrow('项目目录不存在');
   });
 });
 
@@ -625,7 +625,7 @@ describe('会话命令', () => {
 
   it('/name 改过的标题，首条消息不再覆盖', async () => {
     state.configured = true;
-    const chat = newSession(null);
+    const chat = await newSession(null);
     await runSessionCommand(chat.sessionId!, 'name', '我的标题');
     await askSession(chat.sessionId!, {
       text: '第一句话',
@@ -638,7 +638,7 @@ describe('会话命令', () => {
 
   it('/reload 结束当前实例并立刻按新配置重建；没配模型时只结束', async () => {
     state.configured = true;
-    const chat = newSession(null);
+    const chat = await newSession(null);
     await askSession(chat.sessionId!, { text: '你好', attachments: [], context: [], comments: [] });
     expect(state.opened).toBe(1);
     await runSessionCommand(chat.sessionId!, 'reload', '');
@@ -653,7 +653,7 @@ describe('会话命令', () => {
 
   it('/compact 带上说明交给 Pi；常见失败换成能看懂的说明；用户取消不算失败', async () => {
     state.configured = true;
-    const chat = newSession(null);
+    const chat = await newSession(null);
     await runSessionCommand(chat.sessionId!, 'compact', '保留接口设计的结论');
     await runSessionCommand(chat.sessionId!, 'compact', '');
     expect(state.compactCalls).toEqual(['保留接口设计的结论', undefined]);
@@ -680,7 +680,7 @@ describe('会话命令', () => {
 
   it('回答进行中不执行命令，也不打断它', async () => {
     state.configured = true;
-    const chat = newSession(null);
+    const chat = await newSession(null);
     let finish!: () => void;
     state.onPrompt = () => new Promise<void>((resolve) => (finish = resolve));
     const ask = askSession(chat.sessionId!, {
@@ -704,7 +704,7 @@ describe('会话命令', () => {
 
   it('压缩期间配置变了：不中止压缩，压缩完再丢弃实例；期间发消息给出说明', async () => {
     state.configured = true;
-    const chat = newSession(null);
+    const chat = await newSession(null);
     let finish!: () => void;
     state.compact = () => {
       state.compacting = true;
@@ -754,19 +754,19 @@ describe('会话级模型', () => {
 
   it('切换只影响本会话；新会话沿用最近发过消息的会话', async () => {
     state.configured = true;
-    const a = newSession(null).sessionId!;
+    const a = (await newSession(null)).sessionId!;
     await ask(a);
-    const b = newSession(null).sessionId!;
+    const b = (await newSession(null)).sessionId!;
     await ask(b);
     expect((await setSessionModel(a, 'p1', 'm2')).model).toBe('m2');
     expect(openSession(b).model).toBe('m');
     await ask(a);
-    expect(newSession(null).model).toBe('m2');
+    expect((await newSession(null)).model).toBe('m2');
   });
 
   it('空闲实例就地切换，运行中的一轮用原模型、结束后才按新选择重建', async () => {
     state.configured = true;
-    const id = newSession(null).sessionId!;
+    const id = (await newSession(null)).sessionId!;
     await ask(id);
     await setSessionModel(id, 'p1', 'm2');
     expect(state.modelSwitches).toEqual(['m2']);
@@ -785,7 +785,7 @@ describe('会话级模型', () => {
 
   it('提供商停用后会话保留原选择但不能发送，另选模型后恢复', async () => {
     state.configured = true;
-    const id = newSession(null).sessionId!;
+    const id = (await newSession(null)).sessionId!;
     await ask(id);
     invalidateSessions();
     state.providers.push({ ...state.providers[0]!, id: 'p2', name: 'other' });

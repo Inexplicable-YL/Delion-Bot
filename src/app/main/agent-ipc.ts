@@ -180,14 +180,15 @@ const capabilities = implement(capabilitiesContract, {
 });
 
 export function registerAgentIpc() {
-  void preloadPi();
   // 调用过协议的窗口才收得到会话事件。
   for (const channel of channelsOf(agentContract)) {
     const name = channel.slice(agentContract.namespace.length + 1);
     ipcMain.handle(channel, async (event, input: unknown) => {
       checkWorkspaceSender(event);
       hostPorts().broadcaster.subscribe(event.sender);
-      await preloadPi();
+      // 首页先恢复输入框和导航。复用已有记录的会话时，由 newSession 加载 Pi。
+      if (name !== 'create-session' && name !== 'list-sessions' && name !== 'list-commands')
+        await preloadPi();
       return agentProtocol.call(name, input);
     });
   }
