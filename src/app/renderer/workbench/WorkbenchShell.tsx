@@ -187,6 +187,7 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
   const chatSource: ChatTabSource = {
     referenceSource,
     navigate: (target) => useNavigationStore.getState().navigate(target),
+    onCreateProject: () => useNavigationStore.getState().newProject(),
     workbench: {
       open: (tab, options) => openTarget(tab, options),
       openDocument: (key, options) =>

@@ -17,7 +17,7 @@ import type { SearchHit } from '../../../modules/search/contract';
 import type { NavTarget, PageDrawer } from '../../module';
 import { pageOf, views } from '../../views';
 import type { NavSessionSummary } from '../navigation/ProjectSessionNav';
-import { useRuns, useSessions, updateSession, onAgentEvent } from '../../../modules/chat/view';
+import { useSessions, updateSession, onAgentEvent } from '../../../modules/chat/view';
 import { closeTabEverywhere, useWorkbenchLayout } from '../workbench/layout-store';
 import { walkGroups } from '../workbench/layout-schema';
 import { importFromDialog } from '../workspace/entry-actions';
@@ -31,8 +31,10 @@ import { useAppearance } from './theme';
 import { WorkbenchShell } from '../workbench/WorkbenchShell';
 import { errorMessage } from '../../../core/protocol/contract';
 
-/** 通用池会话不入项目树，但仍预热镜像：会话标签标题与通用聊天定位都读它。 */
-function useSessionNavData(): { sessionsByProject: Record<string, NavSessionSummary[]> } {
+function useSessionNavData(): {
+  sessionsByProject: Record<string, NavSessionSummary[]>;
+  generalSessions: NavSessionSummary[];
+} {
   const lists = useSessions((state) => state.lists);
   // 选择器必须返回稳定引用（useSyncExternalStore 的 getSnapshot 缓存要求），过滤放渲染期。
   const entries = useWorkspaceStore((state) => state.workspace.entries);
@@ -54,12 +56,13 @@ function useSessionNavData(): { sessionsByProject: Record<string, NavSessionSumm
       id: session.id,
       title: session.title,
       updatedAt: session.updatedAt,
+      createdAt: session.createdAt,
       pinned: session.pinned,
     }));
   const sessionsByProject: Record<string, NavSessionSummary[]> = {};
   for (const project of projects)
     sessionsByProject[project.id] = toSummaries(lists[project.id] ?? []);
-  return { sessionsByProject };
+  return { sessionsByProject, generalSessions: toSummaries(lists.general ?? []) };
 }
 
 function ModulePage({ target, drawer }: { target: NavTarget; drawer: PageDrawer | null }) {
@@ -94,8 +97,8 @@ export default function App() {
 
   const { theme, zoom, fontSize, changeTheme, changeZoom, changeFontSize } = useAppearance();
   const notifications = useNotificationCounts();
-  const { sessionsByProject } = useSessionNavData();
-  const homeSessionId = useNavigationStore((state) => state.generalChat?.sessionId ?? null);
+  const { sessionsByProject, generalSessions } = useSessionNavData();
+  const homeSessionId = useSessions((state) => state.homeSessionId);
   const workbenchSessionId = useWorkbenchLayout((state) => {
     const group = walkGroups(state.root).find((node) => node.id === state.focus);
     const active = group?.active;
@@ -219,7 +222,7 @@ export default function App() {
           notificationCount={notifications.count}
           todoUnreadCount={notifications.todoUnread}
           sessionsByProject={sessionsByProject}
-          runBadge={(sessionId) => useRuns.getState().bySession[sessionId]?.status ?? null}
+          generalSessions={generalSessions}
           activeSessionId={activeSessionId}
           onDeleteSession={async (sessionId) => {
             await updateSession(sessionId, { archived: true });
@@ -236,7 +239,7 @@ export default function App() {
             }
             void useNavigationStore.getState().openChat(sessionId, owner);
           }}
-          onOpenGeneralChat={() => void useNavigationStore.getState().openGeneralChat(false)}
+          onNewGeneralChat={() => void useNavigationStore.getState().openGeneralChat(true)}
           onNavigateBusiness={(id) =>
             void useNavigationStore.getState().navigate({ page: id } as NavTarget)
           }

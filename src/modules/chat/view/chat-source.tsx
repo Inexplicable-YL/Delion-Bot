@@ -29,6 +29,7 @@ export interface ChatTabSource {
   opensLink(url: string): boolean;
   /** @ 引用数据源；未提供时 composer 无 @ 候选、发送前不冲盘引用草稿。 */
   referenceSource?: ReferenceSource;
+  onCreateProject?(): void;
   /** 把回答保存为笔记；未提供时隐藏入口。 */
   onSaveNote?(text: string): void;
 }

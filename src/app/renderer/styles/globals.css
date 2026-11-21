@@ -202,7 +202,6 @@ svg[viewBox='0 0 24 24'][data-slot='icon']:is(.size-5, .size-6),
 
 .app-rail-footer {
   flex-shrink: 0;
-  border-top: 1px solid var(--line);
 }
 
 .app-nav-footer {
@@ -258,7 +257,7 @@ svg[viewBox='0 0 24 24'][data-slot='icon']:is(.size-5, .size-6),
   }
 
   .app-tab-bar .app-tab-button {
-    width: var(--spacing-sidebar-collapsed);
+    width: var(--spacing-tab-button);
     min-height: var(--spacing-toolbar);
     flex-direction: column;
     gap: var(--spacing);

@@ -39,6 +39,8 @@ interface NavigationState {
   openGeneralChat(create: boolean): boolean;
   newChat(projectId: string | null): Promise<string | null>;
   openChat(sessionId: string, projectId: string | null): boolean;
+  /** 总在工作台标签里打开；无项目的聊天因此开在通用工作台，而不是首页。 */
+  openChatTab(sessionId: string, projectId: string | null): boolean;
   openDocument(key: string, options?: { keep?: boolean }): boolean;
   openTerminal(projectId: string): boolean;
   openSettings(section?: SettingsSectionId): boolean;
@@ -236,6 +238,8 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       set({ projectId: null, homeSeq: seq, generalChat: { create: false, sessionId, seq } });
       return true;
     },
+
+    openChatTab: (sessionId, projectId) => revealInProject(`chat:${sessionId}`, projectId),
 
     openDocument: (key, options) =>
       revealInProject(documentTabId(key), get().projectId, options?.keep),

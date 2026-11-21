@@ -26,6 +26,8 @@ import {
 } from './use-connector-accounts';
 
 export { ConnectedAppIcons } from './ConnectorAppIcons';
+export { useConnectorAccounts };
+
 function Connectors() {
   const cache = useQueryClient();
   const [key, setKey] = useState('');

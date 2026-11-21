@@ -5,6 +5,16 @@ import { useResizerWidth } from '../../../ui/resizer';
 
 export type ProjectNavPreference = { pinned?: boolean; section?: string };
 
+/** 侧栏「项目」「聊天」两个列表各自的折叠、排序与显示选项。 */
+export type NavListPreference<Sort extends string> = {
+  collapsed: boolean;
+  sort: Sort;
+  status: 'active' | 'archived' | 'all';
+  activityDays: 0 | 1 | 7 | 30;
+};
+export type ChatListSort = 'updated' | 'created';
+export type ProjectListSort = 'updated' | 'name';
+
 const defaults = {
   shellSidebarCollapsed: false,
   projectOpenTarget: 'vscode' as 'vscode' | 'explorer',
@@ -12,6 +22,18 @@ const defaults = {
   workspaceSidebarCollapsed: false,
   hiddenNavEntries: [] as string[],
   projectNav: {} as Record<string, ProjectNavPreference>,
+  chatList: {
+    collapsed: false,
+    sort: 'updated',
+    status: 'all',
+    activityDays: 0,
+  } as NavListPreference<ChatListSort>,
+  projectList: {
+    collapsed: false,
+    sort: 'updated',
+    status: 'all',
+    activityDays: 0,
+  } as NavListPreference<ProjectListSort>,
   remoteLastDirectory: {} as Record<string, string>,
 };
 
@@ -21,6 +43,10 @@ type PreferencesStore = PreferenceValues & {
   setPreference: <K extends keyof PreferenceValues>(key: K, value: PreferenceValues[K]) => void;
   setNavEntryVisible: (id: string, visible: boolean) => void;
   patchProjectNav: (id: string, patch: ProjectNavPreference) => void;
+  patchNavList: <K extends 'chatList' | 'projectList'>(
+    key: K,
+    patch: Partial<PreferenceValues[K]>,
+  ) => void;
 };
 
 const storageKey = 'delion.preferences';
@@ -40,11 +66,22 @@ export const usePreferences = create<PreferencesStore>()(
         set((state) => ({
           projectNav: { ...state.projectNav, [id]: { ...state.projectNav[id], ...patch } },
         })),
+      patchNavList: (key, patch) => set((state) => ({ [key]: { ...state[key], ...patch } })),
     }),
     {
       name: storageKey,
       version: 1,
       storage: createJSONStorage(() => localStorage),
+      // 列表选项按字段合并：旧版存下的对象缺了新增字段时用默认值补齐，菜单不会出现无选中项。
+      merge: (persisted, current) => {
+        const saved = persisted as Partial<PreferenceValues> | undefined;
+        return {
+          ...current,
+          ...saved,
+          chatList: { ...current.chatList, ...saved?.chatList },
+          projectList: { ...current.projectList, ...saved?.projectList },
+        };
+      },
     },
   ),
 );

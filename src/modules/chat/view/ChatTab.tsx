@@ -1,6 +1,6 @@
 import { cn } from '../../../ui/cn';
 import { useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   ArrowDownTrayIcon as Download,
   ArrowsRightLeftIcon as GitCompare,
@@ -10,7 +10,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { TabId } from '../../../app/module';
 import type { ChatComment, ChatSessionSummary, WorkspaceChat } from '../../../core/protocol/agent';
-import { chatClient } from './client';
+import { agentClient, chatClient } from './client';
 import { Button } from '../../../ui/button';
 import { IconButton } from '../../../ui/icon-button';
 import { ChatComposer } from './ChatComposer';
@@ -25,13 +25,20 @@ import {
 } from './chat-source';
 import { useChat, useChatDraft, type ChatReference } from './use-chat';
 import { referenceContext, sessionReferences } from './reference-tokens';
-import { poolKey, updateSession, useSessions } from './sessions';
+import { exportSessionArchive, poolKey, updateSession, useSessions } from './sessions';
 import { useWorkspaceStore } from '../../workspace/view';
 import { showToast } from '../../../ui/toast';
 import { reviewTabId } from './review/tab-id';
 import { SidechatPanel } from './SidechatPanel';
 import { openSidechat, useSidechats } from './sidechat-store';
 import { errorMessage } from '../../../core/protocol/contract';
+
+const chatGreetings = [
+  '你准备好了，我就准备好了。',
+  '今天想做点什么？',
+  '有什么想一起解决的？',
+  '我们从哪里开始？',
+];
 
 function parseChatTabId(tabId: string): string | null {
   if (!tabId.startsWith('chat:')) return null;
@@ -75,6 +82,7 @@ function ChatComposerArea({
   files,
   sessionId,
   hero = false,
+  home = false,
 }: {
   /** 会话快照；IPC 返回前为 null，模型信息按空值降级。 */
   chat: WorkspaceChat | null;
@@ -83,6 +91,7 @@ function ChatComposerArea({
   files: ReferenceEntry[];
   sessionId: string;
   hero?: boolean;
+  home?: boolean;
 }) {
   const { prompt, comments = noComments } = useChatDraft(sessionId);
   const referenceOptions = useReferenceOptions(files, chat);
@@ -93,6 +102,27 @@ function ChatComposerArea({
     (state) => state.workspace.entries.find((entry) => entry.id === projectId) ?? null,
   );
   const context = composerContext(chat, project, chatState.busy);
+  const switchProject = useMutation({
+    mutationFn: async ({
+      nextProjectId,
+    }: {
+      previousProjectId: string | null;
+      nextProjectId: string | null;
+    }) => {
+      await chatClient.move({ id: sessionId, projectId: nextProjectId });
+      return agentClient['open-session']({ sessionId });
+    },
+    onSuccess: (moved, { previousProjectId }) => {
+      const sessions = useSessions.getState();
+      sessions.putChat(sessionId, moved);
+      void Promise.all([
+        sessions.refresh(previousProjectId),
+        sessions.refresh(moved.projectId),
+      ]).catch(() => {});
+    },
+    onError: (cause) =>
+      showToast({ variant: 'error', title: '切换项目失败', description: errorMessage(cause) }),
+  });
   return (
     <div className={cn('mx-auto w-full max-w-reading shrink-0', !hero && 'px-app pb-app')}>
       <ChatComposer
@@ -115,7 +145,16 @@ function ChatComposerArea({
         onModelSelect={chatState.selectModel}
         onRemoveAttachment={chatState.removeAttachment}
         contextUsage={chat?.contextUsage ?? null}
-        onSend={() => void chatState.send(references)}
+        onSelectProject={
+          home && context
+            ? (nextProjectId) =>
+                switchProject.mutate({ previousProjectId: context.projectId, nextProjectId })
+            : undefined
+        }
+        projectSwitching={switchProject.isPending}
+        onSend={() => {
+          if (!switchProject.isPending) void chatState.send(references);
+        }}
         onStop={chatState.stop}
         queued={chat?.queued}
         onWithdrawQueued={chatState.withdrawQueued}
@@ -158,10 +197,16 @@ function ChatSessionView({
 }) {
   const { navigate, workbench } = useChatTabSource();
   const onOpenSource = (key: string) => workbench.openDocument(key);
-  const startNewChat = () => navigate({ page: 'chat', projectId });
+  const startNewChat = () => navigate({ page: 'chat', projectId: home ? null : projectId });
   const openSession = (id: string) => navigate({ page: 'chat', projectId, sessionId: id });
   const chatState = useChat(active, referenceSource, startNewChat);
   const { chat, busy, editLast, fork } = chatState;
+  const projectName = useWorkspaceStore(
+    (state) => state.workspace.entries.find((entry) => entry.id === projectId)?.name,
+  );
+  const [greeting] = useState(
+    () => chatGreetings[Math.floor(Math.random() * chatGreetings.length)],
+  );
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const sidechatOpen = useSidechats((state) => Boolean(state.views[active]));
@@ -189,17 +234,8 @@ function ChatSessionView({
   const saveConversation = async () => {
     if (!window.delionBot) return;
     setExporting(true);
-    const exportSession = async () => {
-      const { saved, missing } = await chatClient.export(active);
-      if (saved)
-        showToast({
-          variant: missing.length ? 'neutral' : 'success',
-          title: missing.length ? '会话已导出，部分文件未打包' : '会话已导出',
-          description: missing.length ? missing.join('、') : undefined,
-        });
-    };
     try {
-      await exportSession();
+      await exportSessionArchive(active);
     } catch (error) {
       showToast({ variant: 'error', title: '会话导出失败', description: errorMessage(error) });
     }
@@ -221,6 +257,7 @@ function ChatSessionView({
         files={files}
         sessionId={active}
         hero={hero}
+        home={home}
       />
     ));
 
@@ -240,7 +277,10 @@ function ChatSessionView({
   return (
     <div
       aria-label="对话"
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-surface @container"
+      className={cn(
+        'relative flex min-h-0 min-w-0 flex-1 flex-col @container',
+        home && !conversation ? 'bg-page' : 'bg-surface',
+      )}
     >
       <div className="flex min-h-toolbar shrink-0 items-center gap-1 px-app">
         <IconButton aria-label="历史对话" onClick={() => setSessionsOpen(true)} title="历史对话">
@@ -295,11 +335,13 @@ function ChatSessionView({
           onSaveNote={onSaveNote}
         />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-app pb-10">
-          <div className="mx-auto my-auto w-full max-w-reading">
-            <h1 className="mb-4 text-ui-large-title">开始对话</h1>
-            {modelSetup}
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-app py-app">
+          <div className="mx-auto my-auto grid w-full max-w-reading gap-6">
+            <h1 className="wrap-anywhere text-center text-ui-large-title text-ink">
+              {projectId === null ? greeting : projectName}
+            </h1>
             {composer(true)}
+            {modelSetup}
           </div>
         </div>
       )}

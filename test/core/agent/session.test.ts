@@ -105,6 +105,7 @@ import {
   newSession,
   openSession,
   deleteSession,
+  moveSession,
   runSessionCommand,
   setSessionModel,
 } from '../../../src/core/agent/session/commands';
@@ -580,6 +581,32 @@ describe('会话归属与 cwd', () => {
       .run();
     expect(openSession('old-project').cwd).toBe(state.root);
     expect(openSession('old-chat').cwd).toBe(join(state.root, 'Delion Bot', 'workspace'));
+  });
+
+  it('移动会话改写归属与 cwd，重建空闲实例；回答进行中拒绝移动', async () => {
+    state.configured = true;
+    state
+      .db!.prepare(
+        "INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, remote_id, updated_at) VALUES ('p1', NULL, '课题', 'project', NULL, ?, NULL, 'x')",
+      )
+      .run(state.root);
+    const id = newSession(null).sessionId!;
+    const privateDir = join(state.root, 'Delion Bot', 'chat-sessions', id);
+    await askSession(id, { text: '你好', attachments: [], context: [], comments: [] });
+
+    moveSession(id, 'p1');
+    expect(openSession(id)).toMatchObject({ projectId: 'p1', cwd: state.root });
+    expect(state.disposed).toBe(1);
+    moveSession(id, null);
+    expect(openSession(id)).toMatchObject({ projectId: null, cwd: privateDir });
+
+    let finish!: () => void;
+    state.onPrompt = () => new Promise<void>((resolve) => (finish = resolve));
+    const ask = askSession(id, { text: '慢慢想', attachments: [], context: [], comments: [] });
+    await vi.waitFor(() => expect(state.prompts).toHaveLength(2));
+    expect(() => moveSession(id, 'p1')).toThrow('请等待当前回答完成');
+    finish();
+    await ask;
   });
 
   it('项目目录不存在时拒绝新建会话，不回退到其他目录', () => {

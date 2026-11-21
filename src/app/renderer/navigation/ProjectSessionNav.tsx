@@ -1,5 +1,6 @@
-// 顶部功能入口与按项目分组的会话历史；会话数据与运行徽标由接入方注入，本组件不 import sessions/。
-import { useState } from 'react';
+// 新建聊天、功能入口、按项目分组的会话与无归属的聊天；会话数据由接入方注入。拖动会话行可换归属。
+import { useState, type DragEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '../../../ui/button';
 import { useDismissOnOutsidePointer } from '../../../ui/use-dismiss-on-outside-pointer';
 import { CollapseChevron } from '../../../ui/collapse';
@@ -12,10 +13,8 @@ import {
   EllipsisHorizontalIcon as MoreHorizontal,
   FolderIcon as Folder,
   FolderOpenIcon as FolderOpen,
-  HomeIcon as House,
   ListBulletIcon as List,
   PencilIcon as Pencil,
-  PencilSquareIcon as SquarePen,
   PlusIcon as Plus,
   TrashIcon as Trash2,
 } from '@heroicons/react/24/outline';
@@ -23,7 +22,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -36,14 +34,26 @@ import type { WorkspaceEntry } from '../../../modules/workspace/contract';
 import { remoteAccent } from '../../../modules/remotes/view';
 import { useVisibleNavEntries, type NavEntryId } from './entries';
 import { showToast } from '../../../ui/toast';
-import { SessionRow, type NavSessionSummary, type SessionRunBadge } from './SessionRow';
-import { usePreferences } from '../shell/preferences';
+import {
+  SessionRow,
+  projectSessionDragType,
+  sessionDragType,
+  type NavSessionSummary,
+} from './SessionRow';
+import {
+  usePreferences,
+  type ChatListSort,
+  type NavListPreference,
+  type ProjectListSort,
+} from '../shell/preferences';
+import { activitySince, NavListHeader, type NavListOptions } from './NavListHeader';
 import { useTreeState } from './store';
-import { refreshSessionLists, chatClient } from '../../../modules/chat/view';
+import { refreshSessionLists, chatClient, moveSession } from '../../../modules/chat/view';
 import { closeTabEverywhere } from '../workbench/layout-store';
 import { Input } from '../../../ui/input';
 import { purgeRemovedEntries } from '../workbench/removed-cleanup';
-import { navIcon, navRow, navSectionTitle, rowActions } from './nav-styles';
+import { navIcon, navRow, navSectionTitle, rowActions, rowEndInset } from './nav-styles';
+import { NewChatIcon } from './new-chat-icon';
 import { useRemoteActivity } from './remote-activity';
 import { RemoteConnectionTip } from './remote-connection-tip';
 import { useRemoteConnections } from './remote-connections';
@@ -60,23 +70,30 @@ import { errorMessage } from '../../../core/protocol/contract';
 
 const fileManagerName = window.delionBot?.platform === 'darwin' ? 'Finder' : '资源管理器';
 
-export type { NavSessionSummary, SessionRunBadge };
+export type { NavSessionSummary };
 
 export type BusinessNavId = Exclude<NavEntryId, 'sources'>;
 
 const RECENT_SESSIONS = 3;
+const chatSortOptions: NavListOptions<ChatListSort> = [
+  ['updated', '最后活动'],
+  ['created', '创建时间'],
+];
+const projectSortOptions: NavListOptions<ProjectListSort> = [
+  ['updated', '最后活动'],
+  ['name', '名称'],
+];
 
 export function ProjectSessionNav({
   sessionsByProject,
-  runBadge,
+  generalSessions,
   onOpenSession,
   onDeleteSession,
   activeSessionId = null,
   onOpenProject,
   onNewProject,
   onNewChat,
-  onOpenGeneralChat,
-  generalChatActive = false,
+  onNewGeneralChat,
   onOpenSources,
   sourcesActive = false,
   activeProjectId = null,
@@ -84,15 +101,14 @@ export function ProjectSessionNav({
   activeBusinessId = null,
 }: {
   sessionsByProject: Record<string, NavSessionSummary[]>;
-  runBadge: (sessionId: string) => SessionRunBadge;
+  generalSessions: NavSessionSummary[];
   onOpenSession: (sessionId: string) => void;
   onDeleteSession?: (sessionId: string) => void;
   activeSessionId?: string | null;
   onOpenProject: (projectId: string) => void;
   onNewProject: () => void;
   onNewChat?: (projectId: string | null) => void;
-  onOpenGeneralChat: () => void;
-  generalChatActive?: boolean;
+  onNewGeneralChat: () => void;
   onOpenSources?: () => void;
   sourcesActive?: boolean;
   activeProjectId?: string | null;
@@ -107,11 +123,62 @@ export function ProjectSessionNav({
   const toggleFullSessionList = useTreeState((s) => s.toggleFullSessionList);
   const preferences = usePreferences((state) => state.projectNav);
   const setProjectPreference = usePreferences((state) => state.patchProjectNav);
+  const chatList = usePreferences((state) => state.chatList);
+  const projectList = usePreferences((state) => state.projectList);
+  const patchNavList = usePreferences((state) => state.patchNavList);
+  // 归档会话只在某个列表要看时才读；归档的不进置顶区，置顶标记因此清掉。
+  const queryClient = useQueryClient();
+  const archived = useQuery({
+    queryKey: ['chat', 'archived'],
+    queryFn: () => chatClient.archived(),
+    enabled:
+      Boolean(window.delionBot) &&
+      (chatList.status !== 'active' || projectList.status !== 'active'),
+  });
+  const archivedIn = (projectId: string | null): NavSessionSummary[] =>
+    (archived.data ?? [])
+      .filter((session) => session.projectId === projectId)
+      .map((session) => ({ ...session, pinned: false, archived: true }));
+  const byStatus = (
+    status: NavListPreference<string>['status'],
+    active: NavSessionSummary[],
+    projectId: string | null,
+  ) => [
+    ...(status === 'archived' ? [] : active),
+    ...(status === 'active' ? [] : archivedIn(projectId)),
+  ];
+  const sessionsOf = (projectId: string) =>
+    byStatus(projectList.status, sessionsByProject[projectId] ?? [], projectId);
+  const chatsSince = activitySince(chatList.activityDays);
+  const listedChats = byStatus(chatList.status, generalSessions, null)
+    .filter((session) => !session.pinned && Date.parse(session.updatedAt) >= chatsSince)
+    .toSorted((a, b) =>
+      chatList.sort === 'created'
+        ? b.createdAt.localeCompare(a.createdAt)
+        : b.updatedAt.localeCompare(a.updatedAt),
+    );
   const projects = entries
     .filter((entry) => entry.kind === 'project')
     .sort(
       (a, b) =>
         Number(Boolean(preferences[b.id]?.pinned)) - Number(Boolean(preferences[a.id]?.pinned)),
+    );
+  // 项目的最后活动取名下最新的会话，没有会话时取条目本身的更新时间。
+  const lastActivity = (project: WorkspaceEntry) =>
+    sessionsOf(project.id).reduce(
+      (latest, session) => (session.updatedAt > latest ? session.updatedAt : latest),
+      project.updatedAt,
+    );
+  const projectsSince = activitySince(projectList.activityDays);
+  const listedProjects = projects
+    .filter(
+      (project) =>
+        !preferences[project.id]?.pinned && Date.parse(lastActivity(project)) >= projectsSince,
+    )
+    .toSorted((a, b) =>
+      projectList.sort === 'name'
+        ? a.name.localeCompare(b.name)
+        : lastActivity(b).localeCompare(lastActivity(a)),
     );
   // 连接取自共享缓存，取数状态由目录树写、这里读，两处说法因此一致。
   const connections = useRemoteConnections();
@@ -138,6 +205,45 @@ export function ProjectSessionNav({
       showToast({ variant: 'error', title, description: errorMessage(cause) });
     }
   };
+  const [dropTarget, setDropTarget] = useState<{ projectId: string | null } | null>(null);
+  const isDropTarget = (projectId: string | null) => dropTarget?.projectId === projectId;
+  const ownerOf = (sessionId: string): string | null | undefined =>
+    generalSessions.some((session) => session.id === sessionId)
+      ? null
+      : Object.keys(sessionsByProject).find((id) =>
+          sessionsByProject[id]!.some((session) => session.id === sessionId),
+        );
+  // 换归属后旧位置的标签失效：先关掉，正在看的会话在新位置重新打开。
+  const moveChat = (sessionId: string, projectId: string | null) =>
+    void runAction('移动对话失败', async () => {
+      await moveSession(sessionId, projectId);
+      await queryClient.invalidateQueries({ queryKey: ['chat', 'archived'] });
+      closeTabEverywhere(`chat:${sessionId}`);
+      if (projectId) toggleProject(projectId, true);
+      if (sessionId === activeSessionId) onOpenSession(sessionId);
+    });
+  const dropZone = (projectId: string | null) => ({
+    onDragOver: (event: DragEvent) => {
+      const { types } = event.dataTransfer;
+      if (!types.includes(sessionDragType)) return;
+      if (projectId === null && types.includes(projectSessionDragType)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      if (!isDropTarget(projectId)) setDropTarget({ projectId });
+    },
+    onDragLeave: (event: DragEvent) => {
+      if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null);
+    },
+    onDrop: (event: DragEvent) => {
+      setDropTarget(null);
+      const sessionId = event.dataTransfer.getData(sessionDragType);
+      const owner = ownerOf(sessionId);
+      if (owner === undefined || owner === projectId || (projectId === null && owner !== null))
+        return;
+      event.preventDefault();
+      moveChat(sessionId, projectId);
+    },
+  });
 
   const sessionGroup = (
     project: WorkspaceEntry,
@@ -146,9 +252,9 @@ export function ProjectSessionNav({
   ) => {
     const key = project.id;
     const label = project.name;
-    const Icon = project.remoteId ? Cloud : Folder;
     const accent = project.remoteId ? { color: remoteAccent(project.remoteId, 'text') } : undefined;
     const expanded = openProjects.includes(key);
+    const Icon = project.remoteId ? Cloud : expanded ? FolderOpen : Folder;
     const full = fullSessionLists.includes(key);
     const unpinned = sessions.filter((session) => !session.pinned);
     const visible = full ? unpinned : unpinned.slice(0, RECENT_SESSIONS);
@@ -160,31 +266,42 @@ export function ProjectSessionNav({
       !shownActiveSession &&
       !sessions.some((session) => session.pinned && session.id === activeSessionId);
     // 远端项目行挂连接提示；挂在名称按钮上而非整行，键盘聚焦时也能看到。
+    // 图标与展开箭头共用一个槽位：悬停或键盘聚焦时换成箭头。
     const labelButton = (
       <button
         aria-current={rowActive ? 'page' : undefined}
         aria-expanded={expanded}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-chip text-left"
+        className="flex min-w-0 flex-1 items-center gap-2.5 rounded-chip text-left"
         onClick={() => toggleProject(key)}
         title={project.remoteId ? undefined : label}
         type="button"
       >
-        <Icon className={navIcon(rowActive)} style={accent} />
+        <span className="grid size-5 shrink-0 place-items-center">
+          <Icon
+            className={cn(
+              navIcon(rowActive),
+              'size-4 group-hover:hidden group-has-focus-visible:hidden',
+            )}
+            style={accent}
+          />
+          <CollapseChevron
+            className="hidden text-ink-2 group-hover:block group-has-focus-visible:block"
+            open={expanded}
+          />
+        </span>
         <span className="min-w-0 flex-1 truncate">{label}</span>
       </button>
     );
     return (
-      <div key={key} className="grid min-w-0 gap-px">
-        <div className={cn(navRow(rowActive), 'group pr-1 pl-1.5')}>
-          <button
-            aria-expanded={expanded}
-            aria-label={`${expanded ? '收起' : '展开'} ${label} 的会话`}
-            className="grid size-4 shrink-0 place-items-center rounded-chip text-ink-2"
-            onClick={() => toggleProject(key)}
-            type="button"
-          >
-            <CollapseChevron open={expanded} />
-          </button>
+      <div key={key} className="grid min-w-0 gap-px" {...dropZone(key)}>
+        <div
+          className={cn(
+            navRow(rowActive),
+            'group',
+            rowEndInset,
+            isDropTarget(key) && 'bg-accent-tint text-ink',
+          )}
+        >
           {project.remoteId ? (
             <Tooltip>
               <TooltipTrigger asChild>{labelButton}</TooltipTrigger>
@@ -200,6 +317,16 @@ export function ProjectSessionNav({
             labelButton
           )}
           <div className={rowActions}>
+            {onNewChat && (
+              <IconButton
+                size="sm"
+                aria-label={`在 ${label} 中新建对话`}
+                title="新对话"
+                onClick={() => onNewChat(key)}
+              >
+                <Plus />
+              </IconButton>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <IconButton size="sm" aria-label={`${label} 的项目菜单`} title="项目菜单">
@@ -207,11 +334,6 @@ export function ProjectSessionNav({
                 </IconButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="right" className="w-56">
-                <DropdownMenuLabel className="break-words text-ui-body text-ink">
-                  {label}
-                </DropdownMenuLabel>
-                <DropdownMenuLabel>{sessions.length} 个对话</DropdownMenuLabel>
-                <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => onOpenProject(key)}>
                   <FolderOpen />
                   打开项目
@@ -276,17 +398,6 @@ export function ProjectSessionNav({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            {onNewChat && (
-              <IconButton
-                size="sm"
-                aria-label={`在 ${label} 中新建对话`}
-                title="新对话"
-
-                onClick={() => onNewChat(key)}
-              >
-                <SquarePen />
-              </IconButton>
-            )}
           </div>
         </div>
         {confirmArchive === key && (
@@ -319,23 +430,20 @@ export function ProjectSessionNav({
         )}
         {expanded && (
           <div className="grid grid-cols-1 gap-px pb-1">
-            {sessions.length === 0 && onNewChat && (
-              <button
-                className="flex h-7 items-center gap-2 rounded-control pl-8 pr-2 text-left text-ui-body text-ink-2 transition-colors duration-base hover:bg-hover hover:text-ink-2"
-                onClick={() => onNewChat(key)}
-                type="button"
-              >
-                <SquarePen className="size-4 shrink-0" />
-                新建第一个对话
-              </button>
+            {sessions.length === 0 && (
+              <p className="flex min-h-row-compact touch:min-h-row-regular items-center pl-8 text-ui-body text-ink-4">
+                尚无对话
+              </p>
             )}
             {visible.map((session) => (
               <SessionRow
+                projectId={key}
                 projectName={label}
                 remoteId={project.remoteId}
                 active={session.id === activeSessionId}
-                badge={runBadge(session.id)}
                 key={session.id}
+                onMove={moveChat}
+                nested
                 onDelete={onDeleteSession}
                 onOpen={onOpenSession}
                 session={session}
@@ -358,16 +466,16 @@ export function ProjectSessionNav({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <Button
+        className="mb-2 h-control-md shrink-0 justify-start gap-2.5 px-2"
+        onClick={onNewGeneralChat}
+        size={null}
+        variant="glass"
+      >
+        <NewChatIcon className="size-5" />
+        <span className="truncate">新建聊天</span>
+      </Button>
       <nav aria-label="功能入口" className="grid shrink-0 gap-px">
-        <button
-          aria-current={generalChatActive ? 'page' : undefined}
-          className={navRow(generalChatActive)}
-          onClick={onOpenGeneralChat}
-          type="button"
-        >
-          <House className={navIcon(generalChatActive)} />
-          <span className="truncate">首页</span>
-        </button>
         {visibleEntries.map((item) => {
           const Icon = item.icon;
           const active = item.id === 'sources' ? sourcesActive : item.id === activeBusinessId;
@@ -390,17 +498,14 @@ export function ProjectSessionNav({
       {(projects.some((project) => preferences[project.id]?.pinned) ||
         projects.some((project) =>
           sessionsByProject[project.id]?.some((session) => session.pinned),
-        )) && (
+        ) ||
+        generalSessions.some((session) => session.pinned)) && (
         <section aria-label="置顶" className="mt-5 grid shrink-0 gap-px">
           <p className={navSectionTitle}>置顶</p>
           {projects
             .filter((project) => preferences[project.id]?.pinned)
             .map((project) =>
-              sessionGroup(
-                project,
-                sessionsByProject[project.id] ?? [],
-                project.id === activeProjectId,
-              ),
+              sessionGroup(project, sessionsOf(project.id), project.id === activeProjectId),
             )}
           {projects.flatMap((project) =>
             (sessionsByProject[project.id] ?? [])
@@ -409,58 +514,107 @@ export function ProjectSessionNav({
                 <SessionRow
                   key={session.id}
                   session={session}
+                  projectId={project.id}
                   projectName={project.name}
                   remoteId={project.remoteId}
                   active={session.id === activeSessionId}
+                  onMove={moveChat}
                   onOpen={onOpenSession}
                   onDelete={onDeleteSession}
                 />
               )),
           )}
+          {generalSessions
+            .filter((session) => session.pinned)
+            .map((session) => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                projectId={null}
+                active={session.id === activeSessionId}
+                onMove={moveChat}
+                onOpen={onOpenSession}
+                onDelete={onDeleteSession}
+              />
+            ))}
         </section>
       )}
-      <div className="mt-5 flex shrink-0 items-center justify-between px-2 pb-1">
-        <span
-          className="whitespace-nowrap text-ui-subhead text-ink-2"
-          id="project-session-nav-title"
+      <div className="mt-5 min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <section
+          aria-labelledby="project-session-nav-title"
+          className="group/list grid content-start gap-px"
         >
-          项目
-        </span>
-        <IconButton
-          size="sm"
-          aria-label="新建项目"
-
-          onClick={onNewProject}
-          title="新建项目"
+          <NavListHeader
+            createLabel="新建项目"
+            onChange={(patch) => patchNavList('projectList', patch)}
+            onCreate={onNewProject}
+            preference={projectList}
+            sortLabel="按以下方式排序项目"
+            sortOptions={projectSortOptions}
+            title="项目"
+            titleId="project-session-nav-title"
+          />
+          {!projectList.collapsed &&
+            ['', ...sectionNames].map((section) => {
+              const sectionProjects = listedProjects.filter(
+                (project) => (preferences[project.id]?.section ?? '') === section,
+              );
+              return (
+                <div key={section} className="min-w-0">
+                  {section && sectionProjects.length > 0 && (
+                    <p className={cn(navSectionTitle, 'pt-3 font-normal')}>{section}</p>
+                  )}
+                  {sectionProjects.map((project) =>
+                    sessionGroup(project, sessionsOf(project.id), project.id === activeProjectId),
+                  )}
+                </div>
+              );
+            })}
+          {!projectList.collapsed && listedProjects.length === 0 && (
+            <p className="px-2 py-1 text-ui-subhead text-ink-3">
+              {projects.some((project) => !preferences[project.id]?.pinned)
+                ? '没有符合条件的项目'
+                : '暂无项目'}
+            </p>
+          )}
+        </section>
+        <section
+          aria-labelledby="general-session-nav-title"
+          className={cn(
+            'group/list mt-5 grid content-start gap-px rounded-control pb-1',
+            isDropTarget(null) && 'bg-accent-tint',
+          )}
+          {...dropZone(null)}
         >
-          <Plus />
-        </IconButton>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        <section aria-labelledby="project-session-nav-title" className="grid content-start gap-px">
-          {['', ...sectionNames].map((section) => (
-            <div key={section} className="min-w-0">
-              {section &&
-                projects.some(
-                  (project) =>
-                    !preferences[project.id]?.pinned &&
-                    preferences[project.id]?.section === section,
-                ) && <p className={cn(navSectionTitle, 'pt-3 font-normal')}>{section}</p>}
-              {projects
-                .filter(
-                  (project) =>
-                    !preferences[project.id]?.pinned &&
-                    (preferences[project.id]?.section ?? '') === section,
-                )
-                .map((project) =>
-                  sessionGroup(
-                    project,
-                    sessionsByProject[project.id] ?? [],
-                    project.id === activeProjectId,
-                  ),
-                )}
-            </div>
-          ))}
+          <NavListHeader
+            createLabel="新建聊天"
+            onChange={(patch) => patchNavList('chatList', patch)}
+            onCreate={onNewGeneralChat}
+            preference={chatList}
+            sortLabel="按以下方式排序聊天"
+            sortOptions={chatSortOptions}
+            title="聊天"
+            titleId="general-session-nav-title"
+          />
+          {!chatList.collapsed &&
+            listedChats.map((session) => (
+              <SessionRow
+                key={session.id}
+                session={session}
+                projectId={null}
+                active={session.id === activeSessionId}
+                onMove={moveChat}
+                onOpen={onOpenSession}
+                onDelete={onDeleteSession}
+              />
+            ))}
+          {!chatList.collapsed && listedChats.length === 0 && (
+            <p className="px-2 py-1 text-ui-subhead text-ink-3">
+              {generalSessions.some((session) => !session.pinned)
+                ? '没有符合条件的聊天'
+                : '暂无聊天'}
+            </p>
+          )}
         </section>
       </div>
       <EntryDialogs

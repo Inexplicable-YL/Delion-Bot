@@ -1,20 +1,15 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ChatBubbleLeftIcon as MessageSquare,
   CheckIcon as Check,
   ChevronDownIcon as ChevronDown,
-  CloudIcon as Cloud,
-  FolderIcon as Folder,
   MagnifyingGlassIcon as Search,
   ShareIcon as GitBranch,
 } from '@heroicons/react/24/outline';
-import type { WorkspaceEntry } from '../../workspace/contract';
-import { useChatTabSource } from './chat-source';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/popover';
 import { showToast } from '../../../ui/toast';
 import type { ComposerContext } from './composer-context';
-import { workspaceClient, useWorkspaceStore } from '../../workspace/view';
+import { workspaceClient } from '../../workspace/view';
 import { errorMessage } from '../../../core/protocol/contract';
 
 const pill =
@@ -29,18 +24,12 @@ const empty = 'px-2 py-2 text-ui-subhead text-ink-2';
 const matches = (value: string, query: string) =>
   value.toLowerCase().includes(query.trim().toLowerCase());
 
-export function ComposerContextBar({ context }: { context: ComposerContext }) {
-  const { navigate } = useChatTabSource();
-  const entries = useWorkspaceStore((state) => state.workspace.entries);
-  const projects = entries.filter((entry) => entry.kind === 'project');
+export function ComposerBranchPicker({ context }: { context: ComposerContext }) {
   const queryClient = useQueryClient();
   const { projectId, remote } = context;
-  const [projectQuery, setProjectQuery] = useState('');
   const [branchQuery, setBranchQuery] = useState('');
-  const [projectOpen, setProjectOpen] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
 
-  // 当前分支要一直显示在胶囊上，进新对话就读一次；远端仓库在另一台机器上，通用池没有项目。
   const hasLocalRepo = Boolean(projectId) && !remote && Boolean(window.delionBot);
   const current =
     useQuery({
@@ -55,20 +44,6 @@ export function ComposerContextBar({ context }: { context: ComposerContext }) {
   });
   const branches = branchList.data ?? [];
   const branchesFailed = branchList.isError;
-
-  const local = (entry: WorkspaceEntry) =>
-    entry.remoteId ? (
-      <Cloud aria-hidden className="size-4 shrink-0" />
-    ) : (
-      <Folder aria-hidden className="size-4 shrink-0" />
-    );
-
-  const chooseProject = (id: string | null) => {
-    setProjectOpen(false);
-    if (id === projectId) return;
-    // 选哪个项目就落到哪个项目：main 复用该项目已有的空会话，不会堆垃圾会话。
-    navigate({ page: 'chat', projectId: id });
-  };
 
   const switchBranch = (branch: string) => {
     setBranchOpen(false);
@@ -87,20 +62,16 @@ export function ComposerContextBar({ context }: { context: ComposerContext }) {
       );
   };
 
-  const visibleProjects = projects.filter((entry) => matches(entry.name, projectQuery));
   const visibleBranches = branches.filter((branch) => matches(branch, branchQuery));
 
+  if (!current) return null;
   return (
-    <div className="mb-2 flex min-w-0 items-center gap-1.5">
-      <Popover onOpenChange={setProjectOpen} open={projectOpen}>
+    <div className="mt-app-gap flex justify-end">
+      <Popover onOpenChange={setBranchOpen} open={branchOpen}>
         <PopoverTrigger asChild>
-          <button aria-label="切换项目" className={pill} type="button">
-            {context.remote ? (
-              <Cloud aria-hidden className="size-4 shrink-0" />
-            ) : (
-              <Folder aria-hidden className="size-4 shrink-0" />
-            )}
-            <span className="truncate text-ink-2">{context.name}</span>
+          <button aria-label="切换分支" className={pill} type="button">
+            <GitBranch aria-hidden className="size-4 shrink-0" />
+            <span className="truncate">{current}</span>
             <ChevronDown aria-hidden className="size-4 shrink-0 opacity-60" />
           </button>
         </PopoverTrigger>
@@ -108,83 +79,34 @@ export function ComposerContextBar({ context }: { context: ComposerContext }) {
           <label className={searchRow}>
             <Search aria-hidden className="size-4 shrink-0" />
             <input
-              aria-label="搜索项目"
+              aria-label="搜索分支"
               className={searchInput}
-              onChange={(event) => setProjectQuery(event.target.value)}
-              placeholder="搜索项目"
-              value={projectQuery}
+              onChange={(event) => setBranchQuery(event.target.value)}
+              placeholder="搜索分支"
+              value={branchQuery}
             />
           </label>
           <div className="max-h-64 overflow-y-auto">
-            {visibleProjects.map((entry) => (
+            {visibleBranches.map((branch) => (
               <button
                 className={option}
-                key={entry.id}
-                onClick={() => chooseProject(entry.id)}
+                key={branch}
+                onClick={() => switchBranch(branch)}
                 type="button"
               >
-                <span className="flex min-w-0 flex-1 items-center gap-2">
-                  {local(entry)}
-                  <span className="truncate">{entry.name}</span>
-                </span>
-                {entry.id === projectId && <Check aria-hidden className="size-4 shrink-0" />}
+                <GitBranch aria-hidden className="size-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{branch}</span>
+                {branch === current && <Check aria-hidden className="size-4 shrink-0" />}
               </button>
             ))}
-            {visibleProjects.length === 0 && <p className={empty}>没有匹配的项目</p>}
+            {branchesFailed ? (
+              <p className={empty}>分支列表加载失败</p>
+            ) : (
+              visibleBranches.length === 0 && <p className={empty}>没有匹配的分支</p>
+            )}
           </div>
-          <div className="my-1 h-px bg-line" />
-          <button className={option} onClick={() => chooseProject(null)} type="button">
-            <span className="flex min-w-0 flex-1 items-center gap-2">
-              <MessageSquare aria-hidden className="size-4 shrink-0" />
-              <span className="truncate">不在项目里（随聊）</span>
-            </span>
-            {projectId === null && <Check aria-hidden className="size-4 shrink-0" />}
-          </button>
         </PopoverContent>
       </Popover>
-
-      {current && (
-        <Popover onOpenChange={setBranchOpen} open={branchOpen}>
-          <PopoverTrigger asChild>
-            <button aria-label="切换分支" className={pill} type="button">
-              <GitBranch aria-hidden className="size-4 shrink-0" />
-              <span className="truncate">{current}</span>
-              <ChevronDown aria-hidden className="size-4 shrink-0 opacity-60" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-64" side="top">
-            <label className={searchRow}>
-              <Search aria-hidden className="size-4 shrink-0" />
-              <input
-                aria-label="搜索分支"
-                className={searchInput}
-                onChange={(event) => setBranchQuery(event.target.value)}
-                placeholder="搜索分支"
-                value={branchQuery}
-              />
-            </label>
-            <div className="max-h-64 overflow-y-auto">
-              {visibleBranches.map((branch) => (
-                <button
-                  className={option}
-                  key={branch}
-                  onClick={() => switchBranch(branch)}
-                  type="button"
-                >
-                  <GitBranch aria-hidden className="size-4 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{branch}</span>
-                  {branch === current && <Check aria-hidden className="size-4 shrink-0" />}
-                </button>
-              ))}
-              {branchesFailed ? (
-                <p className={empty}>分支列表加载失败</p>
-              ) : (
-                visibleBranches.length === 0 && <p className={empty}>没有匹配的分支</p>
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
-      )}
     </div>
   );
 }

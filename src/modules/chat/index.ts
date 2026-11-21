@@ -5,6 +5,7 @@ import { stageChatMediaFiles } from '../../core/agent/media';
 import {
   archiveProjectSessions,
   deleteSession,
+  moveSession,
   updateSessionVisibility,
 } from '../../core/agent/session/commands';
 import {
@@ -35,6 +36,7 @@ export const chatModule = defineModule({
   ipc: implement(chatContract, {
     archived: withPi(() => archivedSessions()),
     update: withPi(({ id, patch }) => updateSessionVisibility(id, patch)),
+    move: withPi(({ id, projectId }) => moveSession(id, projectId)),
     archiveProject: withPi(archiveProjectSessions),
     export: (id) => exportSession(id, hostPorts().workspaceClient()),
     remove: withPi(async (id) => {

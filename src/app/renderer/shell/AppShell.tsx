@@ -1,22 +1,18 @@
 import { useEffect, useEffectEvent, useState, type ComponentType, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeftIcon as ArrowLeft,
-  ArrowRightIcon as ArrowRight,
-  Bars3BottomLeftIcon as PanelLeft,
   Bars3Icon as Menu,
   BellIcon as Bell,
   ChatBubbleLeftEllipsisIcon as MessageCirclePlus,
   CheckIcon as Check,
-  ChevronDoubleLeftIcon as PanelLeftClose,
   ChevronDownIcon as ChevronDown,
   ChevronLeftIcon as ChevronLeft,
+  ChevronRightIcon as ChevronRight,
   ClipboardDocumentCheckIcon as SquareCheckBig,
   CodeBracketIcon as CodeXml,
   Cog6ToothIcon as Settings,
   CommandLineIcon as SquareTerminal,
   FolderOpenIcon as FolderOpen,
-  HomeIcon as House,
   MagnifyingGlassIcon as Search,
   MinusIcon as Minus,
   Square2StackIcon as Restore,
@@ -38,7 +34,6 @@ import {
   ProjectSessionNav,
   type BusinessNavId,
   type NavSessionSummary,
-  type SessionRunBadge,
 } from '../navigation/ProjectSessionNav';
 import { zoomLevels, type ZoomPreference } from '../../../modules/settings/contract';
 import { acceleratorKeys, matchShortcut, shortcutGroups } from '../../../modules/settings/contract';
@@ -49,11 +44,13 @@ import {
   DropdownMenuTrigger,
 } from '../../../ui/dropdown-menu';
 import { navRow } from '../navigation/nav-styles';
+import { NewChatIcon } from '../navigation/new-chat-icon';
 import { ConnectedAppIcons } from '../../../modules/connectors/view';
 import { UpdateBadge } from '../../../modules/update/view';
 import { navEntries, useVisibleNavEntries } from '../navigation/entries';
 import { pageHasDrawer } from '../../views';
 import { IconButton } from '../../../ui/icon-button';
+import { SidebarIcon } from '../../../ui/sidebar-icon';
 import { Button } from '../../../ui/button';
 import { WindowControlButton } from '../../../ui/window-control-button';
 import { Kbd } from '../../../ui/kbd';
@@ -152,13 +149,13 @@ type AppShellProps = {
   notificationCount: number;
   todoUnreadCount: number;
   sessionsByProject: Record<string, NavSessionSummary[]>;
-  runBadge: (sessionId: string) => SessionRunBadge;
+  generalSessions: NavSessionSummary[];
   activeSessionId: string | null;
   projectId: string | null;
   onOpenProject: (id: string) => void;
   onOpenSession: (sessionId: string) => void;
   onDeleteSession?: (sessionId: string) => void;
-  onOpenGeneralChat: () => void;
+  onNewGeneralChat: () => void;
   onOpenSources: () => void;
   activeTabIsChat: boolean;
   onNavigateBusiness: (id: BusinessNavId) => void;
@@ -183,13 +180,13 @@ export function AppShell({
   notificationCount,
   todoUnreadCount,
   sessionsByProject,
-  runBadge,
+  generalSessions,
   activeSessionId,
   projectId,
   onOpenProject,
   onOpenSession,
   onDeleteSession,
-  onOpenGeneralChat,
+  onNewGeneralChat,
   onOpenSources,
   activeTabIsChat,
   onNavigateBusiness,
@@ -207,24 +204,11 @@ export function AppShell({
   const projectIsRemote = useWorkspaceStore(
     (state) => state.workspace.entries.find((item) => item.id === projectId)?.remoteId != null,
   );
-  const projectTitle = useWorkspaceStore(
-    (state) => state.workspace.entries.find((item) => item.id === projectId)?.name,
-  );
   const effectiveOpenTarget: 'vscode' | 'explorer' = projectIsRemote ? 'vscode' : projectOpenTarget;
   const vscodeOpenLabel = projectIsRemote ? '在 VS Code 中打开（SSH）' : '在 VS Code 打开项目';
 
   const visibleEntries = useVisibleNavEntries();
   const sourcesActive = view === 'workbench' && projectId === null && !activeTabIsChat;
-
-  const pageTitle =
-    view === 'home'
-      ? '随聊'
-      : view === 'settings'
-        ? '设置'
-        : view === 'workbench'
-          ? (projectTitle ?? '工作台')
-          : (navEntries.find((entry) => entry.id === view)?.label ??
-            (view === 'todo' ? '待办' : '通知'));
 
   const openProjectDirectory = (target: 'vscode' | 'explorer') => {
     if (view !== 'workbench' || !projectId || !window.delionBot) return;
@@ -280,7 +264,7 @@ export function AppShell({
         useEditorSettings.getState().toggleWordWrap();
         break;
       case 'open-home':
-        navigate('home');
+        onNewGeneralChat();
         break;
       case 'open-connectors':
         navigate({ page: 'connectors' });
@@ -315,11 +299,16 @@ export function AppShell({
       onClick={narrow ? undefined : () => setPreference('shellSidebarCollapsed', !sidebarCollapsed)}
       title={narrow || sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
     >
-      {narrow ? <Menu /> : sidebarCollapsed ? <PanelLeft /> : <PanelLeftClose />}
+      {narrow ? <Menu /> : <SidebarIcon />}
     </IconButton>
   );
 
-  const homeItem = { id: 'home', label: '随聊', icon: House, action: onOpenGeneralChat };
+  const newChatItem = {
+    id: 'new-chat',
+    label: '新建聊天',
+    icon: NewChatIcon,
+    action: onNewGeneralChat,
+  };
   const settingsItem = {
     id: 'settings',
     label: '设置',
@@ -345,48 +334,6 @@ export function AppShell({
     ...item,
     action: () => (item.id === 'sources' ? onOpenSources() : onNavigateBusiness(item.id)),
   }));
-
-  const connectorItem = businessItems.find((item) => item.id === 'connectors');
-  const compactFooter = !narrow && sidebarCollapsed;
-  const footerItems = compactFooter ? [connectorItem, settingsItem] : [settingsItem, connectorItem];
-  const sidebarFooter = (
-    <div
-      className={cn(
-        'app-nav-footer',
-        compactFooter ? 'app-rail-footer' : 'flex shrink-0 items-center gap-1.5 pt-2',
-      )}
-    >
-      {footerItems.map((item) => {
-        if (!item) return null;
-        const { id, label, icon: Icon, action } = item;
-        const showLabel = id === 'connectors' && !compactFooter;
-        return (
-          <Button
-            key={id}
-            aria-current={view === id ? 'page' : undefined}
-            aria-label={showLabel ? undefined : label}
-            className={
-              showLabel
-                ? 'h-control-md min-w-0 flex-1 justify-start gap-2.5 px-2'
-                : 'size-control-md touch:min-w-control-lg'
-            }
-            onClick={id === 'connectors' ? () => navigate({ page: 'connectors' }) : action}
-            size={null}
-            title={label}
-            variant="glass"
-          >
-            <Icon className="size-5" />
-            {showLabel && (
-              <>
-                <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-                <ConnectedAppIcons />
-              </>
-            )}
-          </Button>
-        );
-      })}
-    </div>
-  );
 
   const navItems = (
     items: Array<{
@@ -417,6 +364,50 @@ export function AppShell({
         {!!count && <span aria-hidden className="nav-unread-dot" />}
       </IconButton>
     ));
+
+  const connectorItem = businessItems.find((item) => item.id === 'connectors');
+  const compactFooter = !narrow && sidebarCollapsed;
+  const footerItems = compactFooter ? [connectorItem, settingsItem] : [settingsItem, connectorItem];
+  const sidebarFooter = compactFooter ? (
+    <div className="app-rail-footer">
+      {navItems(
+        footerItems.filter((item) => item !== undefined),
+        'rail',
+      )}
+    </div>
+  ) : (
+    <div className="app-nav-footer flex shrink-0 items-center gap-1.5 pt-2">
+      {footerItems.map((item) => {
+        if (!item) return null;
+        const { id, label, icon: Icon, action } = item;
+        const showLabel = id === 'connectors';
+        return (
+          <Button
+            key={id}
+            aria-current={view === id ? 'page' : undefined}
+            aria-label={showLabel ? undefined : label}
+            className={
+              showLabel
+                ? 'h-control-md min-w-0 flex-1 justify-start gap-2.5 px-2'
+                : 'size-control-md touch:min-w-control-lg'
+            }
+            onClick={id === 'connectors' ? () => navigate({ page: 'connectors' }) : action}
+            size={null}
+            title={label}
+            variant="glass"
+          >
+            <Icon className="size-5" />
+            {showLabel && (
+              <>
+                <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+                <ConnectedAppIcons />
+              </>
+            )}
+          </Button>
+        );
+      })}
+    </div>
+  );
   const navToggle = narrow ? <SheetTrigger asChild>{sidebarToggle}</SheetTrigger> : sidebarToggle;
 
   return (
@@ -443,7 +434,7 @@ export function AppShell({
               onClick={onBack}
               title="后退"
             >
-              <ArrowLeft />
+              <ChevronLeft />
             </IconButton>
             <IconButton
               aria-label="前进"
@@ -452,11 +443,8 @@ export function AppShell({
               onClick={onForward}
               title="前进"
             >
-              <ArrowRight />
+              <ChevronRight />
             </IconButton>
-            <span className="min-w-0 truncate px-2 text-ui-body font-medium text-ink-2">
-              {pageTitle}
-            </span>
           </div>
           <div className="flex h-full shrink-0 items-center">
             <UpdateBadge onOpen={() => useNavigationStore.getState().openSettings('general')} />
@@ -583,7 +571,7 @@ export function AppShell({
           <nav aria-label="快速导航" className="app-tab-bar glass">
             {navItems(
               [
-                homeItem,
+                newChatItem,
                 ...businessItems.filter((item) => item.id === 'sources'),
                 todoItem,
                 notificationsItem,
@@ -608,7 +596,7 @@ export function AppShell({
               <div className="app-rail-primary">
                 {navItems(
                   [
-                    homeItem,
+                    newChatItem,
                     ...businessItems.filter((item) => item.id !== 'connectors'),
                     todoItem,
                     notificationsItem,
@@ -632,8 +620,8 @@ export function AppShell({
               <ProjectSessionNav
                 activeBusinessId={navEntries.find((entry) => entry.id === view)?.id ?? null}
                 activeProjectId={view === 'workbench' ? projectId : null}
-                activeSessionId={view === 'home' ? null : activeSessionId}
-                generalChatActive={view === 'home'}
+                activeSessionId={activeSessionId}
+                generalSessions={generalSessions}
                 onDeleteSession={onDeleteSession}
                 onNewChat={(id) => void useNavigationStore.getState().newChat(id)}
                 onNavigateBusiness={onNavigateBusiness}
@@ -641,8 +629,8 @@ export function AppShell({
                   onNewProject();
                   if (narrow) onMobileDrawerChange?.(null);
                 }}
-                onOpenGeneralChat={() => {
-                  onOpenGeneralChat();
+                onNewGeneralChat={() => {
+                  onNewGeneralChat();
                   if (narrow) onMobileDrawerChange?.(null);
                 }}
                 onOpenProject={(id) => {
@@ -654,7 +642,6 @@ export function AppShell({
                   onOpenSources();
                   if (narrow) onMobileDrawerChange?.(null);
                 }}
-                runBadge={runBadge}
                 sessionsByProject={sessionsByProject}
                 sourcesActive={sourcesActive}
               />

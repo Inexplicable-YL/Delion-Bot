@@ -47,7 +47,7 @@ export const shortcutActions: readonly ShortcutAction[] = [
     defaultKeys: 'Mod+O',
   },
   { id: 'global-search', scope: 'global', group: '文件', label: '全局搜索', defaultKeys: 'Mod+K' },
-  { id: 'open-home', scope: 'global', group: '导航', label: '首页', defaultKeys: 'Mod+1' },
+  { id: 'open-home', scope: 'global', group: '导航', label: '新建聊天', defaultKeys: 'Mod+1' },
   { id: 'open-connectors', scope: 'global', group: '导航', label: '连接器', defaultKeys: 'Mod+2' },
   { id: 'open-settings', scope: 'global', group: '导航', label: '设置', defaultKeys: 'Mod+,' },
   { id: 'zoom-in', scope: 'global', group: '视图', label: '放大', defaultKeys: 'Mod+=' },

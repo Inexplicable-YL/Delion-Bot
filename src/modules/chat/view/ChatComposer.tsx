@@ -2,17 +2,26 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AtSymbolIcon as AtSign,
+  CalendarDaysIcon,
   ChatBubbleLeftIcon as MessageSquare,
   ChevronDownIcon as ChevronDown,
   CpuChipIcon as Bot,
   DocumentTextIcon as FileText,
+  EnvelopeIcon,
+  FolderOpenIcon,
   GlobeAltIcon as Globe,
   InformationCircleIcon as Info,
+  LinkIcon,
+  ListBulletIcon,
   PaperClipIcon as Paperclip,
 } from '@heroicons/react/24/outline';
+import { PlayIcon } from '@heroicons/react/24/solid';
+import { useConnectorAccounts } from '../../connectors/view';
 import { cn } from '../../../ui/cn';
+import { Button } from '../../../ui/button';
 import type { ComposerContext } from './composer-context';
-import { ComposerContextBar } from './composer-context-bar';
+import { ComposerBranchPicker } from './composer-context-bar';
+import { NewChatMenu } from './NewChatMenu';
 import { ReplyCommentRail } from './reply-comment';
 import { formatDuration } from './ToolTimeline';
 import { openSubagent } from './tool-views';
@@ -64,11 +73,58 @@ import {
 } from './client';
 import { errorMessage } from '../../../core/protocol/contract';
 
+const todoPrompt = '帮我查看还未完成的个人待办';
+
 const builtinCommands = [
-  { name: '待办', prompt: '帮我查看还未完成的个人待办', hint: '查询个人待办' },
+  { name: '待办', prompt: todoPrompt, hint: '查询个人待办' },
   { name: '邮件', prompt: '帮我查找最近的未读邮件', hint: '通过邮箱连接器' },
   { name: '资料', prompt: '帮我在项目中查找相关文件', hint: '搜索并读取资料' },
   { name: '整理', prompt: '帮我把引用资料里的要点整理成一份笔记', hint: '生成并保存笔记' },
+];
+
+const connectorActions = [
+  {
+    slug: 'gmail',
+    icon: EnvelopeIcon,
+    label: '查看 Gmail 未读邮件',
+    prompt: '帮我查看 Gmail 最近的未读邮件，并列出需要处理的事项。',
+  },
+  {
+    slug: 'outlook',
+    icon: EnvelopeIcon,
+    label: '查看 Outlook 未读邮件',
+    prompt: '帮我查看 Outlook 最近的未读邮件，并列出需要处理的事项。',
+  },
+  {
+    slug: 'googlecalendar',
+    icon: CalendarDaysIcon,
+    label: '查看今日日程',
+    prompt: '帮我查看 Google Calendar 中今天的日程，按时间排列。',
+  },
+  {
+    slug: 'googledrive',
+    icon: FolderOpenIcon,
+    label: '查找 Google Drive 文件',
+    prompt: '请在 Google Drive 中查找这些文件：',
+  },
+  {
+    slug: 'slack',
+    icon: MessageSquare,
+    label: '搜索 Slack 消息',
+    prompt: '请在 Slack 中搜索这个话题：',
+  },
+  {
+    slug: 'notion',
+    icon: FileText,
+    label: '查找 Notion 页面',
+    prompt: '请在 Notion 中查找这些页面：',
+  },
+  {
+    slug: 'github',
+    icon: FolderOpenIcon,
+    label: '查询 GitHub 仓库',
+    prompt: '请查看这个 GitHub 仓库的最新动态：',
+  },
 ];
 
 type MenuState = { kind: 'slash' | 'mention' | 'session'; query: string; start: number } | null;
@@ -129,6 +185,8 @@ export function ChatComposer({
   onDismissNotice,
   hero = false,
   context = null,
+  onSelectProject,
+  projectSwitching = false,
   sidechat = false,
   queued = [],
   onWithdrawQueued,
@@ -142,8 +200,9 @@ export function ChatComposer({
   onStopTask?: (taskId: string) => void;
   /** 旁问输入框：模型与思考强度沿用主会话、联网搜索是全局开关，这三个选择器都不显示。 */
   sidechat?: boolean;
-  /** 新对话的项目浮岛数据；null = 不显示（已有历史或通用池没有项目）。 */
   context?: ComposerContext | null;
+  onSelectProject?: (projectId: string | null) => void;
+  projectSwitching?: boolean;
   notice?: string | null;
   onDismissNotice?: () => void;
   value: string;
@@ -211,6 +270,60 @@ export function ChatComposer({
   const searchEntries = searchQuery.data?.entries ?? null;
   const searchSelectedId = searchQuery.data?.selectedId ?? null;
   const searchFailed = searchQuery.isError;
+  const showAgentActions = hero && configured && !modelUnavailable;
+  const { configured: connectorsConfigured, accounts } = useConnectorAccounts(
+    undefined,
+    showAgentActions,
+  );
+  const [connectorOrder] = useState(() =>
+    connectorActions
+      .map((action) => ({ action, order: Math.random() }))
+      .sort((left, right) => left.order - right.order)
+      .map(({ action }) => action),
+  );
+  const connectedApps = new Set(
+    (connectorsConfigured.data ? accounts.data : undefined)
+      ?.filter(({ status }) => status === 'ACTIVE')
+      .map(({ toolkit }) => toolkit.slug),
+  );
+  const { data: capabilities } = useQuery({
+    queryKey: ['capabilities', 'builtin'],
+    queryFn: () => capabilitiesClient.listBuiltinCapabilities(),
+    enabled: showAgentActions && Boolean(window.delionBot),
+  });
+  const { data: skills } = useQuery({
+    queryKey: ['capabilities', 'skills'],
+    queryFn: () => capabilitiesClient.listSkills(),
+    enabled: showAgentActions && !context?.remote && Boolean(window.delionBot),
+  });
+  const agentActions = [
+    ...connectorOrder.map((action) => ({ ...action, available: connectedApps.has(action.slug) })),
+    {
+      icon: ListBulletIcon,
+      label: '查看待办',
+      prompt: todoPrompt,
+      available:
+        !context?.remote &&
+        capabilities?.some(({ name, enabled }) => name === 'bash' && enabled) &&
+        skills?.some(
+          ({ name, origin, enabled }) => name === 'todo' && origin === 'builtin' && enabled,
+        ),
+    },
+    {
+      icon: LinkIcon,
+      label: '总结网页',
+      prompt: '请阅读并总结这个网页：',
+      available: capabilities?.some(({ name, enabled }) => name === 'web_fetch' && enabled),
+    },
+    {
+      icon: Globe,
+      label: '搜索网络',
+      prompt: '请联网搜索：',
+      available: searchSelectedId !== null,
+    },
+  ]
+    .filter(({ available }) => available)
+    .slice(0, 3);
   // 先取消在途读取：首次读取还没回来时，失效不会重读，旧响应会盖掉新配置。
   const refreshSearch = async () => {
     await queryClient.cancelQueries({ queryKey: webSearchOptionsKey });
@@ -280,7 +393,14 @@ export function ChatComposer({
 
   const insertMention = () => {
     const caret = editorRef.current?.selectionStart() ?? value.length;
-    editorRef.current?.insertAt(caret, '@');
+    const prefix = hero && caret > 0 && !/\s/.test(value[caret - 1]!) ? ' ' : '';
+    editorRef.current?.insertAt(caret, `${prefix}@`);
+    if (hero) editorRef.current?.focus();
+  };
+
+  const appendPrompt = (prompt: string) => {
+    editorRef.current?.insertAt(value.length, `${value.trim() ? '\n\n' : ''}${prompt}`);
+    editorRef.current?.focus();
   };
 
   /** 插入一张已暂存的内联图片 token，返回新的插入位置（批量拖入时逐张顺延）。 */
@@ -385,7 +505,7 @@ export function ChatComposer({
     attachments.length > 0 ||
     comments.length > 0;
 
-  const sendable = configured && !modelUnavailable && canSend;
+  const sendable = configured && !modelUnavailable && !projectSwitching && canSend;
   // 主会话运行中输入框有内容就是插队发送；旁问不插队，运行中始终是停止。
   const stoppable = busy && (sidechat || !canSend);
 
@@ -415,7 +535,6 @@ export function ChatComposer({
 
   return (
     <div className="relative">
-      {context && <ComposerContextBar context={context} />}
       {queued.length > 0 && (
         <QueuedMessages
           messages={queued.map((text) => text.trim() || '图片或附件')}
@@ -429,8 +548,10 @@ export function ChatComposer({
         />
       )}
       <PromptInput
+        className={hero ? 'flex flex-wrap items-center gap-2 px-2 py-2.5' : undefined}
         dragging={dragging}
         dropHint="松开以添加图片或附件"
+        material={hero ? 'glass' : 'solid'}
         onDragOver={(event) => {
           if (event.dataTransfer.types.includes('Files')) {
             event.preventDefault();
@@ -449,7 +570,7 @@ export function ChatComposer({
         }}
       >
         {(comments.length > 0 || attachments.length > 0) && (
-          <PromptInputAttachments>
+          <PromptInputAttachments className={hero ? 'min-w-0 basis-full p-2' : undefined}>
             {comments.length > 0 && (
               <ReplyCommentRail comments={comments} onChange={onCommentsChange} />
             )}
@@ -469,8 +590,23 @@ export function ChatComposer({
             )}
           </PromptInputAttachments>
         )}
+        {hero && (
+          <NewChatMenu
+            projectId={context?.projectId ?? null}
+            onSelectProject={onSelectProject}
+            projectSwitching={projectSwitching}
+            onReference={insertMention}
+            onSkill={(name) => appendPrompt(`请使用 ${name} 技能。`)}
+            onUpload={pickFiles}
+            searchEntries={searchEntries}
+            searchFailed={searchFailed}
+            searchSelectedId={searchSelectedId}
+            onRefreshSearch={() => void refreshSearch()}
+            onSelectSearch={(id) => void selectSearchEntry(id)}
+          />
+        )}
         <ComposerEditor
-          className="@max-[220px]:[&_[aria-hidden='true']]:truncate"
+          className={hero ? 'min-w-0 flex-1' : "@max-[220px]:[&_[aria-hidden='true']]:truncate"}
           handleRef={editorRef}
           hero={hero}
           menu={menuApi}
@@ -496,14 +632,18 @@ export function ChatComposer({
           referenceOptions={referenceOptions}
           value={value}
         />
-        <PromptInputToolbar>
-          <IconButton aria-label="添加图片或附件" onClick={pickFiles} title="添加图片或附件">
-            <Paperclip />
-          </IconButton>
-          <IconButton aria-label="引用资料" onClick={insertMention} title="引用资料（@）">
-            <AtSign />
-          </IconButton>
-          {!sidechat && (
+        <PromptInputToolbar className={hero ? 'min-w-0 justify-end @max-sm:basis-full' : undefined}>
+          {!hero && (
+            <>
+              <IconButton aria-label="添加图片或附件" onClick={pickFiles} title="添加图片或附件">
+                <Paperclip />
+              </IconButton>
+              <IconButton aria-label="引用资料" onClick={insertMention} title="引用资料（@）">
+                <AtSign />
+              </IconButton>
+            </>
+          )}
+          {!sidechat && !hero && (
             <Popover onOpenChange={openSearchPicker} open={searchPickerOpen}>
               <PopoverTrigger asChild>
                 <IconButton
@@ -584,6 +724,7 @@ export function ChatComposer({
                   aria-label="模型服务"
                   className={cn(
                     '@max-[220px]:px-1.5',
+                    hero && 'max-w-40',
                     modelUnavailable && 'text-danger hover:text-danger',
                   )}
                   title={modelUnavailable ? `${model}（已停用或被移除，请另选模型）` : model}
@@ -755,6 +896,25 @@ export function ChatComposer({
           </PromptInputMenu>
         )}
       </PromptInput>
+      {showAgentActions && agentActions.length > 0 && (
+        <div className="mt-app-gap grid gap-1">
+          {agentActions.map(({ icon: Icon, label, prompt }) => (
+            <Button
+              className="group h-row-regular w-full justify-start gap-3 rounded-control px-3 text-ui-body focus-visible:bg-hover focus-visible:text-ink"
+              key={label}
+              onClick={() => appendPrompt(prompt)}
+              variant="ghost"
+            >
+              <span aria-hidden className="grid size-5 shrink-0 place-items-center">
+                <Icon className="size-5 group-hover:hidden group-focus-visible:hidden" />
+                <PlayIcon className="hidden size-5 text-accent-ink group-hover:block group-focus-visible:block" />
+              </span>
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
+      {context && <ComposerBranchPicker context={context} />}
     </div>
   );
 }

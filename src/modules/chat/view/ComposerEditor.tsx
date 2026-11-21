@@ -277,7 +277,8 @@ const composerTheme = EditorView.theme({
 });
 
 const heroTheme = EditorView.theme({
-  '.cm-content': { minHeight: '4rem' },
+  '&.cm-editor': { fontSize: 'inherit' },
+  '&.cm-editor .cm-scroller': { lineHeight: 'inherit', padding: '0' },
 });
 
 function filesFromTransfer(transfer: DataTransfer | null): File[] {
@@ -462,18 +463,28 @@ export function ComposerEditor({
   // 与实际插入点不一致。
   const empty = value.length === 0;
   return (
-    <div className={cn('relative', className)} ref={host}>
+    <div
+      className={cn('relative', hero && 'text-ui-body touch:text-ui-input-touch', className)}
+      ref={host}
+    >
       {empty && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute select-none break-words text-ink-2"
-          style={{
-            fontSize: '0.875rem',
-            left: SCROLLER_PADDING.x,
-            lineHeight: '1.65',
-            right: SCROLLER_PADDING.x,
-            top: SCROLLER_PADDING.top,
-          }}
+          className={cn(
+            'pointer-events-none absolute select-none text-ink-2',
+            hero ? 'inset-x-0 top-0 truncate' : 'break-words',
+          )}
+          style={
+            hero
+              ? undefined
+              : {
+                  fontSize: '0.875rem',
+                  left: SCROLLER_PADDING.x,
+                  lineHeight: '1.65',
+                  right: SCROLLER_PADDING.x,
+                  top: SCROLLER_PADDING.top,
+                }
+          }
         >
           {placeholderText}
         </div>

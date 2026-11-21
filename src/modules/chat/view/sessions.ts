@@ -4,6 +4,7 @@ import type {
   ChatSessionSummary,
   WorkspaceChat,
 } from '../../../core/protocol/agent';
+import { showToast } from '../../../ui/toast';
 import { agentClient, chatClient, onAgentEvent } from './client';
 
 // 会话列表镜像：会话事实（chat_sessions 表）在 main，本模块数据全来自 list-sessions 与
@@ -141,6 +142,30 @@ export async function updateSession(
 ): Promise<void> {
   if (!window.delionBot) throw new Error('会话管理仅在桌面端可用');
   await chatClient.update({ id: sessionId, patch });
+  await refreshSessionLists();
+}
+
+export async function moveSession(sessionId: string, projectId: string | null): Promise<void> {
+  if (!window.delionBot) throw new Error('会话管理仅在桌面端可用');
+  await chatClient.move({ id: sessionId, projectId });
+  if (projectId !== null && useSessions.getState().homeSessionId === sessionId)
+    useSessions.setState({ homeSessionId: null });
+  await refreshSessionLists();
+}
+
+/** 存为 ZIP 并提示结果；失败直接抛出，由调用方决定怎么提示。用户取消保存时不提示。 */
+export async function exportSessionArchive(sessionId: string): Promise<void> {
+  const { saved, missing } = await chatClient.export(sessionId);
+  if (saved)
+    showToast({
+      variant: missing.length ? 'neutral' : 'success',
+      title: missing.length ? '会话已导出，部分文件未打包' : '会话已导出',
+      description: missing.length ? missing.join('、') : undefined,
+    });
+}
+
+export async function renameSession(sessionId: string, title: string): Promise<void> {
+  await agentClient['run-command']({ sessionId, name: 'name', args: title });
   await refreshSessionLists();
 }
 

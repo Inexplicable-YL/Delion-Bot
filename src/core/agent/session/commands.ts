@@ -20,6 +20,7 @@ import {
   row,
   sessionCwd,
   storeModel,
+  storeProject,
   storeTitle,
   storeVisibility,
 } from './store';
@@ -63,6 +64,19 @@ export function updateSessionVisibility(
     void closeSidechat(id);
   }
   storeVisibility(id, patch);
+}
+
+/** 工作目录随归属改变；Pi 实例绑定旧 cwd，空闲时丢弃，下一轮按新目录重建。已写出的文件不搬。 */
+export function moveSession(id: string, projectId: string | null) {
+  const meta = row(id);
+  if (meta.project_id === projectId) return;
+  if (projectId !== null) sessionCwd(projectId, null);
+  const entry = live.get(id);
+  if (entry?.run || entry?.session.isCompacting) throw new Error('请等待当前回答完成后再移动');
+  if (entry) disposeLive(id, entry);
+  void closeSidechat(id);
+  storeProject(id, projectId);
+  publish(id);
 }
 
 export function archiveProjectSessions(projectId: string | null): string[] {

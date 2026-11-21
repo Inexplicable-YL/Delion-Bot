@@ -21,6 +21,7 @@ import { useNavigationStore } from '../../../../src/app/renderer/navigation/view
 import { useWorkbenchLayout } from '../../../../src/app/renderer/workbench/layout-store';
 import { walkGroups } from '../../../../src/app/renderer/workbench/layout-schema';
 import { toasts } from '../../../../src/ui/toast';
+import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
 import {
   ChatHome,
   ChatTabSourceProvider,
@@ -34,11 +35,15 @@ vi.mock('../../../../src/modules/chat/view/ChatComposer', () => ({
     value,
     onChange,
     onSend,
+    onSelectProject,
+    projectSwitching,
     notice,
   }: {
     value: string;
     onChange: (value: string) => void;
     onSend: () => void;
+    onSelectProject?: (projectId: string | null) => void;
+    projectSwitching?: boolean;
     notice?: string | null;
   }) => (
     <>
@@ -47,7 +52,10 @@ vi.mock('../../../../src/modules/chat/view/ChatComposer', () => ({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
-      <button onClick={onSend}>发送</button>
+      <button disabled={projectSwitching} onClick={onSend}>
+        发送
+      </button>
+      {onSelectProject && <button onClick={() => onSelectProject('project')}>选择项目</button>}
       {notice && <p role="alert">{notice}</p>}
     </>
   ),
@@ -114,6 +122,7 @@ beforeEach(() => {
   });
   useWorkbenchLayout.setState({ pendingReveal: null });
   useSessions.setState({ chats: {}, lists: {}, homeSessionId: null });
+  useWorkspaceStore.setState({ workspace: { directory: '', entries: [] } });
   useChatDrafts.setState({ drafts: {} });
   for (const channel of Object.keys(api)) delete api[channel];
   Object.assign(api, {
@@ -155,6 +164,60 @@ it('随聊发送首条消息后保持首页聊天，继续显示同一会话的�
   expect(host.querySelector('[aria-label="对话消息"]')?.textContent).toBe('测试随聊\n回答');
   expect(useNavigationStore.getState().view).toBe('home');
   expect(useWorkbenchLayout.getState().pendingReveal).toBeNull();
+  expect(noChatTab()).toBe(true);
+});
+
+it('首页新对话切换归属后在原处显示项目名并发送同一份草稿', async () => {
+  const cwd = 'D:/workspace/project';
+  const moved = { ...emptyChat('first'), projectId: 'project', cwd };
+  useWorkspaceStore.setState({
+    workspace: {
+      directory: 'D:/workspace',
+      entries: [
+        {
+          id: 'project',
+          kind: 'project',
+          name: '测试项目',
+          parentId: null,
+          sourceId: null,
+          updatedAt: '',
+          path: cwd,
+        },
+      ],
+    },
+  });
+  let finishMove!: () => void;
+  api['chat:move'] = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finishMove = resolve;
+      }),
+  );
+  api['agent:open-session'] = async () => moved;
+  const ask = vi.fn(async ({ text }: { text: string }): Promise<WorkspaceChat> => ({
+    ...moved,
+    messages: [{ role: 'user', content: text }],
+  }));
+  api['agent:ask'] = ask;
+  const button = (text: string) =>
+    [...host.querySelectorAll('button')].find((node) => node.textContent === text)!;
+  await act(async () => root.render(<Home />));
+  await act(async () => useChatDrafts.getState().update('first', { prompt: '已有草稿' }));
+  await act(async () => button('选择项目').click());
+  expect(api['chat:move']).toHaveBeenCalledWith({ id: 'first', projectId: 'project' });
+  expect(button('发送').disabled).toBe(true);
+  await act(async () => finishMove());
+  expect(host.querySelector('h1')?.textContent).toBe('测试项目');
+  expect(host.querySelector<HTMLInputElement>('input[aria-label="消息输入"]')?.value).toBe(
+    '已有草稿',
+  );
+  expect(useSessions.getState().chats.first?.cwd).toBe(cwd);
+  await act(async () => button('发送').click());
+  expect(ask).toHaveBeenCalledWith(
+    expect.objectContaining({ sessionId: 'first', text: '已有草稿' }),
+  );
+  expect(useNavigationStore.getState().view).toBe('home');
+  expect(useSessions.getState().homeSessionId).toBe('first');
   expect(noChatTab()).toBe(true);
 });
 

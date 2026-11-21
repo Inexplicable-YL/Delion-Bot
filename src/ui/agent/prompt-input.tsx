@@ -20,21 +20,34 @@ const scrollRowIntoView = (node: HTMLLIElement | null) =>
 export function PromptInput({
   dragging = false,
   dropHint,
+  material = 'solid',
   className,
   children,
   ...props
-}: ComponentProps<'div'> & { dragging?: boolean; dropHint: string }) {
+}: ComponentProps<'div'> & { dragging?: boolean; dropHint: string; material?: 'solid' | 'glass' }) {
+  const radius = material === 'glass' ? 'rounded-window' : 'rounded-card';
   return (
     <div
       className={cn(
-        '@container relative rounded-card border border-line bg-surface shadow-card transition-colors duration-base focus-within:border-line-strong',
-        dragging && 'border-transparent',
+        '@container relative',
+        radius,
+        material === 'glass'
+          ? 'glass outline-line-strong focus-within:outline-1'
+          : cn(
+              'border border-line bg-surface shadow-card transition-colors duration-base focus-within:border-line-strong',
+              dragging && 'border-transparent',
+            ),
         className,
       )}
       {...props}
     >
       {dragging && (
-        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-card border-2 border-dashed border-line-strong bg-page/80 text-ui-body text-ink-2">
+        <div
+          className={cn(
+            'pointer-events-none absolute inset-0 z-raised grid place-items-center border-2 border-dashed border-line-strong bg-page/80 text-ui-body text-ink-2',
+            radius,
+          )}
+        >
           {dropHint}
         </div>
       )}
@@ -43,8 +56,14 @@ export function PromptInput({
   );
 }
 
-export function PromptInputAttachments({ children }: { children: ReactNode }) {
-  return <div className="grid gap-1.5 px-3 pt-3">{children}</div>;
+export function PromptInputAttachments({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return <div className={cn('grid gap-1.5', className ?? 'px-3 pt-3')}>{children}</div>;
 }
 
 export function PromptInputChip({
@@ -76,9 +95,20 @@ export function PromptInputChip({
   );
 }
 
-export function PromptInputToolbar({ children }: { children: ReactNode }) {
+export function PromptInputToolbar({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex items-center gap-1 px-2.5 pb-2.5 pt-1 @max-[160px]:gap-0.5 @max-[160px]:px-1.5">
+    <div
+      className={cn(
+        'flex items-center gap-1',
+        className ?? 'px-2.5 pb-2.5 pt-1 @max-[160px]:gap-0.5 @max-[160px]:px-1.5',
+      )}
+    >
       {children}
     </div>
   );

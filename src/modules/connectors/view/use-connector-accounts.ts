@@ -24,16 +24,16 @@ export function authorizationCompleted(
   );
 }
 
-export function useConnectorAccounts(waiting?: readonly ConnectorAuthorization[]) {
+export function useConnectorAccounts(waiting?: readonly ConnectorAuthorization[], enabled = true) {
   const configured = useQuery({
     queryKey: ['connectors', 'configured'],
     queryFn: () => connectorsClient.configured(),
-    enabled: Boolean(window.delionBot),
+    enabled: enabled && Boolean(window.delionBot),
   });
   const accounts = useQuery({
     queryKey: ['connectors', 'accounts'],
     queryFn: () => connectorsClient.accounts(),
-    enabled: configured.data === true,
+    enabled: enabled && configured.data === true,
     refetchOnWindowFocus: 'always',
     refetchInterval: (query) =>
       waiting?.some(

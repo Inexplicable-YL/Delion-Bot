@@ -302,7 +302,8 @@
   --spacing-row-regular: 2.75rem;
   --spacing-row-comfy: 3.25rem;
   --spacing-sidebar: 15.5rem;
-  --spacing-sidebar-collapsed: 4rem;
+  --spacing-sidebar-collapsed: 3.25rem;
+  --spacing-tab-button: 4rem;
   --spacing-icon-sm: 1rem;
   --spacing-calendar-day: 6rem;
   --spacing-calendar-day-compact: 3.25rem;

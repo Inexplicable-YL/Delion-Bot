@@ -24,7 +24,7 @@ vi.mock('../../../../src/modules/chat/view/ComposerEditor', () => ({
   }: ComponentProps<typeof ComposerEditor>) => {
     handleRef.current = {
       focus: () => {},
-      insertAt: () => {},
+      insertAt: (pos, text) => onChange(`${value.slice(0, pos)}${text}${value.slice(pos)}`),
       replaceRange: () => {},
       selectionStart: () => value.length,
     };
@@ -50,9 +50,11 @@ function Harness({
   contextUsage,
   busy = false,
   sidechat = false,
+  hero = false,
 }: {
   busy?: boolean;
   sidechat?: boolean;
+  hero?: boolean;
   contextUsage: ContextUsageView;
 }) {
   const [value, setValue] = useState('');
@@ -64,6 +66,7 @@ function Harness({
         onCommentsChange={() => {}}
         busy={busy}
         sidechat={sidechat}
+        hero={hero}
         configured
         context={null}
         contextUsage={contextUsage}
@@ -154,4 +157,52 @@ it('运行中输入框有内容时按钮是发送（插队），清空后变回�
   await act(async () => root.render(<Harness busy contextUsage={usage()} sidechat />));
   typeText('顺便问一句');
   expect(button().getAttribute('aria-label')).toBe('停止执行');
+});
+
+it('新对话只显示可用的 Agent 操作，点击时将任务追加到聊天草稿', async () => {
+  const webSearchKey = ['capabilities', 'webSearchOptions'];
+  const entries = [{ id: 'search-id', name: 'Search', provider: 'brave' }];
+  queryClient.setQueryDefaults(['capabilities'], { staleTime: Infinity });
+  queryClient.setQueryData(['capabilities', 'builtin'], [{ name: 'web_fetch', enabled: true }]);
+  queryClient.setQueryData(['capabilities', 'skills'], []);
+  queryClient.setQueryData(webSearchKey, { entries, selectedId: null });
+  queryClient.setQueryDefaults(['connectors'], { staleTime: Infinity });
+  queryClient.setQueryData(['connectors', 'configured'], true);
+  queryClient.setQueryData(
+    ['connectors', 'accounts'],
+    [
+      { id: 'gmail', status: 'ACTIVE', toolkit: { slug: 'gmail' } },
+      { id: 'calendar', status: 'INITIATED', toolkit: { slug: 'googlecalendar' } },
+    ],
+  );
+  const action = (label: string) =>
+    [...host.querySelectorAll('button')].find((button) => button.textContent === label);
+
+  await act(async () => root.render(<Harness contextUsage={usage()} hero />));
+  expect(action('总结网页')).toBeDefined();
+  expect(action('查看 Gmail 未读邮件')).toBeDefined();
+  expect(action('查看今日日程')).toBeUndefined();
+  expect(action('搜索网络')).toBeUndefined();
+
+  await act(async () =>
+    queryClient.setQueryData(webSearchKey, { entries, selectedId: 'search-id' }),
+  );
+  typeText('已有草稿');
+  act(() => action('搜索网络')!.click());
+  expect(host.querySelector('textarea')?.value).toBe('已有草稿\n\n请联网搜索：');
+
+  await act(async () =>
+    queryClient.setQueryData(
+      ['connectors', 'accounts'],
+      ['gmail', 'googlecalendar', 'slack', 'notion'].map((slug) => ({
+        id: slug,
+        status: 'ACTIVE',
+        toolkit: { slug },
+      })),
+    ),
+  );
+  expect(
+    ['查看 Gmail 未读邮件', '查看今日日程', '搜索 Slack 消息', '查找 Notion 页面'].filter(action),
+  ).toHaveLength(3);
+  expect(action('搜索网络')).toBeUndefined();
 });

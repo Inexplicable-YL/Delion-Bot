@@ -1,29 +1,29 @@
-import { useState } from 'react';
-import { Button } from '../../../ui/button';
-import { useDismissOnOutsidePointer } from '../../../ui/use-dismiss-on-outside-pointer';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../ui/hover-card';
 import {
   ArchiveBoxIcon as Archive,
   BookmarkIcon as Pin,
-  BookmarkSlashIcon as PinOff,
   CloudIcon as Cloud,
   FolderIcon as Folder,
 } from '@heroicons/react/24/outline';
 import type { RunStatus } from '../../../core/protocol/agent';
 import { cn } from '../../../ui/cn';
-import { useSessionRunStatus, updateSession } from '../../../modules/chat/view';
-import { showToast } from '../../../ui/toast';
+import { useSessionRunStatus } from '../../../modules/chat/view';
 import { navSubRow, rowActions, rowStatus } from './nav-styles';
-import { IconButton } from '../../../ui/icon-button';
-import { errorMessage } from '../../../core/protocol/contract';
+import { SessionMenu } from './SessionMenu';
 
 export interface NavSessionSummary {
   id: string;
   title: string;
   updatedAt: string;
+  createdAt: string;
   pinned?: boolean;
+  archived?: boolean;
 }
-export type SessionRunBadge = RunStatus | null;
+/** 负载只有会话 id；归属由放下处按导航数据反查，未知 id 直接忽略。 */
+export const sessionDragType = 'application/x-delion-session';
+/** 项目内会话拖动时附带的标记：拖放期间读不到负载，聊天区靠它拒绝放下，移出项目只走菜单。 */
+export const projectSessionDragType = 'application/x-delion-project-session';
+const rowMarker = 'grid size-control-xs shrink-0 place-items-center';
 const badgeVisual: Record<RunStatus, { className: string; label: string }> = {
   pending: { className: 'bg-accent animate-pulse', label: '等待运行' },
   running: { className: 'bg-accent animate-pulse', label: '运行中' },
@@ -35,48 +35,39 @@ const badgeVisual: Record<RunStatus, { className: string; label: string }> = {
 };
 export function SessionRow({
   session,
+  projectId,
   projectName,
   remoteId = null,
   active = false,
+  nested = false,
   onOpen,
+  onMove,
   onDelete,
 }: {
   session: NavSessionSummary;
+  projectId: string | null;
   projectName?: string;
   remoteId?: string | null;
-  badge?: SessionRunBadge;
   active?: boolean;
+  nested?: boolean;
   onOpen: (id: string) => void;
+  onMove: (sessionId: string, projectId: string | null) => void;
   onDelete?: (id: string) => void | Promise<void>;
 }) {
   const ProjectIcon = remoteId ? Cloud : Folder;
   const title = session.title || '新对话';
   const badge = useSessionRunStatus(session.id);
   const visual = badge === null ? null : badgeVisual[badge];
-  const [busy, setBusy] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  useDismissOnOutsidePointer(confirming, '[data-archive-confirm]', () => setConfirming(false), {
-    escape: true,
-  });
-  const change = async (archive: boolean) => {
-    if (busy) return;
-    if (archive && !confirming) {
-      setConfirming(true);
-      return;
-    }
-    setConfirming(false);
-    setBusy(true);
-    try {
-      if (archive) {
-        if (onDelete) await onDelete(session.id);
-      } else await updateSession(session.id, { pinned: !session.pinned });
-    } catch (cause) {
-      showToast({ variant: 'error', title: '会话操作失败', description: errorMessage(cause) });
-    }
-    setBusy(false);
-  };
   return (
-    <div className={navSubRow(active)}>
+    <div
+      className={navSubRow(active, nested)}
+      draggable={!session.archived}
+      onDragStart={(event) => {
+        event.dataTransfer.setData(sessionDragType, session.id);
+        if (projectId !== null) event.dataTransfer.setData(projectSessionDragType, '');
+        event.dataTransfer.effectAllowed = 'move';
+      }}
+    >
       <HoverCard>
         <HoverCardTrigger asChild>
           <button
@@ -92,12 +83,15 @@ export function SessionRow({
                 className={cn('size-1.5 shrink-0 rounded-full', visual.className)}
               />
             )}
-            <span className={cn('min-w-0 flex-1 truncate text-ui-body', active && 'font-medium')}>
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate text-ui-body',
+                active && 'font-medium',
+                session.archived && !active && 'text-ink-4',
+              )}
+            >
               {title}
             </span>
-            {session.pinned && (
-              <Pin className={cn('size-4 shrink-0 text-ink-2', rowStatus)} aria-label="已置顶" />
-            )}
           </button>
         </HoverCardTrigger>
         <HoverCardContent align="start" className="max-w-80" side="right" sideOffset={8}>
@@ -109,43 +103,28 @@ export function SessionRow({
           </span>
         </HoverCardContent>
       </HoverCard>
-      {confirming ? (
-        <Button
-          data-archive-confirm=""
-          size="sm"
-          variant="destructive"
-          className="h-6 px-2 text-ui-subhead"
-          disabled={busy}
-          onBlur={() => setConfirming(false)}
-          onClick={() => void change(true)}
-        >
-          确认归档
-        </Button>
+      {/* 行尾标记与「…」共用一个槽位：归档标记常驻且不可点；置顶标记在「…」出现时让位。 */}
+      {session.archived ? (
+        <span className={cn(rowMarker, 'text-ink-3')}>
+          <Archive className="size-4" role="img" aria-label="已归档" />
+        </span>
       ) : (
-        <div className={rowActions}>
-          <IconButton
-            size="sm"
-            disabled={busy}
-            aria-label={`${session.pinned ? '取消置顶' : '置顶'} ${title}`}
-            title={session.pinned ? '取消置顶' : '置顶'}
-
-            onClick={() => void change(false)}
-          >
-            {session.pinned ? <PinOff /> : <Pin />}
-          </IconButton>
-          {onDelete && (
-            <IconButton
-              size="sm"
-              disabled={busy}
-              aria-label={`归档 ${title}`}
-              title="归档对话"
-
-              onClick={() => void change(true)}
-            >
-              <Archive />
-            </IconButton>
+        <>
+          {session.pinned && (
+            <span className={cn(rowMarker, 'text-ink-2', rowStatus)}>
+              <Pin className="size-4" role="img" aria-label="已置顶" />
+            </span>
           )}
-        </div>
+          <div className={rowActions}>
+            <SessionMenu
+              onDelete={onDelete}
+              onMove={onMove}
+              projectId={projectId}
+              session={session}
+              title={title}
+            />
+          </div>
+        </>
       )}
     </div>
   );

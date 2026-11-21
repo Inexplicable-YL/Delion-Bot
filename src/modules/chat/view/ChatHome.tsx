@@ -1,4 +1,4 @@
-// 随聊的新建、发送与历史查看留在首页聊天；会话与运行状态由 sessions 管理。
+// 首页聊天可原地切换项目；会话与运行状态由 sessions 管理。
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { agentClient } from './client';
 import type { WorkspaceChat } from '../../../core/protocol/agent';
@@ -51,7 +51,7 @@ export function ChatHome({ request }: { request: HomeChatRequest | null }) {
         useSessions.setState({ homeSessionId: chat.sessionId });
         void useSessions
           .getState()
-          .refresh(null)
+          .refresh(chat.projectId)
           .catch(() => {});
       }
       return chat.sessionId;

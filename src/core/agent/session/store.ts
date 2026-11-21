@@ -161,6 +161,14 @@ export function storeVisibility(id: string, patch: { archived?: boolean; pinned?
     db.prepare('UPDATE sessions SET pinned=? WHERE id=?').run(Number(patch.pinned), id);
 }
 
+/** 换归属时 cwd 跟着换：进项目留 NULL 按项目目录解析，回通用池用自己的私有目录。子 Agent 会话只随迁归属。 */
+export function storeProject(id: string, projectId: string | null) {
+  const db = hostPorts().database();
+  const cwd = projectId === null ? chatSessionDirectory(id) : null;
+  db.prepare('UPDATE sessions SET project_id=?, cwd=? WHERE id=?').run(projectId, cwd, id);
+  db.prepare('UPDATE sessions SET project_id=? WHERE parent_id=?').run(projectId, id);
+}
+
 export function archiveProject(projectId: string | null): string[] {
   const db = hostPorts().database();
   const ids = db

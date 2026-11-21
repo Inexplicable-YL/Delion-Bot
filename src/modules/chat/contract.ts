@@ -24,6 +24,8 @@ export const chatContract = defineContract('chat', {
     }),
     output: z.void(),
   },
+  /** projectId 为 null 表示移回通用池。 */
+  move: { input: z.object({ id: sessionId, projectId: z.uuid().nullable() }), output: z.void() },
   /** projectId 为 null 时归档通用会话；返回被归档的会话 id。 */
   archiveProject: { input: z.uuid().nullable(), output: z.custom<string[]>() },
   export: { input: sessionId, output: z.custom<{ saved: boolean; missing: string[] }>() },
