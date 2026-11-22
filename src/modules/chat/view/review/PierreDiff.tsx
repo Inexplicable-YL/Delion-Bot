@@ -1,5 +1,5 @@
 import { useSyncExternalStore, type CSSProperties } from 'react';
-import { parseDiffFromFile } from '@pierre/diffs';
+import { parseDiffFromFile, type FileDiffLoadedChangedFiles } from '@pierre/diffs';
 import { File, FileDiff, PatchDiff, Virtualizer } from '@pierre/diffs/react';
 import { ToolCard } from '../../../../ui/agent/ToolCard';
 import { FileIcon } from '../../../../ui/FileIcon';
@@ -43,12 +43,28 @@ function useAppThemeType() {
   );
 }
 
-export function PatchDiffView({ patch }: { patch: string }) {
+export function PatchDiffView({
+  patch,
+  diffStyle,
+  files,
+  expandUnchanged,
+}: {
+  patch: string;
+  diffStyle: 'unified' | 'split';
+  files: FileDiffLoadedChangedFiles | null;
+  expandUnchanged: boolean;
+}) {
   const themeType = useAppThemeType();
   return (
     <PatchDiff
       className="bg-surface"
-      options={{ ...baseOptions, themeType }}
+      options={{
+        ...baseOptions,
+        themeType,
+        diffStyle,
+        expandUnchanged: files !== null && expandUnchanged,
+        loadDiffFiles: files ? async () => files : undefined,
+      }}
       patch={patch}
       style={reviewTokenStyle}
     />

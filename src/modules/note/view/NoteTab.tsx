@@ -61,7 +61,7 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
       .acquire(id, true)
       .catch((cause) => setFailure({ entryId: id, message: errorMessage(cause) }));
   };
-  const attachDraft = (element: HTMLElement | null) => {
+  const [attachDraft] = useState(() => (element: HTMLElement | null) => {
     if (!element || entryId === null) return;
     void source
       .acquire(entryId)
@@ -75,7 +75,7 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
       window.removeEventListener('focus', onFocus);
       void source.release(entryId);
     };
-  };
+  });
 
   if (entryId === null)
     return (

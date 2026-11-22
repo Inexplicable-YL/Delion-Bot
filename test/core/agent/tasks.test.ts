@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeEach, expect, it, vi } from 'vitest';
@@ -100,16 +100,27 @@ it('长输出完整写进日志：通知只带末尾几行，task_output 按 off
 });
 
 it('task_stop 连同子进程一起结束，记为停止并照常投递', async () => {
-  const marker = join(root, 'survived');
-  const taskId = await start(`(sleep 1; echo > '${marker}') & sleep 30; wait`);
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  const taskId = await start(
+    `node -e 'console.log("child-pid: " + process.pid); setTimeout(() => {}, 30000)' & wait`,
+  );
+  const pid = await vi.waitFor(
+    async () => {
+      const output = await call('task_output', { taskId });
+      const match = /child-pid: (\d+)/.exec(output);
+      expect(match).not.toBeNull();
+      return Number(match![1]);
+    },
+    { timeout: 5_000 },
+  );
   expect(await call('task_stop', { taskId })).toContain('已停止');
   const { notice, wake } = await noticeOf(taskId);
   expect(notice.details.status).toBe('stopped');
   expect(wake).toBe(true);
   expect(await call('task_stop', { taskId })).toContain('任务已经结束');
-  await new Promise((resolve) => setTimeout(resolve, 1500));
-  expect(existsSync(marker)).toBe(false);
+  await vi.waitFor(
+    () => expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' })),
+    { timeout: 5_000 },
+  );
 }, 15_000);
 
 it('用户在面板上手动停止只追加通知、不唤醒；归档删除时结束任务且不投递', async () => {

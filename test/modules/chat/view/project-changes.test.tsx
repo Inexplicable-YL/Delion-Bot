@@ -85,6 +85,13 @@ beforeEach(() => {
   api.readUncommittedChanges.mockImplementation(async () => summaryFixture());
   api.readUncommittedFileChange.mockImplementation(async ({ path }) => detailOf(path));
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   window.delionBot = delion;
   host = document.createElement('div');
