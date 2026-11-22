@@ -184,8 +184,10 @@ export function ProjectSessionNav({
   const [sectionName, setSectionName] = useState('');
   const [archiving, setArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState<string | null>(null);
-  useDismissOnOutsidePointer(confirmArchive !== null, '[data-archive-confirm]', () =>
-    setConfirmArchive(null),
+  const dismissArchiveRef = useDismissOnOutsidePointer(
+    confirmArchive !== null,
+    '[data-archive-confirm]',
+    () => setConfirmArchive(null),
   );
   const sectionNames = [
     ...new Set(
@@ -467,7 +469,7 @@ export function ProjectSessionNav({
         <NewChatIcon className="size-5" />
         <span className="truncate">新建聊天</span>
       </Button>
-      <nav aria-label="功能入口" className="grid shrink-0 gap-px">
+      <nav aria-label="功能入口" className="grid shrink-0 gap-px" ref={dismissArchiveRef}>
         {visibleEntries.map((item) => {
           const Icon = item.icon;
           const active = item.id === 'sources' ? sourcesActive : item.id === activeBusinessId;

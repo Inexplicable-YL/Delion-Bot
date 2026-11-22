@@ -1,7 +1,5 @@
 import {
   useCallback,
-  useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -65,6 +63,7 @@ export function Explorer({
   sortItems = false,
   pending,
   onActivate,
+  onTreeCommit,
 }: {
   items: ExplorerItem[];
   expanded: string[];
@@ -80,20 +79,13 @@ export function Explorer({
   sortItems?: boolean;
   pending?: ExplorerPending | null;
   onActivate?: (id: string) => void;
+  onTreeCommit?: () => void;
 }) {
   'use no memo';
   const root = useRef<HTMLDivElement>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [externalDropTarget, setExternalDropTarget] = useState<string | null>(null);
-  useEffect(() => {
-    if (!selected) return;
-    const index = visible.findIndex((row) => row.item.id === selected);
-    if (virtualized && index >= 0) virtualizer.scrollToIndex(index, { align: 'auto' });
-    root.current
-      ?.querySelector('[role="treeitem"][aria-selected="true"]')
-      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [selected, expanded]);
   const children = useMemo(() => {
     const children = new Map<string | null, ExplorerItem[]>();
     for (const item of items) {
@@ -147,7 +139,6 @@ export function Explorer({
       element = element.parentElement;
     return element;
   };
-  // oxlint-disable-next-line react/incompatible-library
   const virtualizer = useVirtualizer({
     count: visible.length,
     getScrollElement: scrollElement,
@@ -163,52 +154,72 @@ export function Explorer({
         : indices;
     },
   });
-  useEffect(() => {
-    if (virtualized && pendingAnchor >= 0)
-      virtualizer.scrollToIndex(pendingAnchor, { align: 'auto' });
-  }, [pendingAnchor, virtualized]);
-  useLayoutEffect(() => {
-    if (!virtualized || !root.current) return;
-    const element = scrollElement();
+  const [position] = useState(() => ({
+    selection: '',
+    pendingAnchor: -1,
+    frame: 0,
+    focus: null as number | null,
+  }));
+  const measureGeometry = (tree: HTMLDivElement, scroller: HTMLElement) => {
+    const token = getComputedStyle(tree).getPropertyValue('--spacing').trim();
+    const spacing = Number.parseFloat(token);
+    const unit = token.endsWith('rem')
+      ? Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
+      : 1;
+    if (Number.isFinite(spacing)) setRowHeight(spacing * unit * 7);
+    setScrollMargin(
+      tree.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop,
+    );
+  };
+  const [observeGeometry] = useState(() => (element: HTMLDivElement | null) => {
     if (!element) return;
-    const measure = () => {
-      if (!root.current) return;
-      const spacing = Number.parseFloat(
-        getComputedStyle(root.current).getPropertyValue('--spacing'),
-      );
-      const rootStyle = getComputedStyle(root.current);
-      const token = rootStyle.getPropertyValue('--spacing').trim();
-      const unit = token.endsWith('rem')
-        ? Number.parseFloat(getComputedStyle(document.documentElement).fontSize)
-        : 1;
-      if (Number.isFinite(spacing)) setRowHeight(spacing * unit * 7);
-      setScrollMargin(
-        root.current.getBoundingClientRect().top -
-          element.getBoundingClientRect().top +
-          element.scrollTop,
-      );
-    };
-    measure();
+    const tree = root.current;
+    const scroller = scrollElement();
+    if (!tree || !scroller) return;
+    const measure = () => measureGeometry(tree, scroller);
     const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    if (root.current.parentElement) observer.observe(root.current.parentElement);
-    return () => observer.disconnect();
-  }, [virtualized, items]);
+    observer.observe(scroller);
+    observer.observe(tree);
+    if (element.parentElement) observer.observe(element.parentElement);
+    measure();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(position.frame);
+      position.selection = '';
+      position.pendingAnchor = -1;
+    };
+  });
+  const attachTree = (tree: HTMLDivElement | null) => {
+    root.current = tree;
+    if (!tree) return;
+    onTreeCommit?.();
+    const selection = JSON.stringify([virtualized, selected, expanded]);
+    const selectionChanged = position.selection !== selection;
+    const pendingChanged = position.pendingAnchor !== pendingAnchor;
+    position.selection = selection;
+    position.pendingAnchor = pendingAnchor;
+    if (virtualized && (selectionChanged || pendingChanged)) {
+      cancelAnimationFrame(position.frame);
+      position.frame = requestAnimationFrame(() => {
+        if (pendingChanged && pendingAnchor >= 0) {
+          virtualizer.scrollToIndex(pendingAnchor, { align: 'auto' });
+          return;
+        }
+        if (selectionChanged && selected) {
+          const index = visible.findIndex((row) => row.item.id === selected);
+          if (index >= 0) virtualizer.scrollToIndex(index, { align: 'auto' });
+        }
+      });
+    }
+    if (!virtualized && selectionChanged && selected)
+      tree
+        .querySelector('[role="treeitem"][aria-selected="true"]')
+        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  };
   const virtualRows = virtualizer.getVirtualItems();
   const rendered = virtualized
     ? virtualRows.map((row) => ({ ...visible[row.index]!, index: row.index, start: row.start }))
     : visible.map((row, index) => ({ ...row, index, start: 0 }));
-  const pendingFocus = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    if (pendingFocus.current === null) return;
-    const element = root.current?.querySelector<HTMLElement>(
-      `[data-tree-index="${pendingFocus.current}"]`,
-    );
-    if (element) {
-      element.focus();
-      pendingFocus.current = null;
-    }
-  });
   const parentOf = useMemo(() => new Map(items.map((item) => [item.id, item.parentId])), [items]);
   const projectIds = useMemo(
     () => new Set(items.filter((item) => item.project).map((item) => item.id)),
@@ -235,12 +246,12 @@ export function Explorer({
     setExternalDropTarget(null);
   };
   const focusItem = (index: number) => {
-    pendingFocus.current = index;
+    position.focus = index;
     if (virtualized) virtualizer.scrollToIndex(index, { align: 'auto' });
     const element = root.current?.querySelector<HTMLElement>(`[data-tree-index="${index}"]`);
     if (element) {
       element.focus();
-      pendingFocus.current = null;
+      position.focus = null;
     }
   };
   const keyDown = (event: KeyboardEvent, index: number, item: ExplorerItem, branch: boolean) => {
@@ -360,174 +371,181 @@ export function Explorer({
       : undefined;
   const activeDrop = dropTarget ?? externalDropTarget;
   return (
-    <div
-      ref={root}
-      role="tree"
-      aria-label={label}
-      className="grid min-w-0 w-full content-start gap-0 p-1"
-      style={
-        virtualized
-          ? {
-              position: 'relative',
-              display: 'block',
-              height: `calc(${virtualizer.getTotalSize()}px + 0.5rem)`,
-            }
-          : undefined
-      }
-      onDragLeave={(event) => {
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-        resetDrag();
-      }}
-      onDragEnd={resetDrag}
-      onDragOver={(event) => {
-        if (onImportFiles && isFileDrag(event)) {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = 'copy';
-        }
-      }}
-      onDrop={(event) => {
-        if (!onImportFiles || !isFileDrag(event)) return;
-        if (event.defaultPrevented) return;
-        event.preventDefault();
-        onImportFiles(Array.from(event.dataTransfer.files), null);
-        resetDrag();
-      }}
-    >
-      {pending && visible.length === 0 && pendingAt && (
-        <PendingRow key="pending" pending={pending} level={pendingAt.level} />
-      )}
-      {rendered.map(({ item, level, index, start }) => {
-        const branch = Boolean(item.container || children.has(item.id));
-        const fileIcon = !branch && !item.icon ? fileIconUrl(item.name) : null;
-        const Icon = item.icon ?? (item.project ? FolderKanban : branch ? Folder : FileText);
-        const showIcon = !branch || item.project || item.accent !== undefined;
-        const accent = item.accent ? { color: item.accent } : undefined;
-        const ancestors = trailOf(item.parentId);
-        const dropRegion =
-          activeDrop !== null && (activeDrop === item.id || ancestors.includes(activeDrop));
-        return (
-          <div
-            key={item.id}
-            data-index={index}
-            className="min-w-0"
-            ref={virtualized ? virtualizer.measureElement : undefined}
-            style={
-              virtualized
-                ? {
-                    position: 'absolute',
-                    left: '0.25rem',
-                    right: '0.25rem',
-                    top: 0,
-                    transform: `translateY(calc(${start - scrollMargin}px + 0.25rem))`,
-                  }
-                : undefined
-            }
-          >
-            {pending && pendingAt?.index === index && (
-              <PendingRow pending={pending} level={pendingAt.level} />
-            )}
-            <div
-              role="treeitem"
-              data-tree-index={index}
-              aria-posinset={(children.get(item.parentId) ?? []).indexOf(item) + 1}
-              aria-setsize={children.get(item.parentId)?.length}
-              aria-label={item.name}
-              aria-level={level}
-              aria-expanded={branch ? open.has(item.id) : undefined}
-              aria-selected={selected === item.id}
-              tabIndex={
-                selected === item.id ||
-                (!visible.some((v) => v.item.id === selected) && index === 0)
-                  ? 0
-                  : -1
+    <div className="contents" ref={virtualized ? observeGeometry : undefined}>
+      <div
+        ref={attachTree}
+        role="tree"
+        aria-label={label}
+        className="grid min-w-0 w-full content-start gap-0 p-1"
+        style={
+          virtualized
+            ? {
+                position: 'relative',
+                display: 'block',
+                height: `calc(${virtualizer.getTotalSize()}px + 0.5rem)`,
               }
-              onKeyDown={(event) => {
-                if (event.target === event.currentTarget) keyDown(event, index, item, branch);
-              }}
-              {...dragProps?.(item, branch)}
-              onClick={(event) => {
-                event.currentTarget.focus();
-                if (event.altKey && onOpenToSide) onOpenToSide(item.id);
-                else onSelect(item.id);
-              }}
-              onDoubleClick={() => {
-                if (!branch) onActivate?.(item.id);
-              }}
-              onContextMenu={(event) => {
-                const trigger = event.currentTarget.querySelector<HTMLButtonElement>(
-                  '[data-slot="dropdown-menu-trigger"]',
-                );
-                if (trigger) {
-                  event.preventDefault();
-                  trigger.click();
-                }
-              }}
-              className={cn(
-                'group isolate relative flex h-7 min-w-0 cursor-default items-center gap-1.5 rounded-chip pr-1 text-ui-body outline-none before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:bottom-px before:-z-10 before:rounded-chip before:transition-colors focus-visible:ring-2 focus-visible:ring-accent',
-                selected === item.id
-                  ? 'before:bg-selected text-ink'
-                  : 'text-ink-2 hover:text-ink hover:before:bg-hover',
-                dropRegion && 'rounded-none bg-accent-tint text-ink',
-              )}
-              style={{ paddingLeft: `calc(var(--spacing) * ${2 + (level - 1) * 4})` }}
+            : undefined
+        }
+        onDragLeave={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          resetDrag();
+        }}
+        onDragEnd={resetDrag}
+        onDragOver={(event) => {
+          if (onImportFiles && isFileDrag(event)) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+          }
+        }}
+        onDrop={(event) => {
+          if (!onImportFiles || !isFileDrag(event)) return;
+          if (event.defaultPrevented) return;
+          event.preventDefault();
+          onImportFiles(Array.from(event.dataTransfer.files), null);
+          resetDrag();
+        }}
+      >
+        {pending && visible.length === 0 && pendingAt && (
+          <PendingRow key="pending" pending={pending} level={pendingAt.level} />
+        )}
+        {rendered.map(({ item, level, index, start }) => {
+          const branch = Boolean(item.container || children.has(item.id));
+          const fileIcon = !branch && !item.icon ? fileIconUrl(item.name) : null;
+          const Icon = item.icon ?? (item.project ? FolderKanban : branch ? Folder : FileText);
+          const showIcon = !branch || item.project || item.accent !== undefined;
+          const accent = item.accent ? { color: item.accent } : undefined;
+          const ancestors = trailOf(item.parentId);
+          const dropRegion =
+            activeDrop !== null && (activeDrop === item.id || ancestors.includes(activeDrop));
+          return (
+            <div
+              key={item.id}
+              data-index={index}
+              className="min-w-0"
+              ref={virtualized ? virtualizer.measureElement : undefined}
+              style={
+                virtualized
+                  ? {
+                      position: 'absolute',
+                      left: '0.25rem',
+                      right: '0.25rem',
+                      top: 0,
+                      transform: `translateY(calc(${start - scrollMargin}px + 0.25rem))`,
+                    }
+                  : undefined
+              }
             >
-              {Array.from({ length: level - 1 }, (_, guide) =>
-                projectIds.has(ancestors[guide] ?? '') ? null : (
-                  <span
-                    key={guide}
-                    aria-hidden
-                    className={cn(
-                      'absolute inset-y-0 w-px -translate-x-1/2',
-                      selectedTrail.has(ancestors[guide] ?? '') ? 'bg-line-strong' : 'bg-line',
-                    )}
-                    style={{ left: `calc(var(--spacing) * ${4 + guide * 4})` }}
-                  />
-                ),
+              {pending && pendingAt?.index === index && (
+                <PendingRow pending={pending} level={pendingAt.level} />
               )}
-              {branch && (
-                <button
-                  type="button"
-                  aria-label={`${open.has(item.id) ? '收起' : '展开'} ${item.name}`}
-                  tabIndex={-1}
-                  className="grid size-4 shrink-0 place-items-center"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onExpand(item.id, !open.has(item.id));
-                  }}
-                >
-                  <CollapseChevron open={open.has(item.id)} />
-                </button>
-              )}
-              {showIcon &&
-                (fileIcon ? (
-                  <img alt="" className="size-4 shrink-0" draggable={false} src={fileIcon} />
-                ) : (
-                  <Icon className="size-4 shrink-0 text-ink-2" style={accent} />
-                ))}
-              <span
-                className={cn('min-w-0 flex-1 truncate', item.gitIgnored && 'text-ink-2')}
-                title={item.title ?? item.name}
+              <div
+                role="treeitem"
+                ref={(element) => {
+                  if (!element || position.focus !== index) return;
+                  position.focus = null;
+                  element.focus();
+                }}
+                data-tree-index={index}
+                aria-posinset={(children.get(item.parentId) ?? []).indexOf(item) + 1}
+                aria-setsize={children.get(item.parentId)?.length}
+                aria-label={item.name}
+                aria-level={level}
+                aria-expanded={branch ? open.has(item.id) : undefined}
+                aria-selected={selected === item.id}
+                tabIndex={
+                  selected === item.id ||
+                  (!visible.some((v) => v.item.id === selected) && index === 0)
+                    ? 0
+                    : -1
+                }
+                onKeyDown={(event) => {
+                  if (event.target === event.currentTarget) keyDown(event, index, item, branch);
+                }}
+                {...dragProps?.(item, branch)}
+                onClick={(event) => {
+                  event.currentTarget.focus();
+                  if (event.altKey && onOpenToSide) onOpenToSide(item.id);
+                  else onSelect(item.id);
+                }}
+                onDoubleClick={() => {
+                  if (!branch) onActivate?.(item.id);
+                }}
+                onContextMenu={(event) => {
+                  const trigger = event.currentTarget.querySelector<HTMLButtonElement>(
+                    '[data-slot="dropdown-menu-trigger"]',
+                  );
+                  if (trigger) {
+                    event.preventDefault();
+                    trigger.click();
+                  }
+                }}
+                className={cn(
+                  'group isolate relative flex h-7 min-w-0 cursor-default items-center gap-1.5 rounded-chip pr-1 text-ui-body outline-none before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:bottom-px before:-z-10 before:rounded-chip before:transition-colors focus-visible:ring-2 focus-visible:ring-accent',
+                  selected === item.id
+                    ? 'before:bg-selected text-ink'
+                    : 'text-ink-2 hover:text-ink hover:before:bg-hover',
+                  dropRegion && 'rounded-none bg-accent-tint text-ink',
+                )}
+                style={{ paddingLeft: `calc(var(--spacing) * ${2 + (level - 1) * 4})` }}
               >
-                {item.name}
-              </span>
-              {item.badge && (
-                <span className="text-ui-subhead tabular-nums text-ink-2">{item.badge}</span>
-              )}
-              {actions && (
+                {Array.from({ length: level - 1 }, (_, guide) =>
+                  projectIds.has(ancestors[guide] ?? '') ? null : (
+                    <span
+                      key={guide}
+                      aria-hidden
+                      className={cn(
+                        'absolute inset-y-0 w-px -translate-x-1/2',
+                        selectedTrail.has(ancestors[guide] ?? '') ? 'bg-line-strong' : 'bg-line',
+                      )}
+                      style={{ left: `calc(var(--spacing) * ${4 + guide * 4})` }}
+                    />
+                  ),
+                )}
+                {branch && (
+                  <button
+                    type="button"
+                    aria-label={`${open.has(item.id) ? '收起' : '展开'} ${item.name}`}
+                    tabIndex={-1}
+                    className="grid size-4 shrink-0 place-items-center"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onExpand(item.id, !open.has(item.id));
+                    }}
+                  >
+                    <CollapseChevron open={open.has(item.id)} />
+                  </button>
+                )}
+                {showIcon &&
+                  (fileIcon ? (
+                    <img alt="" className="size-4 shrink-0" draggable={false} src={fileIcon} />
+                  ) : (
+                    <Icon className="size-4 shrink-0 text-ink-2" style={accent} />
+                  ))}
                 <span
-                  className="shrink-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100"
-                  onClick={(event) => event.stopPropagation()}
+                  className={cn('min-w-0 flex-1 truncate', item.gitIgnored && 'text-ink-2')}
+                  title={item.title ?? item.name}
                 >
-                  {actions(item)}
+                  {item.name}
                 </span>
+                {item.badge && (
+                  <span className="text-ui-subhead tabular-nums text-ink-2">{item.badge}</span>
+                )}
+                {actions && (
+                  <span
+                    className="shrink-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {actions(item)}
+                  </span>
+                )}
+              </div>
+              {pending && pendingAt?.index === visible.length && index === visible.length - 1 && (
+                <PendingRow pending={pending} level={pendingAt.level} />
               )}
             </div>
-            {pending && pendingAt?.index === visible.length && index === visible.length - 1 && (
-              <PendingRow pending={pending} level={pendingAt.level} />
-            )}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

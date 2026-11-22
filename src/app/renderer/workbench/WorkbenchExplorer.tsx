@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   ArchiveBoxIcon as Archive,
   ArrowsRightLeftIcon,
@@ -122,22 +122,21 @@ export function WorkbenchExplorer({
   const mobileOpen = useMobileDrawer((s) => s.drawer === 'explorer');
   const narrow = useExplorerState((s) => s.narrow);
   const viewportWidth = useViewportWidth();
-  const drawerRef = useRef<HTMLElement>(null);
   const [mode, setMode] = useState<'files' | 'changes'>('files');
   const changesProjectId = root?.kind === 'project' && root.path && !remoteRoot ? root.id : null;
   const showChanges = changesProjectId !== null && mode === 'changes';
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [draggingEntry, setDraggingEntry] = useState(false);
 
-  useEffect(() => {
-    if (!narrow || !mobileOpen) return;
-    drawerRef.current?.focus();
+  const drawerRef = (drawer: HTMLElement | null) => {
+    if (!drawer || !narrow || !mobileOpen) return;
+    drawer.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') useMobileDrawer.getState().setDrawer(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [narrow, mobileOpen]);
+  };
 
   const expand = (id: string, open: boolean) => useTreeState.getState().expand(id, open);
   const container = () => currentContainerOf(selected ?? activeDocKey, rootId);

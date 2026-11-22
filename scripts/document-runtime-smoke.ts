@@ -1,4 +1,3 @@
-// Explicit online smoke: installs into a temporary profile, never the user's component directory.
 import { app } from 'electron';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';

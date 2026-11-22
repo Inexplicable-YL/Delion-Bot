@@ -71,7 +71,7 @@ export function ChatModelPicker({
             'max-w-40 text-ui-headline',
             modelUnavailable && 'text-danger hover:text-danger',
           )}
-          title={modelUnavailable ? `${model}（已停用或被移除，请另选模型）` : '思考强度'}
+          title={modelUnavailable ? `${model}（已停用或被移除，请另选模型）` : undefined}
         >
           <span className="truncate">{modelUnavailable ? '模型已停用' : displayedEffort}</span>
           <ChevronDownIcon aria-hidden="true" className="size-4 shrink-0" />

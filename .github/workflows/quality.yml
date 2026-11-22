@@ -2,24 +2,20 @@ name: Quality
 
 on:
   workflow_call:
-    inputs:
-      workflows:
-        description: Validate GitHub Actions workflows
-        required: true
-        type: boolean
-      app:
-        description: Run application lint and type checks
-        required: true
-        type: boolean
 
 permissions:
   contents: read
+
+env:
+  ACTIONLINT_VERSION: 1.7.12
+  TYPOS_VERSION: v1.52.2
+  ZIZMOR_VERSION: v1.32.0
 
 jobs:
   quality:
     name: Format and static checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
         with:
@@ -35,14 +31,26 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Check formatting
         run: pnpm format:check
-      - name: Validate workflows
-        if: inputs.workflows
-        uses: docker://rhysd/actionlint:1.7.12
-        with:
-          args: -color -shellcheck= -pyflakes=
-      - name: Lint
-        if: inputs.app
+      - name: Check file names
+        run: pnpm check:names
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=critical
+      - name: Install static analysis tools
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" | tar -xz -C "$RUNNER_TEMP" actionlint
+          curl -fsSL "https://github.com/crate-ci/typos/releases/download/${TYPOS_VERSION}/typos-${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "$RUNNER_TEMP" typos
+          curl -fsSL "https://github.com/zizmorcore/zizmor/releases/download/${ZIZMOR_VERSION}/zizmor-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C "$RUNNER_TEMP" zizmor
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Check spelling
+        run: typos
+      - name: Audit workflows
+        run: zizmor --format=plain .github/workflows
+      - name: Lint workflows
+        run: actionlint
+      - name: Lint with oxlint
         run: pnpm lint
+      - name: Lint with ESLint
+        run: pnpm lint:eslint
       - name: Typecheck
-        if: inputs.app
         run: pnpm typecheck

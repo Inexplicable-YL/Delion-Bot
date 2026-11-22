@@ -1,5 +1,5 @@
 import { ProjectChangeTabStatus } from '../../../modules/chat/view';
-import { useEffect, useRef, type DragEvent, type KeyboardEvent } from 'react';
+import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { XMarkIcon as X } from '@heroicons/react/24/outline';
 import type { GroupNode, TabId } from '../../../modules/workspace/contract';
@@ -10,7 +10,7 @@ import {
   ContextMenuTrigger,
 } from '../../../ui/ContextMenu';
 import { cn } from '../../../ui/cn';
-import { useHorizontalWheel } from '../../../ui/use-horizontal-wheel';
+import { horizontalWheelRef } from '../../../ui/use-horizontal-wheel';
 import { useWorkbenchLayout } from './layout-store';
 import { kindOf, registry, titleOf } from './registry';
 import { fileIconUrl } from '../../../modules/workspace/view';
@@ -35,19 +35,27 @@ export function TabBar({
   const moveTab = useWorkbenchLayout((s) => s.moveTab);
   const togglePin = useWorkbenchLayout((s) => s.togglePin);
   const keepTab = useWorkbenchLayout((s) => s.keepTab);
-  const listRef = useHorizontalWheel<HTMLDivElement>();
   const tabRefs = useRef(new Map<TabId, HTMLDivElement>());
-
-  useEffect(() => {
-    if (!group.active) return;
-    listRef.current
-      ?.querySelector('[data-active="true"]')
-      ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  }, [group.active]);
+  const [revealActiveTab] = useState(() => {
+    let revealed: HTMLDivElement | null = null;
+    return (element: HTMLDivElement, active: boolean) => {
+      if (!active) {
+        if (revealed === element) revealed = null;
+        return;
+      }
+      if (revealed === element) return;
+      revealed = element;
+      element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    };
+  });
 
   const setTabRef = (tab: TabId) => (element: HTMLDivElement | null) => {
-    if (element) tabRefs.current.set(tab, element);
-    else tabRefs.current.delete(tab);
+    if (!element) return;
+    tabRefs.current.set(tab, element);
+    revealActiveTab(element, tab === group.active);
+    return () => {
+      tabRefs.current.delete(tab);
+    };
   };
 
   const onTabKeyDown = (event: KeyboardEvent<HTMLDivElement>, tab: TabId) => {
@@ -113,7 +121,7 @@ export function TabBar({
     <div className="relative z-raised @container flex min-h-toolbar min-w-0 shrink-0 items-center gap-2 bg-surface px-app">
       {showReveal && <ExplorerRevealButton className="self-center" />}
       <div
-        ref={listRef}
+        ref={horizontalWheelRef}
         role="tablist"
         aria-label={activeTab ? `标签页：${titleOf(activeTab, queryClient)}` : '工作组标签页'}
         className="glass flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-full p-1 [scrollbar-width:none]"

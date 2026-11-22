@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   type DocumentContent,
@@ -176,10 +176,9 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
 
   const onRemoved = (liveIds: Set<string>) => purgeRemovedEntries(liveIds);
 
-  useEffect(() => {
-    if (!loaded) return;
-    void useWorkbenchLayout.getState().init(projectId);
-  }, [loaded, projectId]);
+  const initializeLayout = (element: HTMLDivElement | null) => {
+    if (element && loaded) void useWorkbenchLayout.getState().init(projectId);
+  };
 
   const chatSource: ChatTabSource = {
     referenceSource,
@@ -279,7 +278,7 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
     <ChatTabSourceProvider source={chatSource}>
       <NoteDraftSourceProvider source={draftSource}>
         <ContentLoaderProvider loader={loader}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col" ref={initializeLayout}>
             {workspaceError && (
               <ErrorText size="sm" className="px-4 py-2">
                 {workspaceError}

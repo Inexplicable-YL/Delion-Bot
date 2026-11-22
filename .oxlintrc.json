@@ -382,6 +382,18 @@
           }
         ]
       }
+    },
+    {
+      "files": ["scripts/terminal-smoke.cjs", "src/modules/workspace/main/disk-name.ts"],
+      "rules": {
+        "no-control-regex": "off"
+      }
+    },
+    {
+      "files": ["src/modules/workspace/view/Explorer.tsx"],
+      "rules": {
+        "react/incompatible-library": "off"
+      }
     }
   ]
 }

@@ -1,9 +1,9 @@
-import { useEffect, useEffectEvent, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown, markdownKeymap, markdownLanguage } from '@codemirror/lang-markdown';
 import { LanguageDescription, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
-import { Annotation, Compartment, EditorState, Transaction } from '@codemirror/state';
+import { Annotation, Compartment, EditorState, Facet, Transaction } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, placeholder } from '@codemirror/view';
 import { search, searchKeymap } from '@codemirror/search';
@@ -56,10 +56,29 @@ const previewConf = new Compartment();
 const readOnlyConf = new Compartment();
 const externalSync = Annotation.define<boolean>();
 
+type EditorCallbacks = {
+  onChange: (text: string) => void;
+  onSave: () => void;
+  onScroll: (top: number) => void;
+};
+
+const editorCallbacks = Facet.define<EditorCallbacks, EditorCallbacks>({
+  combine: (values) => values[0]!,
+});
+const callbacksConf = new Compartment();
+
+type EditorOptions = {
+  filename: string | undefined;
+  wordWrap: boolean;
+  readOnly: boolean;
+  ariaLabel: string;
+  placeholderText: string;
+};
+
 type EditorHandlers = {
   onChange: (text: string) => void;
   onSave: () => void;
-  sync: () => void;
+  finishComposition: () => void;
   onCursor: (cursor: { line: number; column: number }) => void;
 };
 
@@ -126,48 +145,18 @@ export function MarkdownEditor({
   extensions?: Extension[];
   alwaysWrap?: boolean;
 }) {
-  const host = useRef<HTMLDivElement>(null);
-  const view = useRef<EditorView | null>(null);
+  const editor = useRef<{
+    view: EditorView;
+    replaceText: (text: string) => void;
+    options: EditorOptions | null;
+  } | null>(null);
   const generatedKey = useId();
   const [instanceKey] = useState(editorStateKey ?? generatedKey);
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const wordWrap = useEditorSettings((state) => state.wordWrap) || alwaysWrap;
-  const latestValue = useRef(value);
-  const lastPublishedValue = useRef<string | null>(null);
-  const publishChange = useEffectEvent((text: string) => {
-    lastPublishedValue.current = text;
-    latestValue.current = text;
-    onChange(text);
-  });
-  const save = useEffectEvent(() => onSave());
-  const reportScroll = useEffectEvent((top: number) => onScroll(top));
-  const syncValue = () => {
-    const current = view.current;
-    if (!current) return;
-    if (latestValue.current === lastPublishedValue.current) return;
-    const text = current.state.sliceDoc();
-    if (latestValue.current === text) return;
-    if (current.compositionStarted) {
-      return;
-    }
-    lastPublishedValue.current = null;
-    current.dispatch({
-      changes: replaceDocument(text, latestValue.current),
-      annotations: [externalSync.of(true), Transaction.addToHistory.of(false)],
-    });
-  };
-  const appliedFilename = useRef(filename);
-  const loadLanguage = (
-    current: EditorView,
-    language: LanguageDescription,
-    name: string | undefined,
-  ) => {
-    void language.load().then((support) => {
-      if (view.current === current && appliedFilename.current === name)
-        current.dispatch({ effects: languageConf.reconfigure(support) });
-    });
-  };
-  useEffect(() => {
+  const callbacks = { onChange, onSave, onScroll };
+  const [attachEditor] = useState(() => (element: HTMLDivElement | null) => {
+    if (!element) return;
     const initial = languageForFilename(filename);
     const persistent = editorStateKey !== undefined;
     const transient: { current?: EditorSession } = {};
@@ -175,6 +164,7 @@ export function MarkdownEditor({
     const extensions: Extension[] = [
       EditorState.lineSeparator.of(lineSeparatorOf(value)),
       history(),
+      callbacksConf.of(editorCallbacks.of(callbacks)),
       languageConf.of(
         initial.kind === 'markdown'
           ? markdown({ base: markdownLanguage, codeLanguages: languages })
@@ -247,7 +237,7 @@ export function MarkdownEditor({
           return false;
         },
         compositionend: () => {
-          window.setTimeout(() => handlers.get(instanceKey)?.sync(), 0);
+          handlers.get(instanceKey)?.finishComposition();
           return false;
         },
       }),
@@ -262,7 +252,25 @@ export function MarkdownEditor({
     const session: EditorSession = { state, scrollTop: previous?.scrollTop ?? initialScroll() };
     transient.current = session;
     if (persistent) sessions.set(instanceKey, session);
-    const current = new EditorView({ parent: host.current!, state });
+    const current = new EditorView({ parent: element, state });
+    let pendingText: string | null = null;
+    let compositionFrame = 0;
+    const replaceText = (next: string) => {
+      const text = current.state.sliceDoc();
+      if (next === text) {
+        pendingText = null;
+        return;
+      }
+      if (current.compositionStarted) {
+        pendingText = next;
+        return;
+      }
+      pendingText = null;
+      current.dispatch({
+        changes: replaceDocument(text, next),
+        annotations: [externalSync.of(true), Transaction.addToHistory.of(false)],
+      });
+    };
     current.scrollDOM.scrollTop = session.scrollTop;
     const updateCursor = () => {
       const position = current.state.doc.lineAt(current.state.selection.main.head);
@@ -273,26 +281,26 @@ export function MarkdownEditor({
     };
     const handleScroll = () => {
       session.scrollTop = current.scrollDOM.scrollTop;
-      reportScroll(current.scrollDOM.scrollTop);
+      current.state.facet(editorCallbacks).onScroll(session.scrollTop);
     };
     const boundHandlers: EditorHandlers = {
-      onChange: publishChange,
-      onSave: save,
-      sync: syncValue,
+      onChange: (text) => {
+        pendingText = null;
+        current.state.facet(editorCallbacks).onChange(text);
+      },
+      onSave: () => current.state.facet(editorCallbacks).onSave(),
+      finishComposition: () => {
+        cancelAnimationFrame(compositionFrame);
+        compositionFrame = requestAnimationFrame(() => {
+          if (pendingText !== null) replaceText(pendingText);
+        });
+      },
       onCursor: setCursor,
     };
     handlers.set(instanceKey, boundHandlers);
     current.scrollDOM.addEventListener('scroll', handleScroll);
-    view.current = current;
+    editor.current = { view: current, replaceText, options: null };
     updateCursor();
-    current.dispatch({
-      effects: languageConf.reconfigure(
-        initial.kind === 'markdown'
-          ? markdown({ base: markdownLanguage, codeLanguages: languages })
-          : [],
-      ),
-    });
-    if (initial.kind === 'code') loadLanguage(current, initial.language, filename);
     return () => {
       if (!persistent || sessions.get(instanceKey) === session) {
         session.state = current.state;
@@ -300,71 +308,57 @@ export function MarkdownEditor({
       }
       current.scrollDOM.removeEventListener('scroll', handleScroll);
       current.destroy();
-      view.current = null;
-      if (handlers.get(instanceKey)?.sync === boundHandlers.sync) handlers.delete(instanceKey);
+      editor.current = null;
+      cancelAnimationFrame(compositionFrame);
+      if (handlers.get(instanceKey) === boundHandlers) handlers.delete(instanceKey);
     };
-  }, []);
-  useEffect(() => {
-    view.current?.dispatch({
-      effects: wrappingConf.reconfigure(wordWrap ? EditorView.lineWrapping : []),
-    });
-  }, [wordWrap]);
-  useEffect(() => {
-    view.current?.dispatch({
-      effects: readOnlyConf.reconfigure(EditorState.readOnly.of(readOnly)),
-    });
-  }, [readOnly]);
-  useEffect(() => {
-    view.current?.dispatch({
-      effects: contentAttributesConf.reconfigure(
-        EditorView.contentAttributes.of({
-          spellcheck: 'false',
-          'aria-label': ariaLabel,
-        }),
-      ),
-    });
-  }, [ariaLabel]);
-  useEffect(() => {
-    view.current?.dispatch({
-      effects: layoutConf.reconfigure(
-        EditorView.editorAttributes.of({
-          class: languageForFilename(filename).kind === 'markdown' ? '' : 'cm-source-file',
-        }),
-      ),
-    });
-  }, [filename]);
-  useEffect(() => {
-    latestValue.current = value;
-    syncValue();
-  }, [value]);
-  useEffect(() => {
-    const current = view.current;
-    if (!current || appliedFilename.current === filename) return;
-    appliedFilename.current = filename;
-    const apply = (extension: Extension) => {
-      if (view.current === current && appliedFilename.current === filename)
-        current.dispatch({ effects: languageConf.reconfigure(extension) });
-    };
-    const resolved = languageForFilename(filename);
-    if (resolved.kind === 'code') {
-      apply([]);
-      loadLanguage(current, resolved.language, filename);
-    } else {
-      apply(
-        resolved.kind === 'markdown'
-          ? markdown({ base: markdownLanguage, codeLanguages: languages })
-          : [],
+  });
+  const syncEditor = (element: HTMLDivElement | null) => {
+    const mounted = editor.current;
+    if (!element || !mounted) return;
+    const { view: current, options: previous } = mounted;
+    mounted.options = { filename, wordWrap, readOnly, ariaLabel, placeholderText };
+    const effects = [];
+    if (current.state.facet(editorCallbacks) !== callbacks)
+      effects.push(callbacksConf.reconfigure(editorCallbacks.of(callbacks)));
+    if (previous?.wordWrap !== wordWrap)
+      effects.push(wrappingConf.reconfigure(wordWrap ? EditorView.lineWrapping : []));
+    if (previous?.readOnly !== readOnly)
+      effects.push(readOnlyConf.reconfigure(EditorState.readOnly.of(readOnly)));
+    if (previous?.ariaLabel !== ariaLabel)
+      effects.push(
+        contentAttributesConf.reconfigure(
+          EditorView.contentAttributes.of({ spellcheck: 'false', 'aria-label': ariaLabel }),
+        ),
       );
+    if (previous?.placeholderText !== placeholderText)
+      effects.push(placeholderConf.reconfigure(placeholder(placeholderText)));
+    if (!previous || previous.filename !== filename) {
+      const resolved = languageForFilename(filename);
+      effects.push(
+        layoutConf.reconfigure(
+          EditorView.editorAttributes.of({
+            class: resolved.kind === 'markdown' ? '' : 'cm-source-file',
+          }),
+        ),
+        languageConf.reconfigure(
+          resolved.kind === 'markdown'
+            ? markdown({ base: markdownLanguage, codeLanguages: languages })
+            : [],
+        ),
+      );
+      if (resolved.kind === 'code')
+        void resolved.language.load().then((support) => {
+          if (editor.current === mounted && mounted.options?.filename === filename)
+            current.dispatch({ effects: languageConf.reconfigure(support) });
+        });
     }
-  }, [filename]);
-  useEffect(() => {
-    view.current?.dispatch({
-      effects: placeholderConf.reconfigure(placeholder(placeholderText)),
-    });
-  }, [placeholderText]);
+    if (effects.length) current.dispatch({ effects });
+    mounted.replaceText(value);
+  };
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-      <div ref={host} className="min-h-0 w-full flex-1 overflow-hidden" />
+    <div ref={syncEditor} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div ref={attachEditor} className="min-h-0 w-full flex-1 overflow-hidden" />
       {editorStateKey !== undefined && (
         <div className="flex h-6 shrink-0 items-center justify-end border-t px-3 text-ui-subhead text-ink-2">
           行 {cursor.line}，列 {cursor.column}

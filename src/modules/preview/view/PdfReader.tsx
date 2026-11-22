@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   AnnotationMode,
   getDocument,
@@ -34,27 +34,32 @@ export function PdfReader({
   initialScroll: () => number;
   onScroll?: (top: number) => void;
 }) {
-  const host = useRef<HTMLDivElement>(null);
-  const pages = useRef<HTMLDivElement>(null);
   const viewer = useRef<PDFViewer | null>(null);
-  const position = useRef(initialScroll());
-  const reportScroll = useEffectEvent((top: number) => onScroll?.(top));
+  const [position] = useState(() => {
+    let top = initialScroll();
+    return {
+      read: () => top,
+      write: (next: number) => {
+        top = next;
+      },
+    };
+  });
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [pageCount, setPageCount] = useState(0);
   const [current, setCurrent] = useState(1);
   const [pageInput, setPageInput] = useState('1');
   const [zoom, setZoom] = useState(1);
-  useEffect(() => {
-    let disposed = false;
+  const attachViewer = (pages: HTMLDivElement | null) => {
+    if (!pages) return;
     let initialized = false;
-    const element = host.current!;
+    const element = pages.parentElement as HTMLDivElement;
     const controller = new AbortController();
     const lifecycle = new AbortController();
     const eventBus = new EventBus();
     const options = {
       container: element,
-      viewer: pages.current!,
+      viewer: pages,
       eventBus,
       removePageBorders: true,
       annotationMode: AnnotationMode.DISABLE,
@@ -67,7 +72,7 @@ export function PdfReader({
     viewer.current = instance;
     let task: PDFDocumentLoadingTask | undefined;
     const fail = (error: unknown) => {
-      if (disposed || controller.signal.aborted) return;
+      if (controller.signal.aborted) return;
       setError(errorMessage(error));
       initialized = false;
       setPageCount(0);
@@ -76,24 +81,25 @@ export function PdfReader({
       void task?.destroy();
     };
     const savePosition = () => {
-      if (!initialized || disposed) return;
+      if (!initialized || controller.signal.aborted) return;
       const index = instance.currentPageNumber - 1;
       const page = instance.getPageView(index).div;
       if (!page.clientHeight) return;
-      position.current = Math.max(
+      const top = Math.max(
         0,
         index +
           Math.max(0, Math.min(0.999, (element.scrollTop - page.offsetTop) / page.clientHeight)),
       );
-      reportScroll(position.current);
+      position.write(top);
+      onScroll?.(top);
     };
     eventBus.on('pagesinit', () => {
-      if (disposed) return;
+      if (controller.signal.aborted) return;
       instance.currentScaleValue = 'page-width';
-      const index = Math.min(instance.pagesCount - 1, Math.floor(position.current));
+      const index = Math.min(instance.pagesCount - 1, Math.floor(position.read()));
       instance.currentPageNumber = index + 1;
       const page = instance.getPageView(index).div;
-      element.scrollTop = page.offsetTop + (position.current % 1) * page.clientHeight;
+      element.scrollTop = page.offsetTop + (position.read() % 1) * page.clientHeight;
       initialized = true;
       setPageCount(instance.pagesCount);
       instance.update();
@@ -143,7 +149,7 @@ export function PdfReader({
       if (initial.status !== 206 || !Number.isSafeInteger(length) || length <= 0)
         throw new Error('无法分段读取 PDF');
       const bytes = new Uint8Array(await initial.arrayBuffer());
-      if (disposed) return;
+      if (controller.signal.aborted) return;
       const range = new PDFDataRangeTransport(length, bytes, true);
       range.requestDataRange = (begin, end) => {
         void fetch(url, {
@@ -154,7 +160,7 @@ export function PdfReader({
             if (response.status !== 206) throw new Error('PDF 分段读取失败');
             const data = new Uint8Array(await response.arrayBuffer());
             if (data.length !== end - begin) throw new Error('PDF 分段数据不完整');
-            if (!disposed) range.onDataRange(begin, data);
+            if (!controller.signal.aborted) range.onDataRange(begin, data);
           })
           .catch(fail);
       };
@@ -170,11 +176,10 @@ export function PdfReader({
         canvasMaxAreaInBytes: MAX_PIXELS * 4,
       });
       const doc = await task.promise;
-      if (disposed) return;
+      if (controller.signal.aborted) return;
       instance.setDocument(doc);
     })().catch(fail);
     return () => {
-      disposed = true;
       resize.disconnect();
       lifecycle.abort();
       controller.abort();
@@ -182,7 +187,7 @@ export function PdfReader({
       viewer.current = null;
       void task?.destroy();
     };
-  }, [url, attempt]);
+  };
   const go = (page: number) => {
     if (viewer.current && Number.isFinite(page) && pageCount)
       viewer.current.currentPageNumber = Math.min(pageCount, Math.max(1, Math.trunc(page)));
@@ -265,11 +270,12 @@ export function PdfReader({
         </Button>
       </div>
       <div className="relative min-h-0 flex-1">
-        <div
-          ref={host}
-          className="absolute inset-0 overflow-auto overscroll-contain bg-inset [overflow-anchor:none] [scrollbar-gutter:stable]"
-        >
-          <div ref={pages} className="pdfViewer delion-pdf-pages" />
+        <div className="absolute inset-0 overflow-auto overscroll-contain bg-inset [overflow-anchor:none] [scrollbar-gutter:stable]">
+          <div
+            key={`${url}:${attempt}`}
+            ref={attachViewer}
+            className="pdfViewer delion-pdf-pages"
+          />
         </div>
         {error && (
           <ErrorText size="sm" className="absolute inset-x-0 top-0 bg-surface p-3">

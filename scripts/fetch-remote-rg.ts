@@ -1,5 +1,3 @@
-// 打包前准备上传到远程项目服务器的 ripgrep（Linux musl 静态版）：helper 优先用它做 glob/grep，
-// 远端没装 rg 也能按 .gitignore 搜索。产物到 .build/remote-rg，仓库不提交；换版本时成对更新 SHA256。
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -21,7 +19,6 @@ const RELEASES: Record<'amd64' | 'arm64', { triple: string; sha256: string }> = 
 const outDir = join(dirname(fileURLToPath(import.meta.url)), '..', '.build', 'remote-rg');
 mkdirSync(outDir, { recursive: true });
 
-/** ustar 里按名字取一个普通文件：发布包只有十来个条目，不值得引入 tar 依赖。 */
 function tarEntry(archive: Buffer, wanted: string): Buffer | null {
   const field = (offset: number, length: number) =>
     archive.toString('utf8', offset, offset + length).replace(/\0.*$/s, '');

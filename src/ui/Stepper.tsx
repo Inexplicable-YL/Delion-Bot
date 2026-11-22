@@ -1,30 +1,42 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   ChevronLeftIcon as ChevronLeft,
   ChevronRightIcon as ChevronRight,
 } from '@heroicons/react/24/outline';
 
-type HoldPhase = 'idle' | 'waiting' | 'repeating';
-
 function useHoldRepeat(action: () => void, enabled: boolean) {
-  const [phase, setPhase] = useState<HoldPhase>('idle');
-  if (!enabled && phase !== 'idle') setPhase('idle');
-  useEffect(() => {
-    if (phase !== 'waiting') return;
-    const timeout = window.setTimeout(() => setPhase('repeating'), 400);
-    return () => window.clearTimeout(timeout);
-  }, [phase]);
-  useEffect(() => {
-    if (phase !== 'repeating') return;
-    const interval = window.setInterval(action, 64);
-    return () => window.clearInterval(interval);
-  }, [phase, action]);
-  const stop = () => setPhase('idle');
-  const start = () => {
-    action();
-    setPhase('waiting');
-  };
-  return { onPointerDown: start, onPointerUp: stop, onPointerLeave: stop } as const;
+  const [hold] = useState(() => {
+    let delay: number;
+    let interval: number;
+    const stop = () => {
+      window.clearTimeout(delay);
+      window.clearInterval(interval);
+    };
+    return {
+      stop,
+      attach: (button: HTMLButtonElement | null) => (button ? stop : undefined),
+      start: (button: HTMLButtonElement) => {
+        stop();
+        delay = window.setTimeout(() => {
+          interval = window.setInterval(() => button.click(), 64);
+        }, 400);
+      },
+    };
+  });
+  return {
+    ref: enabled ? hold.attach : undefined,
+    onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0) return;
+      hold.start(event.currentTarget);
+      action();
+    },
+    onClick: (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (event.detail === 0) action();
+    },
+    onPointerUp: hold.stop,
+    onPointerLeave: hold.stop,
+    onPointerCancel: hold.stop,
+  } as const;
 }
 
 function StepperInput({

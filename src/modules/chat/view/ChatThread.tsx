@@ -1,4 +1,4 @@
-import { useEffectEvent, useLayoutEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowDownIcon as ArrowDown,
@@ -337,9 +337,42 @@ export function ChatThread({
 }) {
   const replyDraftKey = draftKey === undefined ? chat.sessionId : draftKey;
   const scrollRef = useRef<HTMLDivElement>(null);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const followBottom = useRef(false);
   const [atBottom, setAtBottom] = useState(true);
+  const [scroll] = useState(() => {
+    let followBottom = false;
+    let lineHeight = 0;
+    let lastTop = 0;
+    let anchor: string | null = null;
+    const update = (element: HTMLDivElement) => {
+      if (!lineHeight) {
+        const style = getComputedStyle(element);
+        lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize);
+      }
+      const atBottomNow =
+        element.scrollHeight - element.scrollTop - element.clientHeight <= lineHeight;
+      setAtBottom(atBottomNow);
+      if (atBottomNow) followBottom = true;
+      else if (element.scrollTop < lastTop) followBottom = false;
+      lastTop = element.scrollTop;
+    };
+    return {
+      update,
+      setFollowing: (next: boolean) => {
+        followBottom = next;
+      },
+      anchorTo: (key: string, element: HTMLDivElement, streaming: boolean) => {
+        if (anchor === key) return;
+        anchor = key;
+        followBottom = streaming;
+        element.scrollTo({ top: element.scrollHeight, behavior: 'instant' });
+      },
+      resize: (element: HTMLDivElement) => {
+        lineHeight = 0;
+        if (followBottom) element.scrollTop = element.scrollHeight;
+        update(element);
+      },
+    };
+  });
 
   const messages = chat.messages;
   const streaming = Boolean(chat.running);
@@ -357,40 +390,13 @@ export function ChatThread({
     if (message.role === 'assistant' && message.turnId) turnEnds.set(message.turnId, index);
   });
 
-  const lineHeightRef = useRef(0);
-  const lastScrollTop = useRef(0);
-  const onScroll = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    if (!lineHeightRef.current) {
-      const style = getComputedStyle(el);
-      lineHeightRef.current = parseFloat(style.lineHeight) || parseFloat(style.fontSize);
-    }
-    const atBottomNow = el.scrollHeight - el.scrollTop - el.clientHeight <= lineHeightRef.current;
-    setAtBottom(atBottomNow);
-    if (atBottomNow) followBottom.current = true;
-    else if (el.scrollTop < lastScrollTop.current) followBottom.current = false;
-    lastScrollTop.current = el.scrollTop;
-  };
-  const syncScroll = useEffectEvent(onScroll);
-
-  const anchoredKey = useRef<string | null>(null);
   const replyStartedAt = messages[lastUserIndex + 1]?.startedAt;
-  useLayoutEffect(() => {
-    const viewport = scrollRef.current;
-    const content = contentRef.current;
-    if (!viewport || !content) return;
+  const observeScroll = (content: HTMLDivElement | null) => {
+    if (!content) return;
+    const viewport = content.parentElement as HTMLDivElement;
     const key = `${chat.sessionId}:${lastUserIndex}:${replyStartedAt ?? ''}`;
-    if (anchoredKey.current !== key) {
-      anchoredKey.current = key;
-      followBottom.current = streaming;
-      viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'instant' });
-    }
-    const resize = () => {
-      lineHeightRef.current = 0;
-      if (followBottom.current) viewport.scrollTop = viewport.scrollHeight;
-      syncScroll();
-    };
+    scroll.anchorTo(key, viewport, streaming);
+    const resize = () => scroll.resize(viewport);
     resize();
     let frame = 0;
     const observer = new ResizeObserver(() => {
@@ -403,7 +409,7 @@ export function ChatThread({
       observer.disconnect();
       cancelAnimationFrame(frame);
     };
-  }, [chat.sessionId, lastUserIndex, replyStartedAt, streaming]);
+  };
 
   const handleEditLast = (text: string) => onEditLast?.(text);
   const lastUser = lastUserIndex >= 0 ? messages[lastUserIndex] : undefined;
@@ -423,13 +429,16 @@ export function ChatThread({
         ref={scrollRef}
         className="size-full overflow-y-auto [overflow-anchor:none]"
         aria-label="对话消息"
-        onScroll={onScroll}
+        onScroll={(event) => scroll.update(event.currentTarget)}
         onClickCapture={(event) => {
           if ((event.target as HTMLElement).closest('[data-trace-toggle]'))
-            followBottom.current = false;
+            scroll.setFollowing(false);
         }}
       >
-        <div ref={contentRef} className="relative mx-auto w-full max-w-reading px-app py-app-gap">
+        <div
+          ref={observeScroll}
+          className="relative mx-auto w-full max-w-reading px-app py-app-gap"
+        >
           {messages.map((message, index) =>
             message.compacted ? (
               <CompactionDivider key={`${chat.sessionId}:${index}`} />
@@ -481,7 +490,7 @@ export function ChatThread({
           aria-label="回到底部"
           className="absolute bottom-3 left-1/2 z-10 grid size-8 -translate-x-1/2 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-raised transition-colors hover:bg-hover-strong hover:text-ink"
           onClick={() => {
-            followBottom.current = true;
+            scroll.setFollowing(true);
             const el = scrollRef.current;
             const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             el?.scrollTo({ top: el.scrollHeight, behavior: reduced ? 'auto' : 'smooth' });

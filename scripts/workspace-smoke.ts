@@ -26,6 +26,7 @@ import {
   workspaceModule,
 } from '../src/modules/workspace';
 import { registerModuleIpc } from '../src/app/main/ipc';
+import { chatModule } from '../src/modules/chat';
 import { notificationsModule } from '../src/modules/notifications';
 import { previewModule } from '../src/modules/preview';
 import { remotesModule } from '../src/modules/remotes';
@@ -146,7 +147,6 @@ app
     const other = createWorkspaceEntry({ name: '独立项目', kind: 'project', parentId: null });
     const opened = await readWorkspaceEntry(note.id);
     const revision = saveWorkspaceNote(note.id, '# 恢复测试', opened.revision!);
-    // 路径笔记不落 workspace_notes 行：文件路径即条目 id。
     let path = note.id;
     assert.equal(path, join(profile, 'notes', 'workspace', '主题资料', '参考', '笔记.md'));
     assert.throws(
@@ -178,7 +178,6 @@ app
       ),
       '独立副本',
     );
-    // Simulate a crash after the physical rename but before the database commit.
     const moveFrom = join(profile, 'notes', 'workspace', '独立项目', '参考改名');
     const moveTo = join(profile, 'notes', 'workspace', '独立项目', '恢复后的参考');
     db.prepare("INSERT OR REPLACE INTO workspace_settings VALUES ('storage-move', ?)").run(
@@ -195,7 +194,6 @@ app
     closeDatabase();
     getWorkspaceState();
     assert(existsSync(join(moveTo, '笔记 (2).md')));
-    // 越出父目录的路径段直接拒绝；Windows 保留名仍按段替换成安全名字。
     assert.throws(
       () => createWorkspaceEntry({ name: '../CON', kind: 'file', parentId: folder.id }),
       /路径段/,
@@ -210,7 +208,6 @@ app
     assert(existsSync(join(profile, 'notes', 'workspace', '主题资料', '_CON')));
     renameSync(path, `${path}.external`);
     assert.throws(() => updateWorkspaceEntry(moved.id, { name: '不应生效.md' }));
-    // 目录树按磁盘扫描：文件被外部移走时不列出，重命名失败也不得在磁盘上留下新名字。
     assert(!existsSync(join(dirname(path), '不应生效.md')));
     renameSync(`${path}.external`, path);
     createWorkspaceEntry({
@@ -225,6 +222,7 @@ app
     workspaceModule.register?.();
     ipcMain.handle('window:get-state', () => ({ maximized: false }));
     registerModuleIpc([
+      chatModule,
       workspaceModule,
       remotesModule,
       notificationsModule,
@@ -301,7 +299,9 @@ app
     await invoke(
       `await window.delionBot.bridge.invoke('workspace:remove', ${JSON.stringify(moveTo)});`,
     );
-    await invoke(`const link = document.querySelector('#main-nav button[title="连接器"]');
+    const connectorButton =
+      "[...document.querySelectorAll('#main-nav button')].find((button) => button.querySelector('span')?.textContent === '连接器')";
+    await invoke(`const link = ${connectorButton};
       const settings = link?.parentElement.querySelector('button[aria-label="设置"]');
       if (!settings || settings.offsetTop !== link.offsetTop || settings.offsetLeft >= link.offsetLeft) throw new Error('设置和连接器应在侧栏底部并排');
       if (link.querySelector('img')) throw new Error('未连接时侧栏不应显示应用图标');
@@ -363,11 +363,11 @@ app
         await new Promise(r=>setTimeout(r,100));
       }
       if(!row?.textContent.includes('管理')) throw new Error('Gmail 授权后未显示账户');
-      const sidebar = document.querySelector('#main-nav button[title="连接器"]');
+      const sidebar = ${connectorButton};
       if (sidebar.querySelectorAll('img').length !== 1) throw new Error('侧栏应只显示已连接的 Gmail');`);
     connectedApps.add('googledrive').add('github');
     await invoke(`
-      const sidebar = document.querySelector('#main-nav button[title="连接器"]');
+      const sidebar = ${connectorButton};
       const refresh=()=>[...document.querySelectorAll('#app-main button')].find(button=>button.textContent.trim()==='刷新账户');
       for(let i=0;i<50 && !refresh();i++) await new Promise(r=>setTimeout(r,100));
       if(!refresh()) throw new Error('刷新账户入口不存在');
@@ -376,7 +376,7 @@ app
       if (sidebar.querySelectorAll('img').length !== 3) throw new Error('侧栏未更新已连接应用');`);
     connectedApps.add('googlecalendar').add('slack').add('notion');
     await invoke(`
-      const sidebar = document.querySelector('#main-nav button[title="连接器"]');
+      const sidebar = ${connectorButton};
       const refresh=()=>[...document.querySelectorAll('#app-main button')].find(button=>button.textContent.trim()==='刷新账户');
       for(let i=0;i<50 && !refresh();i++) await new Promise(r=>setTimeout(r,100));
       if(!refresh()) throw new Error('刷新账户入口不存在');

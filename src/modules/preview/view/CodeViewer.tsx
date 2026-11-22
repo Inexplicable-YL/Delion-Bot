@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef } from 'react';
+import { useRef, useState } from 'react';
 import { defaultKeymap } from '@codemirror/commands';
 import { LanguageDescription, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
@@ -52,13 +52,11 @@ export function CodeViewer({
   initialScroll: () => number;
   onScroll: (top: number) => void;
 }) {
-  const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const wordWrap = useEditorSettings((state) => state.wordWrap);
-  const reportScroll = useEffectEvent((top: number) => onScroll(top));
 
-  useEffect(() => {
-    const element = host.current!;
+  const [attachViewer] = useState(() => (element: HTMLDivElement | null) => {
+    if (!element) return;
     const languageConf = new Compartment();
     const view = new EditorView({
       parent: element,
@@ -77,7 +75,7 @@ export function CodeViewer({
       }),
     });
     view.scrollDOM.scrollTop = initialScroll();
-    const handleScroll = () => reportScroll(view.scrollDOM.scrollTop);
+    const handleScroll = () => onScroll(view.scrollDOM.scrollTop);
     view.scrollDOM.addEventListener('scroll', handleScroll);
     viewRef.current = view;
     const language = languageForFilename(filename);
@@ -91,23 +89,23 @@ export function CodeViewer({
       viewRef.current = null;
       view.destroy();
     };
-  }, []);
-
-  useEffect(() => {
-    viewRef.current?.dispatch({
-      effects: wrappingConf.reconfigure(wordWrap ? EditorView.lineWrapping : []),
-    });
-  }, [wordWrap]);
-
-  useEffect(() => {
+  });
+  const syncViewer = (element: HTMLDivElement | null) => {
     const view = viewRef.current;
-    if (!view) return;
+    if (!element || !view) return;
+    const wrapping = wrappingConf.get(view.state);
+    if ((wrapping === EditorView.lineWrapping) !== wordWrap)
+      view.dispatch({ effects: wrappingConf.reconfigure(wordWrap ? EditorView.lineWrapping : []) });
     const current = view.state.doc.toString();
     if (current === value) return;
     const scrollTop = view.scrollDOM.scrollTop;
     view.dispatch({ changes: { from: 0, to: current.length, insert: value } });
     view.scrollDOM.scrollTop = scrollTop;
-  }, [value]);
+  };
 
-  return <div ref={host} className="min-h-0 w-full flex-1 overflow-hidden" />;
+  return (
+    <div ref={syncViewer} className="min-h-0 w-full flex-1 overflow-hidden">
+      <div ref={attachViewer} className="size-full" />
+    </div>
+  );
 }

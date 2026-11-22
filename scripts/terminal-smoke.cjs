@@ -1,4 +1,3 @@
-// 真实应用、独立用户目录：标题栏 → Terminal → 真实 shell 的输入、剪贴板、多会话与回收。
 const { app } = require('electron');
 const { dirname, join, resolve } = require('node:path');
 const { mkdtempSync } = require('node:fs');
@@ -7,14 +6,12 @@ const assert = require('node:assert/strict');
 const root = resolve(process.argv[2] || '.');
 app.setAppPath(root);
 if (root.endsWith('.asar')) {
-  // 加载包内 main 时也按包内资源定位；脚本宿主仍为开发 Electron。
   Object.defineProperty(app, 'isPackaged', { value: true });
   process.resourcesPath = dirname(root);
 }
 const profile = mkdtempSync(join(tmpdir(), 'delion-terminal-smoke-'));
 app.setPath('userData', profile);
 app.setPath('documents', profile);
-// PSReadLine 会按历史预测补全，历史放进临时目录，既不污染用户历史也不干扰断言。
 if (process.platform === 'win32') process.env.APPDATA = profile;
 process.argv.push('--terminal-smoke-test');
 
@@ -35,13 +32,9 @@ app.once('browser-window-created', (_event, window) => {
 });
 require(join(root, 'out/main/index.cjs'));
 
-// 去掉控制序列后按行比较：输入回显带提示符、历史预测跟在已输入文本后，都不会独占一行。
-// ConPTY 换行有时用光标定位而不是 \r\n，定位序列按换行处理。
 const lines = (buffer) =>
   buffer
-    // oxlint-disable-next-line no-control-regex -- 终端输出本身就是控制序列。
     .replace(/\x1b\[\d*(;\d*)?H/g, '\n')
-    // oxlint-disable-next-line no-control-regex -- 同上。
     .replace(/\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[=>]/g, '')
     .split(/\r?\n/)
     .map((line) => line.trim());
@@ -70,7 +63,6 @@ async function run(window) {
       const output = lines((await sessions()).find((item) => item.id === id).buffer);
       return output.slice(output.lastIndexOf(marker) + 1).some((line) => /[$%>#]$/.test(line));
     }, `prompt after ${marker}`);
-  // 键盘事件只送到焦点元素；点过工具栏按钮后焦点会离开 xterm。
   const focus = () => js(`document.querySelector('.xterm-helper-textarea').focus()`);
   const press = async (keyCode, modifiers = []) => {
     await focus();
@@ -113,15 +105,12 @@ async function run(window) {
     return items.length === 1 && /[$%>#]$/.test(lines(items[0].buffer).filter(Boolean).at(-1));
   }, 'shell prompt');
   const [first] = await sessions();
-  // 回归：pwsh 7 的模块路径漏给 5.1 时，PSReadLine 加载失败。
   assert.doesNotMatch(first.buffer, /Cannot load PSReadline/i);
 
   await type('echo DELION_EDITX');
   for (const keyCode of ['Left', 'Delete', 'Enter']) await press(keyCode);
   await printed(first.id, 'DELION_EDIT');
 
-  // Control+C 不能被剪贴板快捷键吞掉。Windows 控制台中断时清空输入缓冲，
-  // 必须等提示符回来再写下一条命令。
   await js(
     `window.delionBot.bridge.invoke('terminal:write', { id: '${first.id}', data: 'echo INTERRUPT_READY; sleep 30\\r' })`,
   );
@@ -133,7 +122,6 @@ async function run(window) {
   );
   await printed(first.id, 'INTERRUPT_OK');
 
-  // 隔离剪贴板夹具，不改写真实系统剪贴板。
   await js(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
     readText: async () => 'echo DELION_PASTE',
     writeText: async (text) => { window.terminalCopiedText = text; }
@@ -174,7 +162,6 @@ async function run(window) {
     });
   await waitDom(`window.terminalCopiedText.length > 0`, 'right-click copies selection');
 
-  // 第二个会话在项目目录启动，特殊字符路径不被 shell 拆开。
   await js(`document.querySelector('button[aria-label="新建终端"]').click()`);
   await wait(async () => (await sessions()).length === 2, 'second session');
   const second = (await sessions()).find((item) => item.id !== first.id);

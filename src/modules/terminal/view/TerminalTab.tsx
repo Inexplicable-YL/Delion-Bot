@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -41,7 +41,6 @@ export function TerminalTab({ tabId }: { tabId: string }) {
   const [creating, setCreating] = useState(false);
   const [reported, setReported] = useState<string | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
-  const host = useRef<HTMLDivElement>(null);
   const screen = useRef<Terminal | null>(null);
 
   const active = tabs.find((item) => item.id === remembered) ?? tabs[0];
@@ -97,10 +96,10 @@ export function TerminalTab({ tabId }: { tabId: string }) {
     }
   };
 
-  useEffect(() => {
-    const element = host.current;
+  const attachTerminal = (element: HTMLDivElement | null) => {
+    if (!element) return;
     const session = useTerminalStore.getState().output[activeId ?? ''];
-    if (!element || !activeId || !session) return;
+    if (!activeId || !session) return;
     const style = getComputedStyle(element);
     const foreground = terminalColor(style.color);
     const terminal = new Terminal({
@@ -196,8 +195,7 @@ export function TerminalTab({ tabId }: { tabId: string }) {
       setHasSelection(false);
       terminal.dispose();
     };
-  }, [activeId]);
-
+  };
   const close = async (id: string) => {
     try {
       await useTerminalStore.getState().close(projectId, id);
@@ -296,7 +294,8 @@ export function TerminalTab({ tabId }: { tabId: string }) {
         </div>
       )}
       <div
-        ref={host}
+        key={activeId}
+        ref={attachTerminal}
         title="拖动选取文本；Alt+单击移动输入光标；右键复制选区或粘贴"
         onContextMenu={(event) => {
           event.preventDefault();

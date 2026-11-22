@@ -1,4 +1,3 @@
-// 校验 DESIGN.md 的产品样式约束和 Tailwind 类名。
 import { createRequire } from 'node:module';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -35,7 +34,6 @@ const rules: Record<string, RegExp> = {
     'g',
   ),
 };
-// token 定义本身，以及给 streamdown 的 shadcn 兼容名。
 const tokenFiles = new Set(['src/ui/tokens.css', 'src/app/renderer/styles/globals.css']);
 
 function* sourceFiles(dir: string): Generator<string> {
@@ -77,7 +75,6 @@ const candidates = new Scanner({
   ],
 }).scan();
 
-// 只查引用 token 的工具类族；扫描器会把内联样式里的 CSS 属性名也当成候选。
 const families =
   /^(?:[\w-]+:)*-?(?:text|bg|border(?:-[trblxy])?|rounded(?:-[trbl]{1,2})?|shadow|ring|outline|fill|stroke|from|via|to|divide|decoration|caret|accent|placeholder|z|duration|ease|animate|font|leading)-/;
 const cssProperties = new Set([

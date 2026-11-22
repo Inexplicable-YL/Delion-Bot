@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState, type DragEvent } from 'react';
+import { Suspense, useRef, useState, type DragEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { GroupNode, TabId } from '../../../modules/workspace/contract';
 import { ErrorBoundary } from '../shell/ErrorBoundary';
@@ -56,16 +56,16 @@ export function TabGroup({ group, onNewChat }: { group: GroupNode; onNewChat: ()
   const clearDropPreview = () =>
     setDropPreview((previous) => (previous.visible ? { ...previous, visible: false } : previous));
 
-  useEffect(() => {
-    if (!dropPreview.visible) return;
-    const clear = () => setDropPreview((previous) => ({ ...previous, visible: false }));
+  const listenForDragEnd = (element: HTMLElement | null) => {
+    if (!element || !dropPreview.visible) return;
+    const clear = clearDropPreview;
     window.addEventListener('dragend', clear);
     window.addEventListener('drop', clear);
     return () => {
       window.removeEventListener('dragend', clear);
       window.removeEventListener('drop', clear);
     };
-  }, [dropPreview.visible]);
+  };
 
   const zoneAt = (event: DragEvent<HTMLElement>) => {
     const rect = contentRef.current!.getBoundingClientRect();
@@ -122,6 +122,7 @@ export function TabGroup({ group, onNewChat }: { group: GroupNode; onNewChat: ()
 
   return (
     <section
+      ref={listenForDragEnd}
       aria-label={active ? `工作组：${titleOf(active, queryClient)}` : '工作组'}
       className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @container"
       onPointerDown={() => focusGroup(group.id)}

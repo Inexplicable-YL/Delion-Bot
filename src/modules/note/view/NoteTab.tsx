@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '../../../ui/Button';
 import { showToast } from '../../../ui/Toast';
@@ -61,32 +61,37 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
       .acquire(id, true)
       .catch((cause) => setFailure({ entryId: id, message: errorMessage(cause) }));
   };
-  const unsaved = draft !== undefined && (draft.saving || draft.text !== draft.saved);
-
-  useEffect(() => {
-    if (entryId === null) return;
+  const attachDraft = (element: HTMLElement | null) => {
+    if (!element || entryId === null) return;
     void source
       .acquire(entryId)
       .catch((cause) => setFailure({ entryId, message: errorMessage(cause) }));
-    return () => void source.release(entryId);
-  }, [entryId, source]);
-
-  useEffect(() => {
-    if (entryId === null || unsaved) return;
-    const refresh = () => reload(entryId);
-    window.addEventListener('focus', refresh);
-    return () => window.removeEventListener('focus', refresh);
-  }, [entryId, source, unsaved]);
+    const onFocus = () => {
+      const current = useNoteDrafts.getState().drafts[entryId];
+      if (!current || (!current.saving && current.text === current.saved)) reload(entryId);
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      void source.release(entryId);
+    };
+  };
 
   if (entryId === null)
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-ui-body text-ink-2">
+      <section
+        ref={attachDraft}
+        className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-ui-body text-ink-2"
+      >
         无效的笔记标签：{tabId}
-      </div>
+      </section>
     );
   if (!draft)
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-ui-body text-ink-2">
+      <section
+        ref={attachDraft}
+        className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-ui-body text-ink-2"
+      >
         {error ? (
           <div role="alert" className="min-w-0">
             <p className="break-words">{error}</p>
@@ -100,12 +105,15 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
             正在打开…
           </>
         )}
-      </div>
+      </section>
     );
 
   if (draft.content.format !== 'markdown' && draft.content.format !== 'text')
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-ui-body text-ink-2">
+      <section
+        ref={attachDraft}
+        className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-ui-body text-ink-2"
+      >
         <p>“{draft.content.title}”不是 UTF-8 文本，或超过 50 MB，无法在应用内打开。</p>
         <Button
           variant="secondary"
@@ -121,7 +129,7 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
         >
           用默认程序打开
         </Button>
-      </div>
+      </section>
     );
   const path = entryPath(entries, entryId);
   const markdown = draft.content.format === 'markdown';
@@ -141,6 +149,7 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
 
   return (
     <section
+      ref={attachDraft}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       aria-label={`文件：${draft.content.title}`}
     >

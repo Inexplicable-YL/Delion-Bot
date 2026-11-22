@@ -1,6 +1,6 @@
 import { renderAsync } from 'docx-preview';
 import { MinusIcon as Minus, PlusIcon as Plus } from '@heroicons/react/24/outline';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Button } from '../../../ui/Button';
 import { pinchZoomRef } from './use-pinch-zoom';
 import { ErrorText } from '../../../ui/Alert';
@@ -11,14 +11,14 @@ const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.1;
 
 export function DocxPreview({ url }: { url: string }) {
-  const host = useRef<HTMLDivElement>(null);
   const [attempt, setAttempt] = useState(0);
   const run = `${attempt}:${url}`;
   const [result, setResult] = useState<{ run: string; error: string } | null>(null);
   const loading = result?.run !== run;
   const error = loading ? '' : result.error;
   const [zoom, setZoom] = useState(1);
-  useEffect(() => {
+  const mountDocument = (container: HTMLDivElement | null) => {
+    if (!container) return;
     const controller = new AbortController();
     void (async () => {
       try {
@@ -27,10 +27,9 @@ export function DocxPreview({ url }: { url: string }) {
           if (!controller.signal.aborted) setResult({ run, error: `HTTP ${response.status}` });
           return;
         }
-        const container = host.current;
-        if (!container) return;
-        container.replaceChildren();
-        await renderAsync(await response.arrayBuffer(), container, undefined, {
+        const bytes = await response.arrayBuffer();
+        if (controller.signal.aborted) return;
+        await renderAsync(bytes, container, undefined, {
           useBase64URL: true,
           renderAltChunks: false,
         });
@@ -42,13 +41,13 @@ export function DocxPreview({ url }: { url: string }) {
             a.removeAttribute('href');
           }
         });
-        setResult({ run, error: '' });
+        if (!controller.signal.aborted) setResult({ run, error: '' });
       } catch (cause) {
         if (!controller.signal.aborted) setResult({ run, error: errorMessage(cause) });
       }
     })();
     return () => controller.abort();
-  }, [run, url]);
+  };
   const step = (direction: number) =>
     setZoom((value) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value + direction * ZOOM_STEP)));
   return (
@@ -74,7 +73,12 @@ export function DocxPreview({ url }: { url: string }) {
           ref={pinchZoomRef(setZoom, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP)}
           className="absolute inset-0 overflow-auto overscroll-contain bg-inset [overflow-anchor:none] [scrollbar-gutter:stable]"
         >
-          <div ref={host} style={{ zoom }} className="docx-preview-host min-h-full" />
+          <div
+            key={run}
+            ref={mountDocument}
+            style={{ zoom }}
+            className="docx-preview-host min-h-full"
+          />
         </div>
         {error && (
           <ErrorText size="sm" className="absolute inset-x-0 top-0 bg-surface p-3">

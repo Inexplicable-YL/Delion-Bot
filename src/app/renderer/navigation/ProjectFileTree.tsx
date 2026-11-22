@@ -17,8 +17,8 @@ import {
   PencilIcon as Pencil,
   TrashIcon as Trash2,
 } from '@heroicons/react/24/outline';
-import { useEffect, useId, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useId, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useDebounce } from 'use-debounce';
 import {
   workspaceArchiveId,
@@ -44,7 +44,8 @@ import { libraryEntriesOf } from '../workspace/library-entries';
 import { remoteAccent } from '../../../modules/remotes/view';
 import { remoteTitle, useRemoteTree } from './remote-tree';
 import { showToast } from '../../../ui/Toast';
-import { onWorkspaceEvent, workspaceClient } from '../../../modules/workspace/view';
+import { workspaceClient } from '../../../modules/workspace/view';
+import { cn } from '../../../ui/cn';
 import { ErrorText } from '../../../ui/Alert';
 import { Spinner } from '../../../ui/Spinner';
 import { IconButton } from '../../../ui/IconButton';
@@ -57,13 +58,20 @@ const emptyExcludedIds: string[] = [];
 
 function ConnectingHint() {
   const [slow, setSlow] = useState(false);
-  useEffect(() => {
+  const wait = (element: HTMLParagraphElement | null) => {
+    if (!element || slow) return;
     const timer = window.setTimeout(() => setSlow(true), CONNECT_HINT_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, []);
-  if (!slow) return null;
+  };
   return (
-    <p className="flex items-center gap-2 px-3 py-3 text-ui-subhead text-ink-2" role="status">
+    <p
+      ref={wait}
+      className={cn(
+        slow ? 'flex' : 'hidden',
+        'items-center gap-2 px-3 py-3 text-ui-subhead text-ink-2',
+      )}
+      role="status"
+    >
       <Spinner size="sm" />
       正在连接远端…
     </p>
@@ -112,7 +120,6 @@ export function ProjectFileTree({
   onActivate?: (id: string) => void;
 }) {
   const afterMenuClose = useAfterMenuClose();
-  const queryClient = useQueryClient();
   const [localError, setLocalError] = useState<string | null>(null);
   const trimmedQuery = query.trim();
   const [term] = useDebounce(trimmedQuery, 250);
@@ -128,13 +135,6 @@ export function ProjectFileTree({
     enabled: Boolean(term) && Boolean(window.delionBot),
   });
   const searching = trimmedQuery !== '';
-  useEffect(() => {
-    if (!searching) return;
-    return onWorkspaceEvent(
-      'changed',
-      () => void queryClient.invalidateQueries({ queryKey: ['workspace', 'search-local', rootId] }),
-    );
-  }, [searching, rootId, queryClient]);
   const searchEntries = search.data && term === trimmedQuery ? search.data : [];
   const merged = searchEntries.length
     ? [...new Map([...baseEntries, ...searchEntries].map((item) => [item.id, item])).values()]
@@ -167,13 +167,6 @@ export function ProjectFileTree({
   if (rootId === workspaceArchiveId) directoryIds.push(rootId);
   const directoriesKey = directoryIds.sort().join('\0');
   const owner = useId();
-  useEffect(() => {
-    void useWorkspaceStore
-      .getState()
-      .holdDirectories(owner, directoryIds)
-      .catch((error) => setLocalError(errorMessage(error)));
-  }, [directoriesKey]);
-  useEffect(() => () => void useWorkspaceStore.getState().holdDirectories(owner, []), []);
   const excluded = new Set(excludeIds);
   const children = new Map<string | null, WorkspaceEntry[]>();
   for (const entry of entries) {
@@ -202,6 +195,32 @@ export function ProjectFileTree({
     expanded,
     rootId,
   );
+  const [[releaseTree, holdDirectories]] = useState(() => {
+    let key: string | null = null;
+    return [
+      (element: HTMLDivElement | null) => {
+        if (!element) return;
+        const stopWatching = remote.watch();
+        return () => {
+          key = null;
+          stopWatching();
+          void useWorkspaceStore.getState().holdDirectories(owner, []);
+        };
+      },
+      (next: string, ids: string[]) => {
+        if (key === next) return;
+        key = next;
+        void useWorkspaceStore
+          .getState()
+          .holdDirectories(owner, ids)
+          .catch((error) => setLocalError(errorMessage(error)));
+      },
+    ] as const;
+  });
+  const updateTree = () => {
+    remote.reportDirectories();
+    holdDirectories(directoriesKey, directoryIds);
+  };
   const nodes: ExplorerItem[] = visible.map((e) => {
     const accent = e.remoteId ? remoteAccent(e.remoteId, 'text') : undefined;
     const source = e.kind === 'source' && e.sourceId ? sourceOf(e.sourceId) : undefined;
@@ -317,7 +336,7 @@ export function ProjectFileTree({
     </DropdownMenu>
   );
   return (
-    <>
+    <div className="contents" ref={releaseTree}>
       {(localError ?? (search.error ? errorMessage(search.error) : null)) && (
         <ErrorText className="px-3 py-2">{localError ?? errorMessage(search.error)}</ErrorText>
       )}
@@ -339,6 +358,7 @@ export function ProjectFileTree({
       )}
       {remote.connecting && <ConnectingHint />}
       <Explorer
+        onTreeCommit={updateTree}
         label="我的内容"
         items={filtered}
         selected={selected}
@@ -469,6 +489,6 @@ export function ProjectFileTree({
           )
         }
       />
-    </>
+    </div>
   );
 }

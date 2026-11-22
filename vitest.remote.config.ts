@@ -8,7 +8,7 @@ export default defineConfig({
   resolve: { alias: { '@': resolve('src/app/renderer') } },
   test: {
     include: ['test/**/*.remote.test.ts'],
-    globalSetup: ['test/modules/remotes/main/remote-host.setup.ts'],
+    globalSetup: ['test/modules/remotes/main/remote-host-setup.ts'],
     setupFiles: ['test/core/host-mock.ts'],
     // 逐个文件串行：几套用例共用同一台主机上的 helper 通道与临时目录，
     // 并行跑会互相 closeHelper、抢 /tmp 下的固定路径。

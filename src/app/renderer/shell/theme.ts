@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   fontSizeDefault,
   fontSizeMax,
@@ -28,14 +27,37 @@ function applyResolvedTheme(theme: ThemePreference, systemDark: boolean) {
   root.dataset.theme = dark ? 'dark' : 'light';
 }
 
-export function initializeTheme() {
-  applyResolvedTheme(initialTheme(), window.matchMedia('(prefers-color-scheme: dark)').matches);
-}
-
 function initialFontSize(): number {
   const stored = Number(localStorage.getItem(fontSizeStorageKey));
   if (Number.isFinite(stored) && stored > 0) return clampFontSize(stored);
   return fontSizeDefault;
+}
+
+export function connectAppearance(client: QueryClient) {
+  const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+  const root = document.documentElement;
+  const apply = () => {
+    const theme = client.getQueryData<ThemePreference>(['settings', 'theme']) ?? initialTheme();
+    const fontSize = client.getQueryData<number>(['settings', 'fontSize']) ?? initialFontSize();
+    applyResolvedTheme(theme, systemTheme.matches);
+    root.style.fontSize = `${fontSize}px`;
+    localStorage.setItem(fontSizeStorageKey, String(fontSize));
+    if (!window.delionBot) {
+      localStorage.setItem(themeStorageKey, theme);
+      root.style.zoom = String(client.getQueryData<ZoomPreference>(['settings', 'zoom']) ?? 1);
+    }
+  };
+  apply();
+  systemTheme.addEventListener('change', apply);
+  client.getQueryCache().subscribe(({ type, query }) => {
+    const [namespace, setting] = query.queryKey;
+    if (
+      type === 'updated' &&
+      namespace === 'settings' &&
+      (setting === 'theme' || setting === 'fontSize' || setting === 'zoom')
+    )
+      apply();
+  });
 }
 
 export function useAppearance() {
@@ -53,22 +75,6 @@ export function useAppearance() {
       queryFn: () => settingsClient.fontSize(),
       enabled,
     }).data ?? initialFontSize();
-
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const apply = () => applyResolvedTheme(theme, media.matches);
-    apply();
-    if (!enabled) localStorage.setItem(themeStorageKey, theme);
-    if (theme !== 'system') return;
-    media.addEventListener('change', apply);
-    return () => media.removeEventListener('change', apply);
-  }, [theme, enabled]);
-
-  useEffect(() => {
-    document.documentElement.style.fontSize = `${fontSize}px`;
-    localStorage.setItem(fontSizeStorageKey, String(fontSize));
-    if (!window.delionBot) document.documentElement.style.zoom = String(zoom);
-  }, [fontSize, zoom]);
 
   const changeTheme = async (next: ThemePreference) => {
     queryClient.setQueryData(

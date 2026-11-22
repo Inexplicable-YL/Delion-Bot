@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useRef, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import {
   defaultKeymap,
   history,
@@ -9,7 +9,9 @@ import { insertNewlineContinueMarkup, markdown, markdownLanguage } from '@codemi
 import { syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import {
+  Compartment,
   EditorState,
+  Facet,
   Prec,
   RangeSetBuilder,
   StateEffect,
@@ -38,6 +40,21 @@ import { matchConnectorPrompts } from './connector-tokens';
 type ComposerMenuApi = {
   onKey: (key: 'down' | 'up' | 'select' | 'close') => boolean;
 };
+
+type ComposerCallbacks = {
+  onChange: (text: string) => void;
+  onSend: () => void;
+  onCaret: (text: string, caret: number) => void;
+  onFiles: (files: File[], pos: number) => void;
+  onDropHandled?: () => void;
+  onMenuKey: ComposerMenuApi['onKey'];
+};
+
+const composerCallbacks = Facet.define<ComposerCallbacks, ComposerCallbacks>({
+  combine: (values) => values[0]!,
+});
+const callbacksConf = new Compartment();
+const handlers = (view: EditorView) => view.state.facet(composerCallbacks);
 
 export type ComposerEditorHandle = {
   focus: () => void;
@@ -350,22 +367,24 @@ export function ComposerEditor({
   referenceOptions: ChatReference[];
   connectorApps?: readonly ConnectorApp[];
 }) {
-  const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
-  const emitChange = useEffectEvent((text: string) => onChange(text));
-  const emitSend = useEffectEvent(() => onSend());
-  const emitCaret = useEffectEvent((text: string, caret: number) => onCaret(text, caret));
-  const emitFiles = useEffectEvent((files: File[], pos: number) => onFiles(files, pos));
-  const emitDropHandled = useEffectEvent(() => onDropHandled?.());
-  const pressMenuKey = useEffectEvent((key: 'down' | 'up' | 'select' | 'close') => menu.onKey(key));
-
-  useEffect(() => {
+  const callbacks: ComposerCallbacks = {
+    onChange,
+    onSend,
+    onCaret,
+    onFiles,
+    onDropHandled,
+    onMenuKey: menu.onKey,
+  };
+  const [attachEditor] = useState(() => (element: HTMLDivElement | null) => {
+    if (!element) return;
     const current = new EditorView({
-      parent: host.current!,
+      parent: element,
       state: EditorState.create({
         doc: value,
         extensions: [
           history(),
+          callbacksConf.of(composerCallbacks.of(callbacks)),
           markdown({ base: markdownLanguage, codeLanguages: languages }),
           EditorView.lineWrapping,
           referenceField,
@@ -385,16 +404,16 @@ export function ComposerEditor({
           }),
           Prec.highest(
             keymap.of([
-              { key: 'ArrowDown', run: () => pressMenuKey('down') },
-              { key: 'ArrowUp', run: () => pressMenuKey('up') },
-              { key: 'Escape', run: () => pressMenuKey('close') },
-              { key: 'Tab', run: () => pressMenuKey('select') },
+              { key: 'ArrowDown', run: (target) => handlers(target).onMenuKey('down') },
+              { key: 'ArrowUp', run: (target) => handlers(target).onMenuKey('up') },
+              { key: 'Escape', run: (target) => handlers(target).onMenuKey('close') },
+              { key: 'Tab', run: (target) => handlers(target).onMenuKey('select') },
               {
                 key: 'Enter',
                 run: (target) => {
                   if (target.compositionStarted) return false;
-                  if (pressMenuKey('select')) return true;
-                  emitSend();
+                  if (handlers(target).onMenuKey('select')) return true;
+                  handlers(target).onSend();
                   return true;
                 },
               },
@@ -408,16 +427,19 @@ export function ComposerEditor({
           syntaxHighlighting(markdownHighlightStyle),
           EditorView.contentAttributes.of({ 'aria-label': '发送给助手', spellcheck: 'false' }),
           EditorView.updateListener.of((update) => {
-            if (update.docChanged) emitChange(update.state.doc.toString());
+            if (update.docChanged) handlers(update.view).onChange(update.state.doc.toString());
             if (update.docChanged || update.selectionSet)
-              emitCaret(update.state.doc.toString(), update.state.selection.main.head);
+              handlers(update.view).onCaret(
+                update.state.doc.toString(),
+                update.state.selection.main.head,
+              );
           }),
           EditorView.domEventHandlers({
             paste: (event, target) => {
               const files = filesFromTransfer(event.clipboardData);
               if (!files.length) return false;
               event.preventDefault();
-              emitFiles(files, target.state.selection.main.head);
+              handlers(target).onFiles(files, target.state.selection.main.head);
               return true;
             },
             drop: (event, target) => {
@@ -428,8 +450,8 @@ export function ComposerEditor({
               const pos =
                 target.posAtCoords({ x: event.clientX, y: event.clientY }) ??
                 target.state.selection.main.head;
-              emitFiles(files, pos);
-              emitDropHandled();
+              handlers(target).onFiles(files, pos);
+              handlers(target).onDropHandled?.();
               return true;
             },
           }),
@@ -458,34 +480,34 @@ export function ComposerEditor({
       view.current = null;
       current.destroy();
     };
-  }, []);
-  useEffect(() => {
-    const current = view.current;
-    if (!current || value === current.state.doc.toString() || current.compositionStarted) return;
-    current.dispatch({ changes: { from: 0, to: current.state.doc.length, insert: value } });
-  }, [value]);
-  useEffect(() => {
-    view.current?.dispatch({
-      effects: setReferenceOptions.of({ files: referenceOptions, connectors: connectorApps }),
-    });
-  }, [referenceOptions, connectorApps]);
+  });
   const menuAriaOpen = menuAria?.open ?? false;
   const menuAriaListId = menuAria?.listId ?? '';
   const menuAriaActiveId = menuAria?.activeId ?? null;
-  useEffect(() => {
-    const content = view.current?.contentDOM;
-    if (!content) return;
+  const syncEditor = (element: HTMLDivElement | null) => {
+    const current = view.current;
+    if (!element || !current) return;
+    if (handlers(current) !== callbacks)
+      current.dispatch({ effects: callbacksConf.reconfigure(composerCallbacks.of(callbacks)) });
+    if (!current.compositionStarted && value !== current.state.doc.toString())
+      current.dispatch({ changes: { from: 0, to: current.state.doc.length, insert: value } });
+    const options = current.state.field(referenceField);
+    if (options.files !== referenceOptions || options.connectors !== connectorApps)
+      current.dispatch({
+        effects: setReferenceOptions.of({ files: referenceOptions, connectors: connectorApps }),
+      });
+    const content = current.contentDOM;
     content.setAttribute('role', 'combobox');
     content.setAttribute('aria-expanded', String(menuAriaOpen));
     content.setAttribute('aria-controls', menuAriaListId);
     if (menuAriaOpen && menuAriaActiveId)
       content.setAttribute('aria-activedescendant', menuAriaActiveId);
     else content.removeAttribute('aria-activedescendant');
-  }, [menuAriaActiveId, menuAriaListId, menuAriaOpen]);
+  };
   const empty = value.length === 0;
   return (
-    <div className={cn('text-ui-body touch:text-ui-input-touch', className)}>
-      <div className="relative" ref={host}>
+    <div ref={syncEditor} className={cn('text-ui-body touch:text-ui-input-touch', className)}>
+      <div className="relative" ref={attachEditor}>
         {empty && (
           <div
             aria-hidden="true"

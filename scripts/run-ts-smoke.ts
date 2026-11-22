@@ -1,5 +1,3 @@
-// 把 scripts/<name>.ts 打成 CJS 放进 .tools/，再用 Electron 运行。
-// 用法：node scripts/run-ts-smoke.ts workspace-smoke | remote-smoke | runtime-smoke
 import { build } from 'vite';
 import { builtinModules, createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
@@ -17,16 +15,10 @@ const smokes: Record<string, SmokeConfig> = {
     timeout: 45000,
     minify: false,
   },
-  // 宿主端口经终端模块入口引入了 node-pty，同样要留在 node_modules。
   'workspace-smoke': { external: ['node-pty', /^@earendil-works\//], timeout: 60000 },
   'remote-smoke': {
-    external: [
-      // 原生模块必须留在 node_modules：打进 bundle 后 node-pty 找不到自己的 prebuilds。
-      'node-pty',
-      /^@earendil-works\//,
-    ],
+    external: ['node-pty', /^@earendil-works\//],
     timeout: 180000,
-    // 冒烟失败时要看真实函数名，压缩过的堆栈只有 a/b/e。
     minify: false,
   },
 };

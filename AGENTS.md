@@ -1,165 +1,163 @@
-- **本文件由人类维护。Agent 只有在用户明确授权时才能修改。**
+- **This file is maintained by humans. Agents may modify it only with the user's explicit authorization.**
 
 # Working core rules
 
-**"不要默认假设。不要隐藏困惑。呈现权衡。"**
-**每个人的想法都受限于认知，注意提醒用户的Unknown unknown。**
-**请先阅读 @README.md**
+**"Do not assume by default. Do not hide confusion. Present tradeoffs."**
+**"Everyone's thinking is limited by what they know; remind the user of their unknown unknowns."**
+**"Read @README.md first."**
 
-## 1. 先思考再编码
+## 1. Think before you code
 
-实现之前：
+Before implementing:
 
-- 明确陈述假设；如果不确定或不明白，就提问。不要擅自为用户做决定。
-- 当存在多种理解时，逐一列出而非默默选择。
-- 如果存在更简单的方案，直接说明并在必要时提出异议。
+- State assumptions explicitly; if you are unsure or do not understand, ask. Do not make decisions on the user's behalf.
+- When multiple interpretations exist, list them one by one instead of silently choosing one.
+- If a simpler solution exists, state it directly and raise an objection when necessary.
 
-## 2. 简洁优先
+## 2. Simplicity first
 
-**"用最少的代码解决问题。不做臆测性编码。"**
+**"Solve the problem with the least code. Do not write speculative code."**
 
-- 不实现超出需求的特性。
-- 不为仅使用一次的代码做抽象。
-- 不添加未经要求的"灵活性"或"可配置性"。
-- **不处理在当前系统边界内不会发生的错误场景。**
+- Do not implement features beyond the requirements.
+- Do not abstract code that is used only once.
+- Do not add unrequested "flexibility" or "configurability".
+- **Do not handle error scenarios that cannot occur within the current system boundary.**
 
-## 3. 精准改动
+## 3. Precise changes
 
-**"只改必须改的。只清理自己制造的遗留。"**
+**"Change only what must be changed. Clean up only the legacy you created."**
 
-编辑现有代码时：
+When editing existing code:
 
-- 不要"改善"相邻的代码、注释或格式。
-- 不要重构没有问题的代码。
-- **与现有风格保持一致。**
-- 如果发现无关的废弃代码，提出来而不是直接删除。
-- 除非可组合或可复用，否则保持在一个函数中
-- 通过阅读代码块的 commit 历史记录来了解功能的改进方向
-- 在拥有未知值的边界处验证一次。向内传递已类型化的值，而不是重复 typeof value === "object" 和属性存在性检查。不要防御性地重新验证已由 schema、构造函数或内部类型保证的值。
+- Do not "improve" adjacent code, comments, or formatting.
+- Do not refactor code that has no problem.
+- **Stay consistent with the existing style.**
+- If you find unrelated dead code, raise it instead of deleting it.
+- Keep the logic in one function unless it is composable or reusable.
+- Read the commit history of the code block to understand the direction of feature improvement.
+- Validate once at the boundary where an unknown value enters. Pass typed values inward instead of repeating `typeof value === "object"` and property-existence checks. Do not defensively re-validate values already guaranteed by a schema, a constructor, or internal types.
 
-当你的改动产生了孤立的代码时：
+When your change leaves code orphaned:
 
-- 移除因你的改动而变得未使用的 import/变量/函数。
-- 不要移除之前就存在的废弃代码，除非被明确要求。
+- Remove imports, variables, and functions that your change made unused.
+- Do not remove pre-existing dead code unless explicitly asked.
 
-检验标准："每一行改动都应该能追溯到用户的请求。"
+Test criterion: "Every changed line must be traceable to the user's request."
 
-不要预先提取单次使用的辅助函数。在调用点内联逻辑，除非该辅助函数被复用、隐藏了真正复杂的边界，或具有能改善调用方的清晰独立名称。
+Do not pre-extract a helper function that is used only once. Inline the logic at the call site unless the helper is reused, hides a genuinely complex boundary, or has a clear standalone name that improves the caller.
 
-## 4. 代码提交与文档维护
+## 4. Code commits and documentation
 
-**代码严格遵守自解释性原则，靠命名而不是注释表达意图**
+**Code strictly follows the self-explanatory principle: express intent through naming, not comments.**
 
-- 代码需要做到无注释时依然保持高水平的可读性
-- 注释只在必要时写：不超过 80 字、不超过两行，从顶层设计说清这部分的“目的”和取舍，不解释具体代码
-- 修改一个文件时，顺带删除其中不符合上一条的注释
-- 文档只负责软件设计顶层思想的阐述，不解释具体的实现细节，时刻保持文档的简洁，最大限度减少文档的更新频率
-- commit信息始终遵循提交传统和社区主流规范，不添加“第一轮”“批次”等无效工作计划信息
-  - 不值得写入文档但又不应该写入注释的信息可以直接放进 commit log
-- 每次commit的代码应该服务于同一个主题，目的或者任务，不要将多个关联不大的改动一起提交
-- 如果工作区出现了其他你没有参与改动的代码，除非用户要求，不要擅自修改或者commit对方的改动
-- 每次commit之前都必须对改动文件进行格式化
-- 只在PR或者publish branch的时候更新 CHANGELOG，不应该每个commit都进入 CHANGELOG
+- Code must remain highly readable without comments.
+- Do not write comments in TypeScript or JavaScript. The only exception is the `@vitest-environment` directive that sets a test's runtime.
+- Never use a comment to paper over code that may misbehave on an edge case, and never disable a rule inline; fix the code or state the tradeoff instead.
+- Documentation is responsible only for stating the top-level ideas of the software design, not the specific implementation details. Keep documentation concise at all times and minimize how often it must be updated.
+- Commit messages always follow commit conventions and mainstream community norms; do not add useless work-planning information such as "round one" or "batch".
+  - Information that is not worth putting in documentation but should not go into comments can go directly into the commit log.
+- The code in each commit must serve the same theme, purpose, or task; do not commit several loosely related changes together.
+- If the workspace contains code you did not touch, do not modify or commit the other party's changes unless the user asks.
+- Format the changed files before every commit.
+- Update CHANGELOG only for a PR or a published branch; not every commit should go into the CHANGELOG.
 
-## 5. 代码测试
+## 5. Code testing
 
-**在为推测性或极不可能发生的竞态或安全边缘情况增加复杂性之前，向用户解释具体的失败模式、可能性和复杂性成本，并获得他们的同意。不要为了理论上的健壮性而默默扩大范围。**
+**Before adding complexity for a speculative or highly unlikely race or security edge case, explain the specific failure mode, its likelihood, and the complexity cost to the user, and obtain their consent. Do not silently expand scope for theoretical robustness.**
 
-测试属于易失性代码，只保留少量高信号的测试。
+Tests are volatile code; keep only a small number of high-signal tests.
 
-- 提交PR之前需要在本地跑测试，并且确认测试通过
-- 更新代码后时刻检查是否需要更新相关测试，将过时的测试清理掉
-- 只覆盖当前的行为契约和关键回归场景；已经验证、稳定运行的部分不需要测试
-- 不断言 className、像素、动画、文案等实现细节
-- 不写墓碑测试（断言“已删除的功能继续不存在”）；负向测试只在缺失或失败本身属于 API、安全或持久化契约时才写
-- TypeScript 测试放在根目录的 `test/` 下，按 `src/` 的相对路径组织。例如，`src/modules/todo/main/` 的测试放在 `test/modules/todo/main/`。Go 的 `*_test.go` 文件留在 `helper/` 的对应包目录。
+- Run the tests locally and confirm they pass before submitting a PR.
+- After changing code, always check whether the related tests need updating, and delete outdated tests.
+- Cover only the current behavioral contract and key regression scenarios; parts that have been verified and run stably do not need tests.
+- Do not assert implementation details such as className, pixels, animations, or copy text.
+- Do not write tombstone tests (asserting that "a deleted feature continues not to exist"); write negative tests only when the absence or failure itself is part of an API, security, or persistence contract.
+- TypeScript tests live under `test/` at the repository root, organized by the relative path of `src/`. For example, tests for `src/modules/todo/main/` live in `test/modules/todo/main/`. Go `*_test.go` files stay in the corresponding package directory under `helper/`.
 
 ## 6. React
 
-**默认不使用 `useEffect`、`useLayoutEffect`、`useInsertionEffect`。禁止把 Effect 当作修复状态异常、页面跳转、数据不更新的补丁。**
+**Effects are forbidden. Do not import, call, alias, wrap, or destructure `useEffect`, `useLayoutEffect`, or `useInsertionEffect`, and do not implement `getDerivedStateFromProps`. `eslint.config.ts` enforces this.**
 
-只有以下场景允许使用 Effect，并优先使用项目已有的共享 hook：
+Use these instead:
 
-- 订阅浏览器原生事件，例如 resize、scroll、visibilitychange
-- 建立和清理 WebSocket、EventSource 等外部连接
-- 初始化、同步、销毁需要命令式 API 的第三方组件
-- 管理随组件生命周期启动和清理的外部定时器、观察器、订阅
-- 其他需要与 React 外部系统同步、且无法用现有机制完成的情况，**必须事先获得用户批准**
+- Subscribe to external stores with `useSyncExternalStore`, with a stable `subscribe` and a cached `getSnapshot`.
+- Acquire imperative resources in ref callbacks and return their cleanup; re-key the component when the resource identity changes.
+- `useEffectEvent` is allowed: it creates a stable event callback and does not run an Effect.
+- Compute derived values directly during rendering; use `key` when state needs to be reset; write side effects caused by events in event handlers
+- Read backend data with TanStack Query; put backend-pushed data into the store of the corresponding domain; perform navigation with actions
+- Do not hand-write `useMemo` or `useCallback` (React Compiler is responsible for them); use `useRef` only for DOM nodes and imperative instances
+- Do not use module-level mutable singletons, request counters, `let active` guards, latest-value refs, or `setTimeout` to wait for a render
 
-其他写法：
+Existing violations are capped in `eslint-suppressions.json`; a file's cap may only shrink. Never raise a cap, and remove the entry once its code is migrated.
 
-- 派生值在渲染中直接计算；需要重置状态时用 `key`；事件引起的副作用写在事件处理函数里
-- 后端数据用 TanStack Query 读取，后端推送的数据进对应领域的 store，导航用 action
-- 不手写 `useMemo`、`useCallback`（由 React Compiler 负责）；`useRef` 只用于 DOM 节点和命令式实例
-- 禁止模块级可变单例、请求计数器、`let active` 守卫、latest-value ref、用 `setTimeout` 等待渲染
+## 7. UI and Design System
 
-## 7. 界面与 Design System
+- Follow @DESIGN.md strictly; when requirements conflict, @DESIGN.md takes precedence.
+- Prefer components and design tokens from `ui` for the UI; do not write arbitrary values and do not use Tailwind's built-in color palette.
+- The semantic names and hierarchy of tokens are frozen (ADR 0018): they may only be added, never modified or deleted; values may be adjusted.
+- When the same UI structure appears more than twice, extract it into a component; compose basic components first, and extract only recurring complex compositions into higher-level components.
 
-- 界面优先使用 `ui` 中的组件和 design token，不写 arbitrary 值，不用 Tailwind 原生色板
-- token 的语义名称和层次已冻结（ADR 0018）：只能新增，不能修改或删除；值可以调整
-- 同样的界面结构出现两次以上，就提取为组件；先用基础组件组合，反复出现的复杂组合才提取为高级组件
+## 8. Other
 
-## 8. 其他
+- Do not write .mjs files; always convert them to .ts.
+- Prefer mature community dependencies and do not reinvent the wheel; check maintenance status, license, and size before introducing a new dependency.
 
-- 禁止写 .mjs 文件，全部一律换为 .ts 格式
-- 优先复用社区成熟的依赖，不重复造轮子；引入新依赖前核对维护状态、许可证和体积
+# Delion Bot architecture
 
-# Delion Bot 架构
+Delion Bot is a local-first personal agent. The first release uses its own data directory, imports no legacy data, and keeps no compatibility layer for the previous version. See `docs/adr/` for design decisions.
 
-Delion Bot 是本地优先的个人 Agent。首版使用独立的数据目录，不导入旧数据，也不保留旧版兼容层。设计决策见 `docs/adr/`。
+Feature modules live in `src/modules/`. Export the module definition and cross-module interfaces through `index.ts`, declare IPC contracts in `contract.ts` where needed, and put implementations in `main/`, `view/`, or `data/`. Register main-process modules in `src/app/modules.ts`.
 
-功能模块放在 `src/modules/`。通过 `index.ts` 导出模块定义和跨模块接口，按需使用 `contract.ts` 声明 IPC 契约，并将实现放在 `main/`、`view/` 或 `data/`。主进程模块在 `src/app/modules.ts` 登记。
+Dependency rules (checked by CI):
 
-依赖规则（由 CI 检查）：
+1. `core` depends only on Pi and Node; `core/protocol` depends only on zod.
+2. `ui` depends only on react, radix, cva, and lucide.
+3. Modules reference each other only through the other module's `index.ts`; `view/` may reference only `core/protocol`, not other parts of core, and not `main/`.
+4. Modules may reference only `app/module.ts`, not other parts of app.
 
-1. `core` 只依赖 Pi 和 Node；`core/protocol` 只依赖 zod
-2. `ui` 只依赖 react、radix、cva、lucide
-3. 模块之间只通过对方的 `index.ts` 引用；`view/` 只能引用 `core/protocol`，不能引用 core 的其他部分，也不能引用 `main/`
-4. 模块只能引用 `app/module.ts`，不能引用 app 的其他部分
+When you receive a requirement, first decide where the change belongs:
 
-拿到需求后，先判断改动落在哪里：
+| What you need to do                      | Where to change                                                                 |
+| ---------------------------------------- | ------------------------------------------------------------------------------- |
+| Change a feature's UI                    | The corresponding module's `view/`                                              |
+| Change a feature's service wiring        | The corresponding module's `main/`                                              |
+| Add domain capabilities for the Agent    | The corresponding module's commands and Skills                                  |
+| Read another module's data               | Call the interface exported by that module's `index.ts`                         |
+| Add a general-purpose tool for the Agent | `core/capabilities`                                                             |
+| Change the Agent protocol                | `core/protocol`; **confirm the versioning strategy with the user first**        |
+| Introduce a new cross-module concept     | `core` or `app/module.ts`; **write an ADR and obtain the user's consent first** |
 
-| 你要做的事            | 改动位置                                                   |
-| --------------------- | ---------------------------------------------------------- |
-| 修改功能界面          | 对应模块的 `view/`                                         |
-| 修改功能的服务接入    | 对应模块的 `main/`                                         |
-| 为 Agent 增加领域能力 | 对应模块的命令与 Skill                                     |
-| 读取其他模块的数据    | 调用对方 `index.ts` 导出的接口                             |
-| 为 Agent 增加通用工具 | `core/capabilities`                                        |
-| 修改 Agent 协议       | `core/protocol`，**需要先和用户确认版本策略**              |
-| 引入新的跨模块概念    | `core` 或 `app/module.ts`，**需要先写 ADR 并获得用户同意** |
+# File directory
 
-# 文件目录
-
-修改前先定位相关模块并阅读其契约和实现。
+Before making changes, locate the relevant module and read its contract and implementation.
 
 ```text
 delion-bot/
 ├─ src/
-│  ├─ core/                   Agent 内核，只依赖 Pi 与 Node
-│  │  ├─ protocol/            Agent 协议、模块契约工具与桌面私有视图类型（只依赖 zod）
-│  │  ├─ agent/               Pi 接入、会话、旁问、子 Agent 与后台任务
-│  │  ├─ capabilities/        工具、Skills、MCP、联网与注册表
-│  │  ├─ remote/              远程执行后端与 helper 通道
-│  │  └─ ports.ts             宿主端口（HostPorts）
-│  ├─ ui/                     Design System（fork 自 beautiful-ui），零业务依赖
-│  ├─ modules/                通用模块（chat、mail、note、notifications、onboarding、preview、
-│  │                          remotes、search、settings、terminal、todo、update、workspace）
-│  └─ app/                    宿主与外壳
-│     ├─ module.ts            模块与视图定义，模块唯一可引用的 app 文件
-│     ├─ modules.ts           主进程模块清单
-│     ├─ contracts.ts         IPC 契约清单
-│     ├─ views.ts             渲染端视图清单
-│     ├─ main/                Electron 入口、数据库、IPC 注册与宿主端口实现
-│     ├─ preload/             contextBridge 与按契约白名单放行的 bridge
-│     └─ renderer/            外壳界面：shell、workbench、navigation、workspace、settings、styles
-├─ test/                      TypeScript 测试，按 app、core、modules、ui 分组
-├─ helper/                    Go 远端 helper 及包内测试
-├─ scripts/                   开发、冒烟、打包与校验脚本
-├─ docs/                      开发文档、条款与接口资料
-├─ vendor/                    入库的 helper、搜索工具与 OpenSSH
-├─ assets/                    图标与品牌素材
-└─ build/                     打包用图标等构建资源
+│  ├─ core/                   Agent kernel; depends only on Pi and Node
+│  │  ├─ protocol/            Agent protocol, module contract utilities, and desktop-private view types (depends only on zod)
+│  │  ├─ agent/               Pi integration, sessions, sidechats, subagents, and background tasks
+│  │  ├─ capabilities/        Tools, Skills, MCP, web access, and the registry
+│  │  ├─ remote/              Remote execution backend and helper channel
+│  │  └─ ports.ts             Host ports (HostPorts)
+│  ├─ ui/                     Design System (forked from beautiful-ui), zero business dependencies
+│  ├─ modules/                General modules (chat, mail, note, notifications, onboarding, preview,
+│  │                          remotes, search, settings, terminal, todo, update, workspace)
+│  └─ app/                    Host and shell
+│     ├─ module.ts            Module and view definitions; the only app file modules may reference
+│     ├─ modules.ts           Main-process module list
+│     ├─ contracts.ts         IPC contract list
+│     ├─ views.ts             Renderer view list
+│     ├─ main/                Electron entry, database, IPC registration, and host port implementations
+│     ├─ preload/             contextBridge and bridges allowlisted by contract
+│     └─ renderer/            Shell UI: shell, workbench, navigation, workspace, settings, styles
+├─ test/                      TypeScript tests, grouped by app, core, modules, and ui
+├─ helper/                    Go remote helper and in-package tests
+├─ scripts/                   Development, smoke, packaging, and validation scripts
+├─ docs/                      Development docs, terms of use, and interface references
+├─ vendor/                    Vendored helper, search tools, and OpenSSH
+├─ assets/                    Icons and brand assets
+└─ build/                     Build resources such as packaging icons
 ```
 
-如果出现较大的代码改动，需要及时更新该目录树。
+Update this directory tree promptly when large code changes occur.

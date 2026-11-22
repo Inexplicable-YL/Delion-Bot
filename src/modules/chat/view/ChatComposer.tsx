@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   CalendarDaysIcon,
@@ -215,7 +215,6 @@ export function ChatComposer({
 }) {
   const { navigate } = useChatTabSource();
   const editorRef = useRef<ComposerEditorHandle | null>(null);
-  const promptRef = useRef<HTMLDivElement>(null);
   const [wrapped, setWrapped] = useState(false);
   const expanded = value.length > 0 && (wrapped || value.includes('\n'));
   const [menu, setMenu] = useState<MenuState>(null);
@@ -300,14 +299,13 @@ export function ChatComposer({
     await queryClient.cancelQueries({ queryKey: webSearchOptionsKey });
     await queryClient.invalidateQueries({ queryKey: webSearchOptionsKey });
   };
-  useEffect(() => onWebSearchChanged(() => void refreshSearch()), []);
-
-  useEffect(() => {
-    const prompt = promptRef.current;
-    const editor = prompt?.querySelector<HTMLElement>('.cm-content');
+  const mountPrompt = (prompt: HTMLDivElement | null) => {
+    if (!prompt) return;
+    const unsubscribe = onWebSearchChanged(() => void refreshSearch());
+    const editor = prompt.querySelector<HTMLElement>('.cm-content');
     const toolbar = prompt?.querySelector<HTMLElement>('[data-slot="prompt-input-toolbar"]');
     const add = prompt?.querySelector<HTMLElement>('[data-slot="composer-add"]');
-    if (!prompt || !editor || !toolbar || !add) return;
+    if (!editor || !toolbar || !add) return unsubscribe;
 
     const lineContents = document.createRange();
     const measure = () => {
@@ -335,8 +333,9 @@ export function ChatComposer({
     return () => {
       contentObserver.disconnect();
       sizeObserver.disconnect();
+      unsubscribe();
     };
-  }, []);
+  };
 
   const slashItems =
     menu?.kind === 'slash'
@@ -543,7 +542,7 @@ export function ChatComposer({
         />
       )}
       <PromptInput
-        ref={promptRef}
+        ref={mountPrompt}
         className="flex flex-wrap items-center gap-2 px-2 py-2.5"
         dragging={dragging}
         dropHint="松开以添加图片或附件"

@@ -18,7 +18,7 @@ import {
 import type { OutlineIcon } from '../../../ui/outline-icon';
 import { settingsSectionLabels, type SettingsSectionId } from '../contract';
 import { cn } from '../../../ui/cn';
-import { useHorizontalWheel } from '../../../ui/use-horizontal-wheel';
+import { horizontalWheelRef } from '../../../ui/use-horizontal-wheel';
 
 export type { SettingsSectionId };
 
@@ -56,13 +56,11 @@ type SettingsNavProps = {
 };
 
 export function SettingsNav({ value, onSectionChange }: SettingsNavProps) {
-  const navRef = useHorizontalWheel<HTMLElement>();
-
   return (
     <nav
       aria-label="设置分区"
       className="flex shrink-0 gap-1 overflow-x-auto rounded-panel glass-thick p-app-inset [scrollbar-width:none] max-md:[mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] md:w-44 lg:w-sidebar md:flex-col md:gap-4 md:overflow-y-auto"
-      ref={navRef}
+      ref={horizontalWheelRef}
     >
       {sectionGroups.map((group, index) => (
         <div className="flex shrink-0 gap-1 md:grid md:gap-1" key={group.title}>

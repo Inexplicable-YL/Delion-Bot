@@ -13,6 +13,9 @@ concurrency:
   group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  GITLEAKS_VERSION: v8.30.1
+
 jobs:
   changes:
     name: Detect changes
@@ -22,7 +25,6 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      workflows: ${{ steps.filter.outputs.workflows }}
       app: ${{ steps.filter.outputs.app == 'true' || steps.filter.outputs.common == 'true' || steps.filter.outputs.windows == 'true' || steps.filter.outputs.helper == 'true' }}
       helper: ${{ steps.filter.outputs.helper == 'true' || steps.filter.outputs.common == 'true' }}
       windows: ${{ steps.filter.outputs.common == 'true' || steps.filter.outputs.runtime == 'true' || steps.filter.outputs.helper == 'true' || steps.filter.outputs.windows == 'true' }}
@@ -38,8 +40,6 @@ jobs:
         with:
           base: ${{ github.event_name == 'push' && github.ref || '' }}
           filters: |
-            workflows:
-              - '.github/workflows/**'
             app:
               - 'src/**'
               - 'test/**'
@@ -97,9 +97,6 @@ jobs:
   quality:
     needs: changes
     uses: ./.github/workflows/quality.yml
-    with:
-      workflows: ${{ needs.changes.outputs.workflows == 'true' }}
-      app: ${{ needs.changes.outputs.app == 'true' }}
 
   test:
     needs: changes
@@ -137,22 +134,83 @@ jobs:
       helper: ${{ needs.changes.outputs.helper == 'true' }}
       archives: ${{ needs.changes.outputs.archives == 'true' }}
 
+  secrets:
+    name: Secret scan
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION#v}_linux_x64.tar.gz" | tar -xz -C "$RUNNER_TEMP" gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Scan pull request commits
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: gitleaks git --redact --no-banner --log-opts="${BASE_SHA}..HEAD"
+
+  dependencies:
+    name: Dependency review
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+  codeql:
+    name: CodeQL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:javascript-typescript
+
   required:
     name: CI required
     if: always()
-    needs: [changes, quality, test, helper, windows, macos]
+    needs: [changes, quality, test, helper, windows, macos, secrets, dependencies, codeql]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Verify required results
         env:
           NEEDS: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           node --input-type=module <<'NODE'
           const needs = JSON.parse(process.env.NEEDS);
-          for (const name of ['changes', 'quality']) {
+          for (const name of ['changes', 'quality', 'codeql']) {
             if (needs[name].result !== 'success') {
               throw new Error(name + ': ' + needs[name].result);
+            }
+          }
+          const pullRequest = process.env.EVENT_NAME === 'pull_request';
+          for (const name of ['secrets', 'dependencies']) {
+            const expected = pullRequest ? 'success' : 'skipped';
+            if (needs[name].result !== expected) {
+              throw new Error(name + ': expected ' + expected + ', got ' + needs[name].result);
             }
           }
           for (const name of ['test', 'helper', 'windows', 'macos']) {

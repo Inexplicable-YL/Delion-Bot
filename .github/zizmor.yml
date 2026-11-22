@@ -1,0 +1,10 @@
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        '*': ref-pin
+  self-repository:
+    disable: true
+  dangerous-triggers:
+    ignore:
+      - pr-labels.yml

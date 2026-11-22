@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AdjustmentsHorizontalIcon as SlidersHorizontal,
@@ -94,13 +94,12 @@ export function CapabilitiesSection() {
   const [busy, setBusy] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
-  useEffect(
-    () =>
-      onWebSearchChanged(
-        () => void queryClient.invalidateQueries({ queryKey: ['capabilities', 'builtin'] }),
-      ),
-    [queryClient],
-  );
+  const watchCapabilities = (element: HTMLDivElement | null) => {
+    if (!element) return;
+    return onWebSearchChanged(
+      () => void queryClient.invalidateQueries({ queryKey: ['capabilities', 'builtin'] }),
+    );
+  };
 
   const run = async (operation: () => Promise<AgentCapabilityView[]>) => {
     if (!window.delionBot || busy) return;
@@ -114,7 +113,7 @@ export function CapabilitiesSection() {
   };
 
   return (
-    <div className="grid gap-10" data-setting-id="capabilities">
+    <div className="grid gap-10" data-setting-id="capabilities" ref={watchCapabilities}>
       <SectionHeader title="内置能力" />
       {!window.delionBot ? (
         <p className="text-ui-body text-ink-2">内置能力配置仅在桌面端可用。</p>

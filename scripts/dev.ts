@@ -2,7 +2,6 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { build, createServer, type Rolldown, type ViteDevServer } from 'vite';
 import electronApi from 'electron';
 
-// 从 node 进程 require('electron') 得到的是可执行文件路径字符串，不是 API 命名空间。
 const electron = electronApi as unknown as string;
 
 let child: ChildProcess | undefined;
@@ -63,7 +62,6 @@ try {
   server = await createServer({ configFile: 'vite.renderer.config.ts', mode: 'development' });
   await server.listen();
   for (const configFile of ['vite.main.config.ts', 'vite.preload.config.ts']) {
-    // build.watch 模式的返回值是 watcher，静态类型上是三态联合，这里断言成 watcher。
     const watcher = (await build({
       configFile,
       mode: 'development',

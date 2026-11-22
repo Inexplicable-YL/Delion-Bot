@@ -1,4 +1,3 @@
-// 直接执行 Pi 的本地工具与真实 delion 命令桥，不调用模型。
 import { app } from 'electron';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -19,10 +18,8 @@ import { workspaceModule } from '../src/modules/workspace';
 
 const root = resolve('.');
 const profile = mkdtempSync(join(tmpdir(), 'delion-runtime-中文-'));
-// setAppPath 是 Electron 未写进类型的内部接口，让打包后的随包路径指回仓库。
 (app as typeof app & { setAppPath(path: string): void }).setAppPath(root);
 for (const name of ['userData', 'documents', 'home'] as const) app.setPath(name, profile);
-// 隔离 Pi 的二进制缓存，禁用缺少工具时的联网下载，确保测试命中随包工具。
 process.env.PI_CODING_AGENT_DIR = join(profile, 'pi');
 process.env.PI_OFFLINE = '1';
 if (process.platform === 'darwin') process.env.PATH = '/usr/bin:/bin';
@@ -96,7 +93,6 @@ app.whenReady().then(async () => {
     clearTimeout(timeout);
     closeDomainBridge();
     closeDatabase();
-    // Windows 上 Chromium 退出前一直占着 userData 里的着色器缓存，目录留给系统临时目录回收。
     if (process.platform !== 'win32') rmSync(profile, { recursive: true, force: true });
     app.exit(exitCode);
   }

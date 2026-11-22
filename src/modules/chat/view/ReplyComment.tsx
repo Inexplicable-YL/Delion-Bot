@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import {
   ChatBubbleLeftEllipsisIcon as MessageSquarePlus,
   QuestionMarkCircleIcon as MessageCircleQuestion,
@@ -112,7 +112,8 @@ export function ReplyCommentLayer({
   const [target, setTarget] = useState<Target | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const watchSelection = (element: HTMLDivElement | null) => {
+    if (!element) return;
     const scroller = scrollRef.current;
     if (!scroller) return;
     let frame = 0;
@@ -147,12 +148,13 @@ export function ReplyCommentLayer({
       document.removeEventListener('selectionchange', collapse);
       document.removeEventListener('keydown', escape);
     };
-  }, [scrollRef]);
+  };
 
-  useLayoutEffect(() => {
+  const placeComment = (box: HTMLDivElement | null) => {
     const scroller = scrollRef.current;
-    const box = boxRef.current;
     if (!target || !scroller || !box) return;
+    boxRef.current = box;
+    if (target.editing) CSS.highlights.set(HIGHLIGHT, new Highlight(target.range));
     const place = () => {
       const rects = [...target.range.getClientRects()].filter((rect) => rect.width || rect.height);
       if (!rects.length) {
@@ -195,19 +197,13 @@ export function ReplyCommentLayer({
       cancelAnimationFrame(frame);
       scroller.removeEventListener('scroll', schedule);
       observer.disconnect();
+      boxRef.current = null;
+      if (target.editing) CSS.highlights.delete(HIGHLIGHT);
     };
-  }, [scrollRef, target]);
+  };
 
-  useEffect(() => {
-    if (!target?.editing) return;
-    CSS.highlights.set(HIGHLIGHT, new Highlight(target.range));
-    return () => {
-      CSS.highlights.delete(HIGHLIGHT);
-    };
-  }, [target]);
-
-  if (!target) return null;
   const add = (comment: string) => {
+    if (!target) return;
     const { drafts, update } = useChatDrafts.getState();
     update(draftKey, {
       comments: [...(drafts[draftKey]?.comments ?? []), { quote: target.quote, comment }],
@@ -215,29 +211,37 @@ export function ReplyCommentLayer({
     setTarget(null);
   };
   return (
-    <CommentFloat editing={target.editing} key={target.editing ? 'input' : 'tip'} ref={boxRef}>
-      {target.editing ? (
-        <CommentInput onCancel={() => setTarget(null)} onSubmit={add} />
-      ) : (
-        <div className="flex">
-          <CommentFloatAction onClick={() => setTarget({ ...target, editing: true })}>
-            <MessageSquarePlus aria-hidden />
-            添加到对话
-          </CommentFloatAction>
-          {onSidechat && (
-            <CommentFloatAction
-              onClick={() => {
-                onSidechat(target.quote);
-                setTarget(null);
-              }}
-            >
-              <MessageCircleQuestion aria-hidden />
-              旁问
-            </CommentFloatAction>
+    <div className="contents" ref={watchSelection}>
+      {target && (
+        <CommentFloat
+          editing={target.editing}
+          key={target.editing ? 'input' : 'tip'}
+          ref={placeComment}
+        >
+          {target.editing ? (
+            <CommentInput onCancel={() => setTarget(null)} onSubmit={add} />
+          ) : (
+            <div className="flex">
+              <CommentFloatAction onClick={() => setTarget({ ...target, editing: true })}>
+                <MessageSquarePlus aria-hidden />
+                添加到对话
+              </CommentFloatAction>
+              {onSidechat && (
+                <CommentFloatAction
+                  onClick={() => {
+                    onSidechat(target.quote);
+                    setTarget(null);
+                  }}
+                >
+                  <MessageCircleQuestion aria-hidden />
+                  旁问
+                </CommentFloatAction>
+              )}
+            </div>
           )}
-        </div>
+        </CommentFloat>
       )}
-    </CommentFloat>
+    </div>
   );
 }
 

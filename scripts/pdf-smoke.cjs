@@ -1,4 +1,3 @@
-// Isolated renderer fixture; no account, credentials or personal files.
 const { app, BrowserWindow, ipcMain, protocol } = require('electron');
 const { join, resolve } = require('node:path');
 const { mkdtempSync, writeFileSync } = require('node:fs');
@@ -226,8 +225,6 @@ app
     await wait(
       `(() => { const row = document.querySelector('[data-page-number="${page}"]'); return Math.abs(row.getBoundingClientRect().width - row.closest('.overflow-auto').clientWidth) <= 2; })()`,
     );
-    // Count visible frames, not just canvas nodes: a blank replacement used to
-    // pass the old resource/position checks while flashing on screen.
     await wait(`(() => {
       const row = document.querySelector('[data-page-number="${page}"]');
       return [...row.querySelectorAll('canvas')].some(c => c.width && getComputedStyle(c).visibility === 'visible' && !c.hidden);
@@ -258,7 +255,6 @@ app
     await evaluate(
       "document.querySelector('.textLayer').closest('.overflow-auto').scrollTop = window.pdfScrollBefore",
     );
-    // Native trackpad pinch is represented by ctrl+wheel in Chromium.
     const zoom = 'parseInt(document.querySelector(\'[title="重置缩放到 100%"]\').textContent)';
     const initialZoom = await evaluate(zoom);
     const anchor = await evaluate(`(() => {
@@ -309,7 +305,6 @@ app
       mobile: false,
     });
     await evaluate('document.querySelector(\'[aria-label="放大 PDF"]\').click()');
-    // Allow the official 400ms delayed redraw to start before testing its result.
     await new Promise((r) => setTimeout(r, 450));
     await wait("[...document.querySelectorAll('canvas')].some(c => c.width > 0)");
     assert.ok(

@@ -1,5 +1,3 @@
-// 远程项目的真实窗口冒烟：真 preload、真 renderer、真主进程 IPC，远端也真连（需要
-// DELION_REMOTE_HOST / DELION_REMOTE_KEY，未设置则跳过并退出 0）；这种链路在 jsdom 里只能靠假 window.delionBot 代替。
 import { app, BrowserWindow, ipcMain } from 'electron';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
@@ -25,8 +23,6 @@ const profile = mkdtempSync(join(tmpdir(), 'delion-remote-gui-'));
 app.setPath('userData', profile);
 app.setPath('documents', profile);
 app.setPath('home', profile);
-// 入口在 .tools/ 时 getAppPath() 不是仓库根，找不到 vendor/ 下的 helper 而静默降级成 ssh；
-// 对齐成仓库根，让冒烟真的走 helper 通道。
 app.getAppPath = () => process.cwd();
 registerPreviewScheme();
 
@@ -40,7 +36,6 @@ app
     closeDatabase();
     getDatabase();
 
-    // 远端夹具：放在主目录下，这样向导从主目录点一层就能到。
     const home = (await probeRemote(target)).home;
     const root = `${home}/delion-gui-smoke`;
     fixtureRoot = root;
@@ -71,7 +66,6 @@ app
     });
     const evaluate = (code: string) => win.webContents.executeJavaScript(code, true);
     const wait = async (code: string, label = code) => {
-      // 向导「连接」要上传并启动 helper，慢链路上 15 秒不够。
       for (let i = 0; i < 300; i++) {
         if (await evaluate(code)) return;
         await new Promise((resolve) => setTimeout(resolve, 100));
@@ -83,7 +77,6 @@ app
         `等待超时：${label}\n角色：${roles}\n${errors.join('\n')}\n${await evaluate('document.body.innerText')}`,
       );
     };
-    // 同名按钮可能同时存在于多处，取可见的最后一个（与 pdf 冒烟一致）。
     const click = (text: string) =>
       evaluate(
         `(() => {
@@ -92,7 +85,6 @@ app
           buttons.at(-1).click();
         })()`,
       );
-    // 截图落到 out/smoke-shots/：面板的样子要人眼看，断言只管行为。
     const shotDir = join(process.cwd(), 'out', 'smoke-shots');
     mkdirSync(shotDir, { recursive: true });
     const shoot = async (name: string) => {
@@ -202,8 +194,6 @@ app
       '点远端文件应该新增一个预览标签',
     );
 
-    // 远端条目只给远端动作（本地的重命名/移动/移除在远端子条目上只会失败）。
-    // Radix 的菜单在 pointerdown 上开，不是 click。
     const menuItems = `[...document.querySelectorAll('[role="menuitem"]')].map(i => i.textContent.trim()).join('|')`;
     const openMenu = (label: string) =>
       evaluate(`(() => {
@@ -234,15 +224,12 @@ app
       `@ 候选缺少子目录文件：${JSON.stringify(references)}`,
     );
 
-    // 远端没有文件监听：工具写文件后靠主进程广播让目录树重读，否则只能收起再展开。
     await remoteBackend(target).write.writeFile(`${root}/fresh.txt`, '新文件\n');
     await wait(
       `document.querySelector('[role="treeitem"][aria-label="fresh.txt"]') !== null`,
       '刷新后自动出现的远端新文件',
     );
 
-    // Delion Bot 之外改的远端文件（这里用一条独立的 ssh 去改），靠 helper 的 inotify watch 推回来；
-    // 每轮重 touch 一次，避免「上报监视集合」和这次改动抢跑。
     const outside = `${root}/outside-watch.txt`;
     const outsideShown = `document.querySelector('[role="treeitem"][aria-label="outside-watch.txt"]') !== null`;
     let watched = false;
@@ -265,7 +252,6 @@ app
     })()`);
     let termData = '';
     try {
-      // 提示符里主目录被 bash 缩写成 ~（PS1 的 \w），所以按 ~/目录名 断言。
       const prompt = `~/${root.split('/').pop()}`;
       for (let i = 0; i < 100 && !termData.includes(prompt); i++) {
         termData = await evaluate(`window.__term.data`);
@@ -282,7 +268,6 @@ app
       await evaluate(
         `window.delionBot.bridge.invoke('terminal:write', { id: window.__term.id, data: 'echo MARK-$(pwd)\\r' })`,
       );
-      // 只认命令输出：输入回显里是 MARK-$(pwd)，展开成绝对路径的结果不会出现在回显里。
       await wait(`window.__term.data.includes('MARK-${root}')`, '远端终端执行命令的输出');
       const buffer = await evaluate(
         `(async () => (await window.delionBot.bridge.invoke('terminal:list', ${JSON.stringify(entry.id)})).map(s => s.buffer).join(''))()`,

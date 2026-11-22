@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useState } from 'react';
 import {
   ArrowTopRightOnSquareIcon as SquareArrowOutUpRight,
   ChatBubbleOvalLeftEllipsisIcon as MessageCircleDashed,
@@ -7,7 +7,7 @@ import {
   QuestionMarkCircleIcon as MessageCircleQuestion,
   XMarkIcon as X,
 } from '@heroicons/react/24/outline';
-import type { ChatMediaView, WorkspaceChat } from '../../../core/protocol/agent';
+import type { WorkspaceChat } from '../../../core/protocol/agent';
 import {
   CHAT_ATTACHMENT_MAX,
   CHAT_DOCUMENT_MAX_BYTES,
@@ -27,6 +27,7 @@ import type { ReferenceEntry, ReferenceSource } from './ChatSource';
 import { emptyDraft, useChatDrafts } from './drafts';
 import { referenceContext } from './reference-tokens';
 import { releaseChatMedia } from './media';
+import { useChatAttachments } from './use-chat-attachments';
 import { sidechatDraftKey, useSidechats } from './sidechat-store';
 import { canSendInput } from './use-chat';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -50,17 +51,16 @@ export function SidechatPanel({
   const parent = useSessions((state) => state.chats[parentId] ?? null);
   const key = sidechatDraftKey(parentId);
   const draft = useChatDrafts((state) => state.drafts[key] ?? emptyDraft);
-  const [attachments, setAttachments] = useState<ChatMediaView[]>([]);
+  const { attachments, update: setAttachments, release } = useChatAttachments();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const entered = useSidechats((state) => state.entered[parentId] ?? false);
   const [motion, setMotion] = useState<Motion>(() => (entered ? null : 'enter'));
   const referenceOptions = parent ? files : [];
 
-  const releaseAttachments = useEffectEvent(() =>
-    releaseChatMedia(attachments.map((item) => item.id)),
-  );
-  useEffect(() => () => releaseAttachments(), []);
+  const [attach] = useState(() => (element: HTMLDivElement | null) => {
+    if (element) return release;
+  });
 
   const thread: WorkspaceChat | null =
     view && parent
@@ -186,7 +186,12 @@ export function SidechatPanel({
     </button>
   );
 
-  if (collapsed && motion !== 'collapse') return pill;
+  if (collapsed && motion !== 'collapse')
+    return (
+      <div className="contents" ref={attach}>
+        {pill}
+      </div>
+    );
 
   const animation = {
     enter: 'slide-in-right 260ms var(--ease-out-strong) both',
@@ -196,7 +201,7 @@ export function SidechatPanel({
   };
 
   return (
-    <>
+    <div className="contents" ref={attach}>
       {(motion === 'collapse' || motion === 'expand') && pill}
       <section
         aria-label="旁问"
@@ -277,6 +282,6 @@ export function SidechatPanel({
           />
         </div>
       </section>
-    </>
+    </div>
   );
 }

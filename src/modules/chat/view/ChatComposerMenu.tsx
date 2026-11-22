@@ -107,7 +107,6 @@ export function ChatComposerMenu({
           className={`rounded-pill bg-hover hover:bg-hover-strong aria-expanded:bg-hover-strong ${className}`}
           data-slot="composer-add"
           size="lg"
-          title="添加到对话"
         >
           <PlusIcon />
         </IconButton>

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useEffectEvent } from 'react';
+import { lazy, Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { Button } from '../../../ui/Button';
@@ -68,13 +68,12 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
     });
 
   const watchesDisk = doc?.watchesDisk === true;
-  const reloadOnFocus = useEffectEvent(load);
-  useEffect(() => {
-    if (!watchesDisk) return;
-    const onFocus = () => reloadOnFocus();
+  const watchDisk = (element: HTMLElement | null) => {
+    if (!element || !watchesDisk) return;
+    const onFocus = () => load();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [watchesDisk]);
+  };
 
   const content = doc?.content;
   const rootSize = useRootFontSize();
@@ -120,6 +119,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
 
   return (
     <section
+      ref={watchDisk}
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       aria-label={`文档：${content.title}`}
     >

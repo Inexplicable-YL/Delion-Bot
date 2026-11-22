@@ -1,4 +1,3 @@
-// 独立 profile 检查真实主进程、原生菜单与可取消的退出，不访问真实账号或系统启动项。
 const { app, BrowserWindow, dialog, Menu } = require('electron');
 const { dirname, join, resolve } = require('node:path');
 const { mkdtempSync } = require('node:fs');
@@ -62,7 +61,6 @@ async function run(window) {
   await wait(() => js("!!document.querySelector('main')"), 'app mounted');
   assert.equal(await js('window.delionBot.platform'), process.platform);
   if (process.platform === 'darwin') {
-    // 品牌源图是 1254 像素，Dock 必须用构建生成的 1024 画布图标，而不是未加留白的源图。
     assert.ok(dockIcon && !dockIcon.isEmpty(), 'Dock icon must use generated macOS assets');
     assert.deepEqual(
       dockIcon.getSize(),
@@ -87,7 +85,6 @@ async function run(window) {
             'titlebar zoom and resize',
           );
           let layout;
-          // 缩放后的 viewport 与原生覆盖区/CSS 环境变量分别更新，不能只等 innerWidth。
           await wait(async () => {
             layout = await js(`(() => {
             const header = document.querySelector('header');
@@ -138,7 +135,6 @@ async function run(window) {
     }
   }
   if (process.platform === 'darwin') {
-    // 更新平台门已与 Windows 一致放开；打包冒烟停在初始状态，不触发真实联网检查。
     const update = await js("window.delionBot.bridge.invoke('update:state')");
     assert.equal(update.phase, packaged ? 'unsupported' : 'idle');
     if (!packaged) {
@@ -181,7 +177,6 @@ async function run(window) {
     });
     await popup.loadURL('data:text/html,<title>Login window fixture</title>');
     popup.show();
-    // Electron 把菜单触发时的窗口作为参数传入；使用真实弹窗，避免后台 CI 抢系统焦点。
     close.click(close, popup, {});
     await wait(() => popup.isDestroyed(), 'menu closes focused auxiliary window');
     assert.equal(window.isDestroyed(), false);
@@ -202,7 +197,6 @@ async function run(window) {
     `window.delionBot.bridge.invoke('terminal:create', { projectId: '${project.id}', id: '${id}' })`,
   );
   const checkRuntime = async (marker) => {
-    // 终端跟随系统 shell，不能再假设 bash 语法；echo 在 PowerShell 与 zsh 下一致。
     await js(
       `window.delionBot.bridge.invoke('terminal:write', { id: '${id}', data: ${JSON.stringify(`echo ${marker}\r`)} })`,
     );
@@ -224,7 +218,6 @@ async function run(window) {
   assert.equal(BrowserWindow.getAllWindows().length, 1);
   await checkRuntime('AFTER_REOPEN');
 
-  // 真正调用 app.quit，由 renderer 的 beforeunload 拦下；取消后终端不得提前销毁。
   await js('window.onbeforeunload = () => false; void 0');
   app.quit();
   await wait(() => declined === 1, 'cancel unsaved-note exit');

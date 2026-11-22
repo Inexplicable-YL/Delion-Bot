@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { AppShell } from './AppShell';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -75,6 +75,40 @@ function prewarmAgentAfterPaint(element: HTMLDivElement | null) {
   return () => cancelAnimationFrame(frame);
 }
 
+export function connectAppEvents() {
+  onAgentEvent('session-update', ({ sessionId, chat }) => {
+    if (chat.running) return;
+    const store = useWorkspaceStore.getState();
+    void store.refresh().catch(console.error);
+    for (const [id, draft] of Object.entries(useNoteDrafts.getState().drafts)) {
+      if (draft.text === draft.saved)
+        void useNoteDrafts.getState().acquire(id, true).catch(console.error);
+    }
+    const lists = useSessions.getState().lists;
+    for (const [pool, list] of Object.entries(lists)) {
+      if (list.some((session) => session.id === sessionId)) {
+        void useSessions
+          .getState()
+          .refresh(pool === 'general' ? null : pool)
+          .catch(() => {});
+        break;
+      }
+    }
+  });
+
+  const beforeUnload = (event: BeforeUnloadEvent) => {
+    if (Object.values(useNoteDrafts.getState().drafts).some((draft) => draft.text !== draft.saved))
+      event.preventDefault();
+  };
+  window.addEventListener('beforeunload', beforeUnload);
+  window.delionBot?.window.onTrayAction((action) => {
+    const navigation = useNavigationStore.getState();
+    if (action === 'new-chat') navigation.openGeneralChat(true);
+    else if (action === 'new-project') navigation.newProject();
+    else if (action === 'open-settings') navigation.navigate('settings');
+  });
+}
+
 export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [drawerSlot, setDrawerSlot] = useState<HTMLElement | null>(null);
@@ -109,48 +143,6 @@ export default function App() {
     const group = walkGroups(state.root).find((node) => node.id === state.focus);
     return group?.active?.startsWith('chat:') ?? false;
   });
-
-  useEffect(() => {
-    return onAgentEvent('session-update', ({ sessionId, chat }) => {
-      if (chat.running) return;
-      const store = useWorkspaceStore.getState();
-      void store.refresh().catch(console.error);
-      for (const [id, draft] of Object.entries(useNoteDrafts.getState().drafts)) {
-        if (draft.text === draft.saved)
-          void useNoteDrafts.getState().acquire(id, true).catch(console.error);
-      }
-      const lists = useSessions.getState().lists;
-      for (const [pool, list] of Object.entries(lists)) {
-        if (list.some((session) => session.id === sessionId)) {
-          void useSessions
-            .getState()
-            .refresh(pool === 'general' ? null : pool)
-            .catch(() => {});
-          break;
-        }
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (
-        Object.values(useNoteDrafts.getState().drafts).some((draft) => draft.text !== draft.saved)
-      )
-        event.preventDefault();
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
-  }, []);
-
-  useEffect(() => {
-    return window.delionBot?.window.onTrayAction((action) => {
-      const navigation = useNavigationStore.getState();
-      if (action === 'new-chat') navigation.openGeneralChat(true);
-      else if (action === 'new-project') navigation.newProject();
-      else if (action === 'open-settings') navigation.navigate('settings');
-    });
-  }, []);
 
   const openSearch = () => {
     setMobileDrawer(null);

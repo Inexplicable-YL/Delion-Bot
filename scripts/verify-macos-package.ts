@@ -1,4 +1,3 @@
-// 在目标架构的 Mac 上检查目录包与同版本 DMG/ZIP（--dir 仅检查目录包）；只读，不安装或启动应用。
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
@@ -85,7 +84,6 @@ assert.deepEqual(
 for (const name of ['rg', 'fd']) {
   const relative = join('bin', `darwin-${process.arch}`, name);
   const executable = join(resources, relative);
-  // Developer ID 签名会改变 Mach-O 字节；签名包在执行工具前校验签名和 Team ID。
   if (!signed)
     assert.deepEqual(readFileSync(executable), readFileSync(join(root, 'vendor', relative)));
   assert.ok(statSync(executable).mode & 0o111, `${name} 不可执行`);
@@ -119,8 +117,6 @@ if (!process.argv.includes('--dir')) {
   if (signed) {
     const directory = mkdtempSync(join(tmpdir(), 'delion-signed-archives-'));
     const mount = join(directory, 'dmg');
-    // 公证票据与 Gatekeeper 已在目录包联网验过；归档副本只做离线签名校验，
-    // ZIP 丢失框架符号链接这类损坏仍会在 codesign --verify 暴露。
     try {
       execFileSync('/usr/bin/ditto', ['-x', '-k', `${prefix}.zip`, join(directory, 'zip')], {
         timeout: 120000,

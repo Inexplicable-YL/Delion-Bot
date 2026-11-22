@@ -1,5 +1,3 @@
-// 打包前准备随包 MinGit（Git for Windows 官方嵌入发行版，含 bash 与 git），产物到 .build/mingit，
-// 仓库不提交这约 40MB。换版本时版本号与 SHA256 必须成对更新；镜像只加速，不作信任源。
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
@@ -27,7 +25,6 @@ const marker = join(root, '.build', 'mingit.prepared');
 
 const version = '2.56.0.2';
 const sha256 = 'da35e72aa21c005a5a0d298cfbae110bc1609a815730ea0dde84b01a1b3cd3be';
-// npmmirror 逐字节镜像官方发布物，大陆直连快；GitHub Releases 兜底。两源都过同一 SHA256 校验。
 const urls = [
   'https://registry.npmmirror.com/-/binary/git-for-windows/v2.56.0.windows.2/MinGit-2.56.0.2-64-bit.zip',
   'https://github.com/git-for-windows/git/releases/download/v2.56.0.windows.2/MinGit-2.56.0.2-64-bit.zip',
@@ -79,13 +76,11 @@ if (!downloaded) {
   process.exit(1);
 }
 
-// Windows 10 1803+ 自带的 bsdtar 可直接解 zip，不引入解压依赖。
 const tar = join(process.env.windir ?? 'C:\\Windows', 'System32', 'tar.exe');
 const extract = spawnSync(tar, ['-xf', archive, '-C', outDir], { stdio: 'inherit' });
 if (extract.status !== 0) process.exit(extract.status ?? 1);
 rmSync(archive, { force: true });
 
-// MinGit 的 bash 本体以 sh.exe 名义分发；argv[0] 为 bash 才走完整 bash 模式，故复制出 bash.exe。
 copyFileSync(join(outDir, 'usr', 'bin', 'sh.exe'), join(outDir, 'usr', 'bin', 'bash.exe'));
 for (const must of [join('usr', 'bin', 'bash.exe'), join('cmd', 'git.exe')]) {
   if (!existsSync(join(outDir, must))) {

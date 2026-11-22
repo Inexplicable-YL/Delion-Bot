@@ -1,5 +1,4 @@
-import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { skipToken, useQuery, type QueryClient } from '@tanstack/react-query';
 import type { WorkspaceEntry } from '../../../modules/workspace/contract';
 import { onWorkspaceEvent, workspaceClient } from '../../../modules/workspace/view';
 
@@ -18,8 +17,31 @@ const normalized = (value: string) =>
 
 const localReferencesKey = (cwd: string | null) => ['workspace', 'localReferenceFiles', cwd];
 
+export function connectLocalWorkspaceQueries(queryClient: QueryClient) {
+  const pending = new Map<string, ReturnType<typeof setTimeout>>();
+  onWorkspaceEvent('changed', (paths) => {
+    void queryClient.invalidateQueries({ queryKey: ['workspace', 'search-local'] });
+    const changed = paths.map(normalized);
+    for (const query of queryClient.getQueryCache().findAll({
+      queryKey: ['workspace', 'localReferenceFiles'],
+    })) {
+      const cwd = query.queryKey[2];
+      if (typeof cwd !== 'string') continue;
+      const root = normalized(cwd).replace(/\/$/, '');
+      if (!changed.some((path) => path === root || path.startsWith(`${root}/`))) continue;
+      clearTimeout(pending.get(cwd));
+      pending.set(
+        cwd,
+        setTimeout(() => {
+          pending.delete(cwd);
+          void queryClient.invalidateQueries({ queryKey: localReferencesKey(cwd), exact: true });
+        }, LOCAL_CHANGE_DEBOUNCE_MS),
+      );
+    }
+  });
+}
+
 export function useLocalReferences(cwd: string | null): WorkspaceEntry[] {
-  const queryClient = useQueryClient();
   const files = useQuery({
     queryKey: localReferencesKey(cwd),
     queryFn: cwd
@@ -30,28 +52,6 @@ export function useLocalReferences(cwd: string | null): WorkspaceEntry[] {
           })
       : skipToken,
   });
-
-  useEffect(() => {
-    if (!cwd) return;
-    const root = normalized(cwd).replace(/\/$/, '');
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const unsubscribe = onWorkspaceEvent('changed', (paths) => {
-      if (
-        !paths.some((path) => normalized(path) === root || normalized(path).startsWith(`${root}/`))
-      )
-        return;
-      clearTimeout(timer);
-      timer = setTimeout(
-        () =>
-          void queryClient.invalidateQueries({ queryKey: localReferencesKey(cwd), exact: true }),
-        LOCAL_CHANGE_DEBOUNCE_MS,
-      );
-    });
-    return () => {
-      clearTimeout(timer);
-      unsubscribe();
-    };
-  }, [cwd, queryClient]);
 
   return files.data ?? noLocalFiles;
 }

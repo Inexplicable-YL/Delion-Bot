@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useState } from 'react';
 import { ArrowUturnLeftIcon as RotateCcw } from '@heroicons/react/24/outline';
 import { Button } from '../../../../ui/Button';
 import { Kbd } from '../../../../ui/Kbd';
@@ -63,7 +63,7 @@ export function ShortcutsSection() {
     setBusy(false);
   };
 
-  const recordKey = useEffectEvent((event: KeyboardEvent) => {
+  const recordKey = (event: KeyboardEvent) => {
     if (!recording) return;
     event.preventDefault();
     event.stopPropagation();
@@ -85,19 +85,19 @@ export function ShortcutsSection() {
       return;
     }
     void apply(recording, accelerator);
-  });
+  };
 
-  useEffect(() => {
-    if (!recording) return;
+  const recordRef = (element: HTMLDivElement | null) => {
+    if (!element || !recording) return;
     const onKeyDown = (event: KeyboardEvent) => recordKey(event);
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [recording]);
+  };
 
   const conflicts = findShortcutConflicts(bindings);
 
   return (
-    <div className="grid gap-10" data-setting-id="shortcuts">
+    <div className="grid gap-10" data-setting-id="shortcuts" ref={recordRef}>
       <SectionHeader
         title="快捷键"
         action={

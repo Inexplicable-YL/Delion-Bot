@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorView } from '@codemirror/view';
+import { undo } from '@codemirror/commands';
 import { MarkdownEditor, lineSeparatorOf } from '../../../../src/modules/note/view/MarkdownEditor';
 
 let root: Root;
@@ -10,6 +11,8 @@ let container: HTMLDivElement;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  Range.prototype.getClientRects ??= () => Object.assign([], { item: () => null });
+  Range.prototype.getBoundingClientRect ??= () => new DOMRect();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -30,6 +33,37 @@ describe('lineSeparatorOf', () => {
 });
 
 describe('MarkdownEditor', () => {
+  it('外部刷新保留撤销历史，并把后续编辑交给当前回调', async () => {
+    const initialChange = vi.fn();
+    const currentChange = vi.fn();
+    const render = (value: string, onChange: (text: string) => void) =>
+      act(async () =>
+        root.render(
+          <MarkdownEditor
+            value={value}
+            onChange={onChange}
+            onSave={() => {}}
+            onScroll={() => {}}
+          />,
+        ),
+      );
+    const getEditor = () =>
+      EditorView.findFromDOM(container.querySelector<HTMLElement>('.cm-editor')!)!;
+
+    await render('草稿', initialChange);
+    await act(async () => getEditor().dispatch({ changes: { from: 0, insert: '我的' } }));
+    expect(initialChange).toHaveBeenLastCalledWith('我的草稿');
+
+    await render('我的草稿\n外部追加', currentChange);
+    expect(getEditor().state.sliceDoc()).toBe('我的草稿\n外部追加');
+    expect(currentChange).not.toHaveBeenCalled();
+    await act(async () => {
+      expect(undo(getEditor())).toBe(true);
+    });
+    expect(currentChange).toHaveBeenLastCalledWith('草稿\n外部追加');
+    expect(initialChange).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['CRLF', '第一行\r\n第二行\r\n', '第一行\r\n第二行!\r\n'],
     ['LF', '第一行\n第二行\n', '第一行\n第二行!\n'],

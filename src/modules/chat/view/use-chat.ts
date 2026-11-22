@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type {
   ChatComment,
@@ -31,6 +31,7 @@ import {
 } from './drafts';
 import type { ReferenceSource } from './ChatSource';
 import { releaseChatMedia } from './media';
+import { useChatAttachments } from './use-chat-attachments';
 import { openSidechat } from './sidechat-store';
 import { errorMessage } from '../../../core/protocol/contract';
 
@@ -64,29 +65,23 @@ export function useChat(
 ) {
   const { navigate } = useChatTabSource();
   const chat = useSessions((state) => state.chats[sessionId] ?? null);
-  const [attachments, setAttachments] = useState<ChatMediaView[]>([]);
+  const { attachments, update: setAttachments, hasAttachments, release } = useChatAttachments();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
   const updateDraft = useChatDrafts((state) => state.update);
   const clearDraft = useChatDrafts((state) => state.clear);
   const flushReference = referenceSource?.flushReference;
 
-  const hasAttachments = attachments.length > 0;
-  useEffect(
-    () => (hasAttachments ? registerChatAttachmentCheck(() => true) : undefined),
-    [hasAttachments],
-  );
-
-  const releaseAttachments = useEffectEvent(() =>
-    releaseChatMedia(attachments.map((file) => file.id)),
-  );
-  useEffect(() => {
+  const [attachSession] = useState(() => (element: HTMLDivElement | null) => {
+    if (!element) return;
     useRuns.getState().startViewing(sessionId);
+    const stopCheckingAttachments = registerChatAttachmentCheck(hasAttachments);
     return () => {
       useRuns.getState().stopViewing(sessionId);
-      releaseAttachments();
+      stopCheckingAttachments();
+      release();
     };
-  }, [sessionId]);
+  });
 
   useQuery({
     queryKey: ['chat-session-seed', sessionId],
@@ -342,25 +337,28 @@ export function useChat(
       .catch(() => {});
   };
 
-  return {
-    chat,
-    busy,
-    setPrompt,
-    setComments,
-    attachments,
-    addAttachmentFile,
-    addAttachmentView,
-    removeAttachment,
-    error,
-    clearError: () => setError(null),
-    send,
-    stop,
-    withdrawQueued,
-    stopTask,
-    editLast,
-    selectModel,
-    selectEffort,
-    fork,
-    refresh,
-  };
+  return [
+    attachSession,
+    {
+      chat,
+      busy,
+      setPrompt,
+      setComments,
+      attachments,
+      addAttachmentFile,
+      addAttachmentView,
+      removeAttachment,
+      error,
+      clearError: () => setError(null),
+      send,
+      stop,
+      withdrawQueued,
+      stopTask,
+      editLast,
+      selectModel,
+      selectEffort,
+      fork,
+      refresh,
+    },
+  ] as const;
 }

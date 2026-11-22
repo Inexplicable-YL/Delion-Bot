@@ -83,7 +83,7 @@ function ChatComposerArea({
   hideAgentActions = false,
 }: {
   chat: WorkspaceChat | null;
-  chatState: ReturnType<typeof useChat>;
+  chatState: ReturnType<typeof useChat>[1];
   error: string | null;
   files: ReferenceEntry[];
   sessionId: string;
@@ -195,7 +195,7 @@ function ChatSessionView({
   const onOpenSource = (key: string) => workbench.openDocument(key);
   const startNewChat = () => navigate({ page: 'chat', projectId: home ? null : projectId });
   const openSession = (id: string) => navigate({ page: 'chat', projectId, sessionId: id });
-  const chatState = useChat(active, referenceSource, startNewChat);
+  const [attachSession, chatState] = useChat(active, referenceSource, startNewChat);
   const { chat, busy, editLast, fork } = chatState;
   const project = useWorkspaceStore((state) =>
     state.workspace.entries.find((entry) => entry.id === projectId),
@@ -257,6 +257,7 @@ function ChatSessionView({
 
   return (
     <div
+      ref={attachSession}
       aria-label="对话"
       className={cn(
         'relative flex min-h-0 min-w-0 flex-1 flex-col @container',

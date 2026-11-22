@@ -1,6 +1,3 @@
-// 真实应用、独立用户目录：验证 agent 基座的工作区闭环（需要真实模型服务）。
-// 用法：DELION_SMOKE_BASE_URL=… DELION_SMOKE_API_KEY=… DELION_SMOKE_MODEL=… electron scripts/agent-smoke.cjs
-// 覆盖：两个项目各自的会话 cwd、项目内读改写、@ 引用文件、跨项目不串、重开会话后续聊（上下文来自 Pi JSONL）。
 const { app } = require('electron');
 const { join, resolve } = require('node:path');
 const { existsSync, mkdtempSync, readFileSync, writeFileSync } = require('node:fs');

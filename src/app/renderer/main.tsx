@@ -5,12 +5,14 @@ import { contracts } from '../contracts';
 import { views } from '../views';
 import { useUpdateState } from '../../modules/update/view';
 import { ErrorBoundary } from './shell/ErrorBoundary';
-import App from './shell/App';
+import App, { connectAppEvents } from './shell/App';
 import { connectQueryEvents } from './shell/query-events';
 import { saveWorkspace } from './shell/save-workspace';
+import { connectLocalWorkspaceQueries } from './navigation/remote-references';
 import { useNavigationStore } from './navigation/view';
 import { useShortcuts } from './shell/shortcuts';
-import { initializeTheme } from './shell/theme';
+import { connectAppearance } from './shell/theme';
+import { installTitleTooltips } from './shell/title-tooltip';
 import { useWorkspaceStore } from '../../modules/workspace/view';
 import './styles/globals.css';
 
@@ -23,7 +25,13 @@ useUpdateState.setState({ beforeInstall: saveWorkspace });
 void useWorkspaceStore.getState().load();
 void useShortcuts.getState().load();
 
-initializeTheme();
+connectAppearance(queryClient);
+connectAppEvents();
+connectLocalWorkspaceQueries(queryClient);
+window.delionBot?.window.onStateChange((state) =>
+  queryClient.setQueryData(['window', 'state'], state),
+);
+installTitleTooltips();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary title="应用遇到错误">

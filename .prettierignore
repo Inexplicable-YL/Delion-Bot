@@ -11,3 +11,5 @@ scripts/*.ps1
 src/core/protocol/agent.schema.json
 # 设计规范含 YAML frontmatter，Prettier 会改写双引号与表格排版
 DESIGN.md
+# 由 ESLint 的 --suppress-all 维护
+eslint-suppressions.json

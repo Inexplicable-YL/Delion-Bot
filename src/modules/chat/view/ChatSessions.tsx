@@ -31,8 +31,10 @@ function SessionList({
   onClose: () => void;
 }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  useDismissOnOutsidePointer(confirmingId !== null, '[data-archive-confirm]', () =>
-    setConfirmingId(null),
+  const dismissArchiveRef = useDismissOnOutsidePointer(
+    confirmingId !== null,
+    '[data-archive-confirm]',
+    () => setConfirmingId(null),
   );
   return (
     <>
@@ -67,6 +69,7 @@ function SessionList({
           {confirmingId === session.id ? (
             <Button
               data-archive-confirm=""
+              ref={dismissArchiveRef}
               onClick={() => {
                 setConfirmingId(null);
                 onDeleteSession(session.id);

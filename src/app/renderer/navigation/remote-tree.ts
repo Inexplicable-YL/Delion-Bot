@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useQueries, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQueries, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { type WorkspaceEntry, hiddenWorkspaceNames } from '../../../modules/workspace/contract';
 import type { RemoteDirectoryEntry } from '../../../modules/remotes/contract';
 import { remoteNodeId } from '../../../modules/remotes/contract';
@@ -21,6 +21,29 @@ const directoryQueries = ['workspace', 'listRemoteDirectory'];
 const withinChange = (path: string, changed: string) =>
   path === changed || path.startsWith(`${changed}/`);
 
+function connectRemoteDirectoryEvents(queryClient: QueryClient) {
+  const changed = new Set<string>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const unsubscribe = onWorkspaceEvent('remoteChange', (path) => {
+    changed.add(trimSlash(path));
+    if (timer !== undefined) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      const paths = [...changed];
+      changed.clear();
+      void queryClient.invalidateQueries({
+        queryKey: directoryQueries,
+        predicate: ({ queryKey }) =>
+          paths.some((changedPath) => withinChange(queryKey[3] as string, changedPath)),
+      });
+    }, CHANGE_DEBOUNCE_MS);
+  });
+  return () => {
+    clearTimeout(timer);
+    unsubscribe();
+  };
+}
+
 function createRemoteWatcher() {
   const reported = new Map<string, string>();
   let wanted = new Map<string, string[]>();
@@ -40,6 +63,11 @@ function createRemoteWatcher() {
   };
   return {
     report(next: Map<string, string[]>) {
+      if (
+        next.size === wanted.size &&
+        [...next].every(([id, paths]) => paths.join('\0') === wanted.get(id)?.join('\0'))
+      )
+        return;
       wanted = next;
       timer ??= setTimeout(flush, WATCH_DEBOUNCE_MS);
     },
@@ -63,6 +91,8 @@ export interface RemoteTree {
   status: string | null;
   degraded: string | null;
   connecting: boolean;
+  reportDirectories: () => void;
+  watch: () => () => void;
 }
 
 export function useRemoteTree(
@@ -78,6 +108,13 @@ export function useRemoteTree(
     Object.entries(connections).map(([id, connection]) => [id, connection.host]),
   );
   const [watcher] = useState(createRemoteWatcher);
+  const [watch] = useState(() => () => {
+    const unsubscribe = connectRemoteDirectoryEvents(queryClient);
+    return () => {
+      watcher.dispose();
+      unsubscribe();
+    };
+  });
   const isOpen = (key: string) => key === rootId || expanded.includes(key);
 
   const projects = entries.filter(
@@ -125,40 +162,12 @@ export function useRemoteTree(
     if (data) listings[key] = data;
   });
 
-  const watchKey = openDirectories
-    .map(({ projectId, path }) => `${projectId}\t${path}`)
-    .sort()
-    .join('\n');
-  useEffect(() => {
+  const reportDirectories = () => {
     const byProject = new Map<string, string[]>();
     for (const { projectId, path } of openDirectories)
       byProject.set(projectId, [...(byProject.get(projectId) ?? []), path].sort());
     watcher.report(byProject);
-  }, [watcher, watchKey]);
-  useEffect(() => watcher.dispose, [watcher]);
-
-  useEffect(() => {
-    const changed = new Set<string>();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const stop = onWorkspaceEvent('remoteChange', (path) => {
-      changed.add(trimSlash(path));
-      if (timer !== undefined) return;
-      timer = setTimeout(() => {
-        timer = undefined;
-        const paths = [...changed];
-        changed.clear();
-        void queryClient.invalidateQueries({
-          queryKey: directoryQueries,
-          predicate: ({ queryKey }) =>
-            paths.some((changedPath) => withinChange(queryKey[3] as string, changedPath)),
-        });
-      }, CHANGE_DEBOUNCE_MS);
-    });
-    return () => {
-      clearTimeout(timer);
-      stop();
-    };
-  }, [queryClient]);
+  };
 
   const items: ExplorerItem[] = [];
   for (const project of projects) {
@@ -200,5 +209,13 @@ export function useRemoteTree(
 
   const connecting = rootActivity?.phase === 'connecting' && items.length === 0;
 
-  return { items, destinations, status, degraded: degradedText, connecting };
+  return {
+    items,
+    destinations,
+    status,
+    degraded: degradedText,
+    connecting,
+    reportDirectories,
+    watch,
+  };
 }

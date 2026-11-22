@@ -1,16 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
 export function rootFontSize(): number {
   const size = parseFloat(getComputedStyle(document.documentElement).fontSize);
   return Number.isFinite(size) ? size : 16;
 }
 
+function subscribe(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributeFilter: ['style'] });
+  return () => observer.disconnect();
+}
+
 export function useRootFontSize(): number {
-  const [size, setSize] = useState(rootFontSize);
-  useEffect(() => {
-    const observer = new MutationObserver(() => setSize(rootFontSize()));
-    observer.observe(document.documentElement, { attributeFilter: ['style'] });
-    return () => observer.disconnect();
-  }, []);
-  return size;
+  return useSyncExternalStore(subscribe, rootFontSize);
 }

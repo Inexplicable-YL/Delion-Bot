@@ -1,5 +1,5 @@
-import { useEffect, useEffectEvent, useState, type ComponentType, type ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type ComponentType, type ReactNode } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Bars3Icon as Menu,
   BellIcon as Bell,
@@ -95,21 +95,12 @@ function ShortcutRow({ hint, keys, label }: { hint?: string; keys?: string[]; la
 }
 
 function WindowControls() {
-  const queryClient = useQueryClient();
   const windowState = useQuery({
     queryKey: ['window', 'state'],
     queryFn: () => window.delionBot!.window.getState(),
     enabled: Boolean(window.delionBot),
   });
   const maximized = windowState.data?.maximized ?? false;
-  useEffect(
-    () =>
-      window.delionBot?.window.onStateChange((state) =>
-        queryClient.setQueryData(['window', 'state'], state),
-      ),
-    [queryClient],
-  );
-
   if (!window.delionBot || platform === 'mac') return null;
 
   return (
@@ -239,7 +230,7 @@ export function AppShell({
     onZoomChange(zoomLevels[Math.max(0, Math.min(index + direction, zoomLevels.length - 1))]!);
   };
 
-  const runShortcut = useEffectEvent((action: NonNullable<ReturnType<typeof matchShortcut>>) => {
+  const runShortcut = (action: NonNullable<ReturnType<typeof matchShortcut>>) => {
     switch (action) {
       case 'new-project':
         onNewProject();
@@ -275,8 +266,9 @@ export function AppShell({
         setHelpOpen(true);
         break;
     }
-  });
-  useEffect(() => {
+  };
+  const attachShortcuts = (element: HTMLElement | null) => {
+    if (!element) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.isComposing) return;
       const action = matchShortcut(useShortcuts.getState().bindings, event, 'global', platform);
@@ -286,7 +278,7 @@ export function AppShell({
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  };
 
   const sidebarToggle = (
     <IconButton
@@ -392,7 +384,6 @@ export function AppShell({
             }
             onClick={id === 'connectors' ? () => navigate({ page: 'connectors' }) : action}
             size={null}
-            title={label}
             variant="glass"
           >
             <Icon className="size-5" />
@@ -421,7 +412,7 @@ export function AppShell({
         data-density="product"
         data-sidebar={sidebarCollapsed ? 'collapsed' : 'expanded'}
       >
-        <header className="app-toolbar" data-scrolled={scrolledView === view}>
+        <header ref={attachShortcuts} className="app-toolbar" data-scrolled={scrolledView === view}>
           <div className="flex min-w-0 items-center gap-1">
             <div className={cn('flex justify-center', !narrow && 'w-sidebar-collapsed')}>
               {navToggle}

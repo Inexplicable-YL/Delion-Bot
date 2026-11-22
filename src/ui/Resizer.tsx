@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { cn } from './cn';
 
 type ResizerProps = {
@@ -27,14 +27,15 @@ export function Resizer({
   const start = useRef<{ pointerId: number; position: number; size: number } | null>(null);
   const horizontal = orientation === 'horizontal';
 
-  useEffect(() => () => onResizingChange?.(false), []);
-
   const clamp = (size: number) => Math.min(max, Math.max(min, size));
   const finishPointer = () => {
     if (!start.current) return;
     start.current = null;
     onResizingChange?.(false);
   };
+  const [attach] = useState(() => (element: HTMLDivElement | null) => {
+    if (element) return finishPointer;
+  });
 
   return (
     <div
@@ -96,6 +97,7 @@ export function Resizer({
         finishPointer();
       }}
       role="separator"
+      ref={attach}
       tabIndex={0}
     />
   );

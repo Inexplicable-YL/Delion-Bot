@@ -1,0 +1,14 @@
+[files]
+extend-exclude = [
+  "vendor/",
+  "node_modules/",
+  ".tools/",
+  "build/installer.nsh",
+  "src/modules/preview/main/runtime-licenses.txt",
+]
+
+[default.extend-words]
+bui = "bui"
+canva = "canva"
+cript = "cript"
+flate = "flate"
