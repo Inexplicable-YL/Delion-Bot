@@ -18,17 +18,20 @@ import { chatAttachmentView, releaseChatAttachments } from '../media';
 import { openPiSession } from '../pi';
 import { taskTool, type SubagentResult } from '../subagent';
 import { backgroundTools, stopAllTasks, type TaskNotice, type TaskParent } from '../tasks';
-import { live, liveSteps, type Live, type Run } from './live';
+import { live, liveSteps, liveThinking, type Live, type Run } from './live';
 import {
   encodeMeta,
   projectMessages,
   publish,
   queuedTexts,
   snapshot,
+  thinkingKey,
+  thinkingTimes,
   toolOutput,
   usageOf,
   withoutToolImages,
   TASK_NOTICE,
+  THINKING_TIME,
 } from './projection';
 import { composePrompt } from './prompt';
 import {
@@ -41,6 +44,7 @@ import {
   storeSessionFile,
   storeTitle,
 } from './store';
+import { generateSessionTitles } from './title';
 
 export async function ensureLive(id: string): Promise<Live> {
   const existing = live.get(id);
@@ -155,9 +159,20 @@ function onEvent(id: string, entry: Live, event: AgentSessionEvent) {
       publish(id);
       break;
     }
-    case 'message_update':
+    case 'message_update': {
+      const update = event.assistantMessageEvent;
+      const times = liveThinking.get(id);
+      if (times && update.type === 'thinking_start')
+        times.set(thinkingKey(update.partial.timestamp, update.contentIndex), {
+          startedAt: Date.now(),
+        });
+      else if (times && update.type === 'thinking_end') {
+        const time = times.get(thinkingKey(update.partial.timestamp, update.contentIndex));
+        if (time) time.finishedAt = Date.now();
+      }
       stream(id, entry);
       break;
+    }
     case 'compaction_end':
       if (event.result?.estimatedTokensAfter !== undefined)
         entry.compactedTokens = event.result.estimatedTokensAfter;
@@ -187,6 +202,8 @@ function stream(id: string, entry: Live) {
     streaming ? [...entry.session.messages, streaming] : entry.session.messages,
     liveSteps.get(id),
     true,
+    undefined,
+    thinkingTimes(entry.session.sessionManager, liveThinking.get(id)),
   );
   const last = messages.at(-1);
   if (last?.role === 'assistant')
@@ -343,9 +360,10 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
   }
   if (entry.run) throw new Error('请等待当前回答完成');
   if (entry.session.isCompacting) throw new Error('正在压缩上下文，请稍候');
+  const meta = row(id);
   const { prompt, userText, images, attachments, comments, turnId } = composePrompt(
     input,
-    row(id).project_id,
+    meta.project_id,
   );
   if (input.replaceLastUser) {
     const branch = entry.session.sessionManager.getBranch();
@@ -358,11 +376,18 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
     entry.session.agent.state.messages =
       entry.session.sessionManager.buildSessionContext().messages;
   }
-  if (row(id).title === '新对话')
+  if (
+    !input.replaceLastUser &&
+    meta.title_temporary &&
+    !entry.session.messages.some((message) => message.role === 'user')
+  ) {
     storeTitle(
       id,
       userText || comments[0]?.comment || comments[0]?.quote || attachments[0]?.name || '图片请求',
+      Boolean(userText),
     );
+    if (userText) generateSessionTitles(id, userText);
+  }
   await runTurn(id, entry, turnId, input.attachments, () =>
     entry.session.prompt(prompt, images.length ? { images } : undefined),
   );
@@ -392,6 +417,7 @@ async function runTurn(
   };
   entry.run = run;
   liveSteps.set(id, new Map());
+  liveThinking.set(id, new Map());
   runEvent(id, 'running');
   let status: TurnStatus = 'completed';
   const startedAt = new Date().toISOString();
@@ -443,8 +469,17 @@ async function runTurn(
         ...attachments,
         ...run.steers.flatMap((steer) => steer.input.attachments),
       ]);
+      const finishedThinking = [...(liveThinking.get(id) ?? [])].filter(
+        ([, time]) => time.finishedAt !== undefined,
+      );
+      if (finishedThinking.length)
+        entry.session.sessionManager.appendCustomEntry(
+          THINKING_TIME,
+          Object.fromEntries(finishedThinking),
+        );
       entry.run = undefined;
       liveSteps.delete(id);
+      liveThinking.delete(id);
       if (entry.session.sessionFile) storeSessionFile(id, entry.session.sessionFile);
       touch(id, entry);
       runEvent(id, status, undefined, turnId, changesError);

@@ -15,6 +15,7 @@ import {
   verifyLlmModel,
 } from '../../../src/core/agent/providers';
 import { MockOpenAiServer, mockFrames } from './mock-openai-server';
+import { summarizeSessionTitle } from '../../../src/core/agent/pi';
 
 vi.mock('../../../src/core/agent/pi', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/core/agent/pi')>()),
@@ -56,6 +57,41 @@ beforeEach(() => {
 });
 
 afterEach(() => vi.unstubAllGlobals());
+
+it('sends a separate title request with the selected reasoning effort', async () => {
+  const server = await MockOpenAiServer.start();
+  try {
+    const provider = {
+      id: 'title-test',
+      name: 'test',
+      baseUrl: server.baseUrl,
+      apiKey: 'test-only',
+      models: ['title-model'],
+      modelConfigs: { 'title-model': { effortLevels: ['low', 'high'] } },
+      piProvider: null,
+      enabled: true,
+    };
+    server.enqueue({
+      kind: 'sse',
+      frames: [
+        mockFrames.reasoningDelta('internal reasoning'),
+        mockFrames.textDelta('  咖啡冲煮  '),
+        mockFrames.finishFrame('stop'),
+      ],
+    });
+    const question = '怎么用手冲壶冲咖啡？';
+    await expect(
+      summarizeSessionTitle({ provider, model: 'title-model', effort: 'low' }, question),
+    ).resolves.toBe('咖啡冲煮');
+    expect(server.requests[0]?.body).toMatchObject({
+      model: 'title-model',
+      reasoning_effort: 'low',
+      messages: [{ role: 'system' }, { role: 'user', content: question }],
+    });
+  } finally {
+    await server.close();
+  }
+}, 15_000);
 
 it('detects actual model output over the same streaming API as chat', async () => {
   const server = await MockOpenAiServer.start();

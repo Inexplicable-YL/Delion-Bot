@@ -43,7 +43,8 @@ function createDb(): Database.Database {
       port INTEGER, key_path TEXT, created_at TEXT NOT NULL);
     CREATE TABLE sessions (
       id TEXT PRIMARY KEY, project_id TEXT REFERENCES workspace_entries(id) ON DELETE SET NULL,
-      file TEXT NOT NULL, title TEXT NOT NULL DEFAULT '新对话', message_count INTEGER NOT NULL DEFAULT 0,
+      file TEXT NOT NULL, title TEXT NOT NULL DEFAULT '新对话',
+      title_temporary INTEGER NOT NULL DEFAULT 0, message_count INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0, pinned INTEGER NOT NULL DEFAULT 0, cwd TEXT,
       created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
       provider_id TEXT, model TEXT, effort TEXT, parent_id TEXT);

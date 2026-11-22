@@ -32,6 +32,25 @@ describe('current database format', () => {
     ).toEqual({ value: 'value' });
   });
 
+  it('preserves existing titles when adding temporary title tracking', () => {
+    freshRoot();
+    const db = getDatabase();
+    db.exec('ALTER TABLE sessions DROP COLUMN title_temporary');
+    db.pragma('user_version = 1');
+    db.exec(
+      `INSERT INTO sessions (id, file, title, message_count, created_at, updated_at)
+       VALUES ('empty', '', '新对话', 0, 'now', 'now'), ('used', '', '我的标题', 1, 'now', 'now')`,
+    );
+    closeDatabase();
+
+    expect(
+      getDatabase().prepare('SELECT title, title_temporary FROM sessions ORDER BY id').all(),
+    ).toEqual([
+      { title: '新对话', title_temporary: 1 },
+      { title: '我的标题', title_temporary: 0 },
+    ]);
+  });
+
   it('rejects a database from a newer version without clearing its data', () => {
     const root = freshRoot();
     const db = new Database(join(root, 'delion.db'));

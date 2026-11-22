@@ -29,6 +29,10 @@ export const live = new Map<string, Live>();
 
 export const liveSteps = new Map<string, Map<string, AgentToolResult>>();
 
+export type ThinkingTime = { startedAt: number; finishedAt?: number };
+
+export const liveThinking = new Map<string, Map<string, ThinkingTime>>();
+
 export const sessionRunning = (id: string) => Boolean(live.get(id)?.run);
 
 export function sessionBranch(id: string): { branch: SessionEntry[]; runningTurn?: string } {

@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import type { StoredLlmProvider } from '../../../src/core/agent/llm-config';
 
 const state = vi.hoisted(() => ({
   db: null as Database.Database | null,
@@ -25,15 +26,7 @@ const state = vi.hoisted(() => ({
   compacting: false,
   compact: null as ((instructions?: string) => Promise<unknown>) | null,
   compactCalls: [] as (string | undefined)[],
-  providers: [] as {
-    id: string;
-    name: string;
-    baseUrl: string;
-    apiKey: string;
-    models: string[];
-    piProvider: null;
-    enabled: boolean;
-  }[],
+  providers: [] as StoredLlmProvider[],
   modelSwitches: [] as string[],
   beforeTool: undefined as (() => Promise<void> | undefined) | undefined,
 }));
@@ -44,9 +37,13 @@ vi.mock('../../../src/core/agent/providers', () => ({
     state.configured ? state.providers.filter(({ enabled }) => enabled) : [],
 }));
 vi.mock('../../../src/core/agent/pi', () => ({
+  loadPi: () => import('@earendil-works/pi-coding-agent'),
   resolveModel: async ({ model }: { model: string }) => ({ model, thinking: 'off' }),
+  summarizeSessionTitle: vi.fn(async () => ''),
   openPiSession: async (input: { beforeTool?: () => Promise<void> | undefined }) => {
     state.beforeTool = input.beforeTool;
+    const getBranch = () =>
+      state.messages.map((message, index) => ({ type: 'message', id: `e${index}`, message }));
     return {
       setModel: async (model: string) => {
         state.modelSwitches.push(model);
@@ -58,10 +55,11 @@ vi.mock('../../../src/core/agent/pi', () => ({
         return state.messages;
       },
       sessionManager: {
+        getBranch,
         buildSessionProjection: () => ({
-          entries: state.messages.map((message, index) => ({
-            sourceEntry: { type: 'message', id: `e${index}` },
-            messages: [message],
+          entries: getBranch().map((sourceEntry) => ({
+            sourceEntry,
+            messages: [sourceEntry.message],
           })),
         }),
       },
@@ -110,9 +108,14 @@ import {
   listSessionTurnChanges,
   readSessionTurnFileChange,
 } from '../../../src/core/agent/session/files';
-import { projectMessages, contextUsageView } from '../../../src/core/agent/session/projection';
+import {
+  projectMessages,
+  contextUsageView,
+  encodeMeta,
+} from '../../../src/core/agent/session/projection';
 import { askSession, invalidateSessions, cancelRun } from '../../../src/core/agent/session/run';
 import { readChatAttachment, stageChatMedia } from '../../../src/core/agent/media';
+import { loadPi, summarizeSessionTitle } from '../../../src/core/agent/pi';
 import * as changes from '../../../src/core/agent/changes';
 import { removeWorkspaceEntry, workspaceProjects } from '../../../src/modules/workspace';
 import { provideTestHostPorts } from '../host-mock';
@@ -128,6 +131,7 @@ registerDocumentReader({
 });
 
 beforeEach(() => {
+  vi.mocked(summarizeSessionTitle).mockClear();
   state.configured = false;
   state.messages = [];
   state.prompts = [];
@@ -167,7 +171,8 @@ beforeEach(() => {
       updated_at TEXT NOT NULL);
     CREATE TABLE sessions (id TEXT PRIMARY KEY,
       project_id TEXT REFERENCES workspace_entries(id) ON DELETE SET NULL, file TEXT NOT NULL,
-      title TEXT NOT NULL DEFAULT '新对话', message_count INTEGER NOT NULL DEFAULT 0,
+      title TEXT NOT NULL DEFAULT '新对话', title_temporary INTEGER NOT NULL DEFAULT 0,
+      message_count INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0, pinned INTEGER NOT NULL DEFAULT 0,
       cwd TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
       provider_id TEXT, model TEXT, effort TEXT, parent_id TEXT);
@@ -610,17 +615,110 @@ describe('会话命令', () => {
   const titleOf = (id: string) =>
     (state.db!.prepare('SELECT title FROM sessions WHERE id=?').get(id) as { title: string }).title;
 
+  it('仅用首条正文和当前会话模型的最低思考档位生成标题', async () => {
+    state.configured = true;
+    const provider = state.providers[0]!;
+    provider.modelConfigs = { m2: { effort: 'high', effortLevels: ['low', 'high'] } };
+    const id = (await newSession(null)).sessionId!;
+    await setSessionModel(id, provider.id, 'm2');
+    vi.mocked(summarizeSessionTitle).mockResolvedValueOnce('咖啡冲煮');
+    const input = { text: '怎么用手冲壶冲咖啡？', attachments: [], context: [], comments: [] };
+    await askSession(id, input);
+    await askSession(id, { ...input, text: '水温要多少？' });
+
+    expect(summarizeSessionTitle).toHaveBeenCalledExactlyOnceWith(
+      { provider, model: 'm2', effort: 'low' },
+      input.text,
+    );
+    expect(titleOf(id)).toBe('咖啡冲煮');
+  });
+
+  it('每次最多补生成三个最近 24 小时内未归档的临时标题', async () => {
+    state.configured = true;
+    const { SessionManager } = await loadPi();
+    const directory = join(state.root, 'sessions');
+    mkdirSync(directory);
+    const now = Date.now();
+    const insert = state.db!.prepare(
+      `INSERT INTO sessions (id, file, title, title_temporary, message_count, archived,
+        provider_id, model, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, 'p1', 'm2', ?, ?)`,
+    );
+    const sessions = [
+      { id: 'archived', hoursAgo: 0, temporary: 1, archived: 1 },
+      { id: 'manual', hoursAgo: 0, temporary: 0, archived: 0 },
+      { id: 'recent-1', hoursAgo: 1, temporary: 1, archived: 0 },
+      { id: 'recent-2', hoursAgo: 2, temporary: 1, archived: 0 },
+      { id: 'recent-3', hoursAgo: 3, temporary: 1, archived: 0 },
+      { id: 'recent-4', hoursAgo: 4, temporary: 1, archived: 0 },
+      { id: 'old', hoursAgo: 25, temporary: 1, archived: 0 },
+    ];
+    for (const { id, hoursAgo, temporary, archived } of sessions) {
+      const manager = SessionManager.create(state.root, directory);
+      const file = manager.getSessionFile()!;
+      const timestamp = now - hoursAgo * 60 * 60 * 1000;
+      const at = new Date(timestamp).toISOString();
+      const message = {
+        role: 'user',
+        content: `${encodeMeta({ turnId: id, body: id })}附件正文`,
+        timestamp,
+      };
+      writeFileSync(
+        file,
+        [manager.getHeader(), { type: 'message', id, parentId: null, timestamp: at, message }]
+          .map((entry) => JSON.stringify(entry))
+          .join('\n'),
+      );
+      insert.run(id, file, `临时 ${id}`, temporary, archived, at, at);
+    }
+    const titles = vi.mocked(summarizeSessionTitle);
+    titles
+      .mockResolvedValueOnce('当前标题')
+      .mockRejectedValueOnce(new Error('request failed'))
+      .mockResolvedValueOnce('第二个标题')
+      .mockResolvedValueOnce('第三个标题');
+    const chat = await newSession(null);
+    await askSession(chat.sessionId!, {
+      text: '当前问题',
+      attachments: [],
+      context: [],
+      comments: [],
+    });
+
+    await vi.waitFor(() => expect(titleOf('recent-3')).toBe('第三个标题'));
+    expect(titles.mock.calls.map(([, question]) => question)).toEqual([
+      '当前问题',
+      'recent-1',
+      'recent-2',
+      'recent-3',
+    ]);
+    expect(titles.mock.calls.slice(1).map(([selection]) => selection.model)).toEqual([
+      'm2',
+      'm2',
+      'm2',
+    ]);
+    expect(sessions.map(({ id }) => titleOf(id))).toEqual([
+      '临时 archived',
+      '临时 manual',
+      '临时 recent-1',
+      '第二个标题',
+      '第三个标题',
+      '临时 recent-4',
+      '临时 old',
+    ]);
+  });
+
   it('/name 改过的标题，首条消息不再覆盖', async () => {
     state.configured = true;
     const chat = await newSession(null);
-    await runSessionCommand(chat.sessionId!, 'name', '我的标题');
+    await runSessionCommand(chat.sessionId!, 'name', '新对话');
     await askSession(chat.sessionId!, {
       text: '第一句话',
       attachments: [],
       context: [],
       comments: [],
     });
-    expect(titleOf(chat.sessionId!)).toBe('我的标题');
+    expect(titleOf(chat.sessionId!)).toBe('新对话');
+    expect(summarizeSessionTitle).not.toHaveBeenCalled();
   });
 
   it('/reload 结束当前实例并立刻按新配置重建；没配模型时只结束', async () => {

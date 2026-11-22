@@ -58,6 +58,7 @@ const schema: string[] = [
     cwd TEXT,
     file TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT '新对话',
+    title_temporary INTEGER NOT NULL DEFAULT 0,
     message_count INTEGER NOT NULL DEFAULT 0,
     archived INTEGER NOT NULL DEFAULT 0,
     pinned INTEGER NOT NULL DEFAULT 0,
@@ -79,7 +80,7 @@ const createConsentRecords = `CREATE TABLE IF NOT EXISTS consent_records (
   accepted_at TEXT NOT NULL
 )`;
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export function getDatabase(): Database.Database {
   if (database) return database;
@@ -88,11 +89,15 @@ export function getDatabase(): Database.Database {
   const db = new Database(join(dir, 'delion.db'));
   try {
     const version = db.pragma('user_version', { simple: true }) as number;
-    if (version !== 0 && version !== SCHEMA_VERSION)
+    if (version !== 0 && version !== 1 && version !== SCHEMA_VERSION)
       throw new Error('数据库格式不受支持，请使用当前版本创建的数据目录');
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.transaction(() => {
+      if (version === 1) {
+        db.exec('ALTER TABLE sessions ADD COLUMN title_temporary INTEGER NOT NULL DEFAULT 0');
+        db.exec("UPDATE sessions SET title_temporary=1 WHERE message_count=0 AND title='新对话'");
+      }
       for (const statement of schema) db.exec(statement);
       db.exec(createConsentRecords);
       db.pragma(`user_version = ${SCHEMA_VERSION}`);

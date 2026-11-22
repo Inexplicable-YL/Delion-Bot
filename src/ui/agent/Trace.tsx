@@ -4,11 +4,26 @@ import { Fragment, useState, type ReactNode } from 'react';
 import { cn } from '../cn';
 import { Collapse, CollapseChevron } from '../Collapse';
 import { fadeIn } from '../motion';
+import { Shimmer } from '../Shimmer';
+import { useNow } from '../use-now';
+import { ThinkingMark } from './ThinkingMark';
 
 const toggleClass =
-  'group/row flex h-7 w-full min-w-0 items-center gap-1 text-left text-ui-body text-ink-2 transition-colors duration-base hover:text-ink-2 focus-visible:outline-none focus-visible:text-ink-2';
+  'group/row flex h-7 w-full min-w-0 items-center gap-2 text-left text-ui-body text-ink-2 transition-colors duration-base hover:text-ink focus-visible:outline-none focus-visible:text-ink aria-expanded:text-ink';
 
-export function TraceDisclosure({ head, children }: { head: ReactNode; children: ReactNode }) {
+const nestedClass = 'ml-1.75 border-l border-line pl-4';
+
+const chevronClass = 'opacity-0 group-hover/row:opacity-100 group-focus-visible/row:opacity-100';
+
+export function TraceDisclosure({
+  head,
+  icon,
+  children,
+}: {
+  head: ReactNode;
+  icon?: ReactNode;
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="min-w-0">
@@ -19,53 +34,92 @@ export function TraceDisclosure({ head, children }: { head: ReactNode; children:
         onClick={() => setOpen(!open)}
         className={toggleClass}
       >
-        <CollapseChevron className="opacity-60 group-hover/row:opacity-100" open={open} />
-        {head}
+        {icon && (
+          <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center">
+            {icon}
+          </span>
+        )}
+        <span className="flex min-w-0 items-center gap-1">{head}</span>
+        <CollapseChevron className={chevronClass} open={open} />
       </button>
-      <Collapse className="ml-[1.125rem]" open={open}>
+      <Collapse className={nestedClass} open={open}>
         <div className="min-w-0 pb-2">{children}</div>
       </Collapse>
     </div>
   );
 }
 
+export type TraceRunning = {
+  current: ReactNode;
+  startedAt: number;
+  keepLast: boolean;
+  formatElapsed: (ms: number) => string;
+};
+
+function RunningElapsed({ running }: { running: TraceRunning }) {
+  const now = useNow(1000);
+  return <>处理中 {running.formatElapsed(Math.max(0, now - running.startedAt))}</>;
+}
+
 export function Trace({
   blocks,
   foldLabel,
+  running,
 }: {
   blocks: { key: number; node: ReactNode }[];
   foldLabel?: string;
+  running?: TraceRunning;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const foldable = foldLabel !== undefined;
   const lastIndex = blocks.length - 1;
+  const folded = running
+    ? running.keepLast
+      ? lastIndex
+      : blocks.length
+    : foldLabel !== undefined
+      ? lastIndex
+      : 0;
   return (
     <div aria-label="对话过程" className="min-w-0">
-      {foldable && (
+      {running && folded > 0 && (
         <button
           type="button"
           aria-expanded={expanded}
           data-trace-toggle
           onClick={() => setExpanded(!expanded)}
-          className={cn(toggleClass, 'mb-1')}
+          className={cn(toggleClass, 'mb-1 w-auto max-w-full')}
         >
-          <CollapseChevron className="opacity-60 group-hover/row:opacity-100" open={expanded} />
-          <span className="min-w-0 truncate">{foldLabel}</span>
+          <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center">
+            <ThinkingMark />
+          </span>
+          <Shimmer className="min-w-0 truncate">
+            {expanded ? <RunningElapsed running={running} /> : running.current}
+          </Shimmer>
+          <CollapseChevron className={cn('-ml-1', chevronClass)} open={expanded} />
         </button>
       )}
-      {blocks.map(({ key, node }, index) =>
-        foldable && index < lastIndex ? (
-          <div
-            key={key}
-            hidden={!expanded}
-            className={cn(fadeIn, 'ml-[0.4375rem] border-l border-line pl-[0.6875rem]')}
-          >
-            {node}
-          </div>
-        ) : (
-          <Fragment key={key}>{node}</Fragment>
-        ),
+      {!running && foldLabel !== undefined && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          data-trace-toggle
+          onClick={() => setExpanded(!expanded)}
+          className={cn(toggleClass, 'mb-1 w-auto max-w-full gap-1')}
+        >
+          <span className="min-w-0 truncate">{foldLabel}</span>
+          <CollapseChevron className={chevronClass} open={expanded} />
+        </button>
       )}
+      {folded > 0 && (
+        <div hidden={!expanded} className={cn(fadeIn, 'flow-root', running && nestedClass)}>
+          {blocks.slice(0, folded).map(({ key, node }) => (
+            <Fragment key={key}>{node}</Fragment>
+          ))}
+        </div>
+      )}
+      {blocks.slice(folded).map(({ key, node }) => (
+        <Fragment key={key}>{node}</Fragment>
+      ))}
     </div>
   );
 }

@@ -1,8 +1,24 @@
+import {
+  CommandLineIcon,
+  DocumentMagnifyingGlassIcon,
+  DocumentPlusIcon,
+  DocumentTextIcon,
+  FolderOpenIcon,
+  GlobeAltIcon,
+  LinkIcon,
+  MagnifyingGlassIcon,
+  PencilSquareIcon,
+  SquaresPlusIcon,
+  UserGroupIcon,
+  WrenchScrewdriverIcon,
+} from '@heroicons/react/24/outline';
 import type { ReactNode } from 'react';
 import type { AgentToolResult, SubagentDetails, WorkspaceChat } from '../../../core/protocol/agent';
 import { Reasoning } from '../../../ui/agent/Reasoning';
 import { ToolGroup, ToolStep, type ToolStepStatus } from '../../../ui/agent/Tool';
 import { Trace } from '../../../ui/agent/Trace';
+import { useConnectorCatalog, type ConnectorApp } from '../../connectors/view';
+import { composioToolPrefix, connectorStep } from './connector-steps';
 import { ChatMarkdown } from './Markdown';
 import { ToolBody } from './ToolViews';
 
@@ -23,7 +39,29 @@ const verbs: Record<string, { doing: string; done: string; noun: string }> = {
 };
 
 function verbOf(name: string) {
+  if (name.startsWith(composioToolPrefix))
+    return { doing: '正在使用连接器', done: '使用连接器', noun: '次' };
   return verbs[name] ?? { doing: `正在调用 ${name}`, done: `调用 ${name}`, noun: '次' };
+}
+
+const icons: Record<string, ReactNode> = {
+  read: <DocumentTextIcon className="size-4" />,
+  write: <DocumentPlusIcon className="size-4" />,
+  edit: <PencilSquareIcon className="size-4" />,
+  bash: <CommandLineIcon className="size-4" />,
+  grep: <MagnifyingGlassIcon className="size-4" />,
+  find: <DocumentMagnifyingGlassIcon className="size-4" />,
+  ls: <FolderOpenIcon className="size-4" />,
+  web_search: <GlobeAltIcon className="size-4" />,
+  web_fetch: <LinkIcon className="size-4" />,
+  task: <UserGroupIcon className="size-4" />,
+};
+const connectorIcon = <SquaresPlusIcon className="size-4" />;
+const toolIcon = <WrenchScrewdriverIcon className="size-4" />;
+
+function iconOf(name: string) {
+  if (name.startsWith('mcp_')) return connectorIcon;
+  return icons[name] ?? toolIcon;
 }
 
 function basename(path: string) {
@@ -72,6 +110,17 @@ function editStat(result: AgentToolResult): { added: number; deleted: number } |
   );
 }
 
+function describeStep(result: AgentToolResult, catalog: readonly ConnectorApp[]) {
+  const step = result.name.startsWith(composioToolPrefix)
+    ? connectorStep(result.name, result.input, catalog)
+    : undefined;
+  return {
+    step,
+    verb: step ?? verbOf(result.name),
+    target: step ? { short: step.target, full: step.target } : stepTarget(result),
+  };
+}
+
 function ChatToolStep({ result, live }: { result: AgentToolResult; live: boolean }) {
   const failed = Boolean(result.output?.isError);
   const status: ToolStepStatus =
@@ -82,14 +131,26 @@ function ChatToolStep({ result, live }: { result: AgentToolResult; live: boolean
         : !live && result.finishedAt === undefined
           ? 'interrupted'
           : 'done';
-  const verb = verbOf(result.name);
-  const target = stepTarget(result);
+  const catalog = useConnectorCatalog(result.name.startsWith(composioToolPrefix)).data ?? [];
+  const { step, verb, target } = describeStep(result, catalog);
   const subagentTool =
     status === 'running' && result.name === 'task'
       ? (result.output?.details as SubagentDetails | undefined)?.tool
       : undefined;
   return (
     <ToolStep
+      icon={
+        step?.apps.length === 1 ? (
+          <img
+            alt=""
+            className="size-4 rounded-full bg-on-media object-contain p-px"
+            loading="lazy"
+            src={step.apps[0]!.logo}
+          />
+        ) : (
+          iconOf(result.name)
+        )
+      }
       label={status === 'running' ? verb.doing : verb.done}
       progress={
         subagentTool && {
@@ -111,11 +172,12 @@ function ChatToolStep({ result, live }: { result: AgentToolResult; live: boolean
 }
 
 function summarize(results: AgentToolResult[]): string {
-  const counts = new Map<string, number>();
-  for (const result of results) counts.set(result.name, (counts.get(result.name) ?? 0) + 1);
-  return [...counts]
-    .map(([name, count]) => `${verbOf(name).done} ${count} ${verbOf(name).noun}`)
-    .join('，');
+  const counts = new Map<string, { noun: string; count: number }>();
+  for (const result of results) {
+    const { done, noun } = verbOf(result.name);
+    counts.set(done, { noun, count: (counts.get(done)?.count ?? 0) + 1 });
+  }
+  return [...counts].map(([done, { noun, count }]) => `${done} ${count} ${noun}`).join('，');
 }
 
 export function formatDuration(ms: number): string {
@@ -126,10 +188,21 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
 }
 
+export function formatElapsed(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return [hours && `${hours} 时`, (hours || minutes) && `${minutes} 分`, `${seconds % 60} 秒`]
+    .filter(Boolean)
+    .join(' ');
+}
+
 function ChatToolGroup({ results, live }: { results: AgentToolResult[]; live: boolean }) {
   const flat = live || results.length === 1;
+  const first = iconOf(results[0]!.name);
   return (
     <ToolGroup
+      icon={results.every((result) => iconOf(result.name) === first) ? first : toolIcon}
       failed={results.some((result) => result.output?.isError)}
       summary={flat ? undefined : summarize(results)}
     >
@@ -138,6 +211,12 @@ function ChatToolGroup({ results, live }: { results: AgentToolResult[]; live: bo
       ))}
     </ToolGroup>
   );
+}
+
+function CurrentStepLabel({ result }: { result: AgentToolResult }) {
+  const catalog = useConnectorCatalog(result.name.startsWith(composioToolPrefix)).data ?? [];
+  const { verb, target } = describeStep(result, catalog);
+  return <>{`${result.finishedAt === undefined ? verb.doing : verb.done} ${target.short}`}</>;
 }
 
 export function ReplyTrace({
@@ -165,6 +244,16 @@ export function ReplyTrace({
     } else blocks.push({ key: index, part });
   });
   const lastIndex = blocks.length - 1;
+  const keepLast = blocks[lastIndex]?.part.type === 'text';
+  const current = blocks[keepLast ? lastIndex - 1 : lastIndex]?.part;
+  const currentResult = current?.type === 'tools' ? current.results.at(-1) : undefined;
+  const currentLabel = currentResult ? (
+    <CurrentStepLabel result={currentResult} />
+  ) : current?.type === 'text' ? (
+    current.text.trim().split('\n')[0]!
+  ) : (
+    'Thinking'
+  );
   const renderBlock = ({ part }: (typeof blocks)[number], index: number) => {
     const blockLive = live && index === lastIndex;
     if (part.type === 'text')
@@ -177,7 +266,19 @@ export function ReplyTrace({
           )}
         </div>
       );
-    if (part.type === 'reasoning') return <Reasoning live={blockLive}>{part.text}</Reasoning>;
+    if (part.type === 'reasoning')
+      return (
+        <Reasoning
+          label={
+            part.startedAt !== undefined && part.finishedAt !== undefined
+              ? `Thought for ${Math.floor(Math.max(0, part.finishedAt - part.startedAt) / 1000)}s`
+              : 'Thought'
+          }
+          streaming={blockLive && part.finishedAt === undefined}
+        >
+          {part.text}
+        </Reasoning>
+      );
     return <ChatToolGroup live={blockLive} results={part.results} />;
   };
   const foldable = !live && blocks.length > 1 && blocks[lastIndex]!.part.type === 'text';
@@ -186,11 +287,20 @@ export function ReplyTrace({
       ? formatDuration(finishedAt - startedAt)
       : null;
   const hasTools = blocks.some(({ part }) => part.type === 'tools');
-  const foldLabel = `${hasTools ? '已处理' : '已思考'}${duration ? ` · 用时 ${duration}` : ''}`;
+  const foldLabel = duration
+    ? `${hasTools ? '处理了' : '思考了'} ${duration}`
+    : hasTools
+      ? '已处理'
+      : '已思考';
   return (
     <Trace
       blocks={blocks.map((block, index) => ({ key: block.key, node: renderBlock(block, index) }))}
       foldLabel={foldable ? foldLabel : undefined}
+      running={
+        live && startedAt !== undefined
+          ? { current: currentLabel, startedAt, keepLast, formatElapsed }
+          : undefined
+      }
     />
   );
 }

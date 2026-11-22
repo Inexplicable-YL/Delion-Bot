@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { WorkspaceChat } from '../../../../src/core/protocol/agent';
 import { ChatThread } from '../../../../src/modules/chat/view/ChatThread';
@@ -123,4 +124,39 @@ it('插队把一轮切成多段回复时，本轮改动卡片只挂在最后一�
   const cards = [...host.querySelectorAll('[data-turn-card]')];
   expect(cards).toHaveLength(1);
   expect(cards[0]!.parentElement!.textContent).toContain('A 和 B 都做完了');
+});
+
+it('在回复操作栏左侧显示来源，点击可打开来源链接列表', async () => {
+  const url = 'https://example.com/article';
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ChatThread
+          chat={{
+            ...chat,
+            running: false,
+            messages: [
+              {
+                role: 'assistant',
+                content: '回答',
+                toolResults: [
+                  {
+                    id: 'page',
+                    name: 'web_fetch',
+                    input: { url },
+                    output: { text: JSON.stringify({ title: 'Article', source: { url } }) },
+                  },
+                ],
+              },
+            ],
+          }}
+        />
+      </QueryClientProvider>,
+    ),
+  );
+  const trigger = host.querySelector('button')!;
+  expect(trigger.textContent).toBe('Article');
+  await act(async () => trigger.click());
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.querySelector('a')?.href).toBe(url);
 });

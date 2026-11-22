@@ -14,6 +14,8 @@ export interface SessionRow {
   cwd: string | null;
   file: string;
   title: string;
+  title_temporary: number;
+  archived: number;
   provider_id: string | null;
   model: string | null;
   effort: string | null;
@@ -24,7 +26,7 @@ export function row(id: string): SessionRow {
   const found = hostPorts()
     .database()
     .prepare(
-      'SELECT id, project_id, cwd, file, title, provider_id, model, effort, parent_id FROM sessions WHERE id=?',
+      'SELECT id, project_id, cwd, file, title, title_temporary, archived, provider_id, model, effort, parent_id FROM sessions WHERE id=?',
     )
     .get(id) as SessionRow | undefined;
   if (!found) throw new Error('会话不存在');
@@ -98,6 +100,10 @@ export function modelChoice(meta: SessionRow): ModelChoice {
       effort: meta.effort,
     };
   }
+  return defaultModelChoice(usable);
+}
+
+export function defaultModelChoice(usable = usableLlmProviders()): ModelChoice {
   const recent = hostPorts()
     .database()
     .prepare(
@@ -130,11 +136,31 @@ export function storeSessionFile(id: string, file: string) {
   hostPorts().database().prepare('UPDATE sessions SET file=? WHERE id=?').run(file, id);
 }
 
-export function storeTitle(id: string, title: string) {
+export function storeTitle(id: string, title: string, temporary = false) {
   hostPorts()
     .database()
-    .prepare('UPDATE sessions SET title=? WHERE id=?')
-    .run(title.slice(0, 60), id);
+    .prepare('UPDATE sessions SET title=?, title_temporary=? WHERE id=?')
+    .run(title.slice(0, 60), Number(temporary), id);
+}
+
+export function completeTemporaryTitle(id: string, title: string) {
+  return hostPorts()
+    .database()
+    .prepare(
+      'UPDATE sessions SET title=?, title_temporary=0 WHERE id=? AND title_temporary=1 AND archived=0 RETURNING title',
+    )
+    .get(title.slice(0, 60), id) as { title: string } | undefined;
+}
+
+export function recentTemporaryTitleSessions(excludeId: string): { id: string }[] {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  return hostPorts()
+    .database()
+    .prepare(
+      `SELECT id FROM sessions WHERE archived=0 AND parent_id IS NULL AND message_count>0
+       AND title_temporary=1 AND updated_at>=? AND id<>? ORDER BY updated_at DESC`,
+    )
+    .all(since, excludeId) as { id: string }[];
 }
 
 export function storeActivity(id: string, messageCount: number) {
@@ -242,7 +268,7 @@ export function insertSession(projectId: string | null): string {
   hostPorts()
     .database()
     .prepare(
-      'INSERT INTO sessions (id, project_id, cwd, file, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO sessions (id, project_id, cwd, file, title_temporary, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)',
     )
     .run(id, projectId, cwd, '', now, now);
   return id;

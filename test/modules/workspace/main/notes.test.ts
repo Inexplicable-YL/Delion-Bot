@@ -61,6 +61,7 @@ function createDb(): Database.Database {
       project_id TEXT REFERENCES workspace_entries(id) ON DELETE SET NULL,
       file TEXT NOT NULL,
       title TEXT NOT NULL DEFAULT '新对话',
+      title_temporary INTEGER NOT NULL DEFAULT 0,
       message_count INTEGER NOT NULL DEFAULT 0,
       archived INTEGER NOT NULL DEFAULT 0,
       pinned INTEGER NOT NULL DEFAULT 0,

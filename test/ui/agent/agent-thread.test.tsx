@@ -52,3 +52,28 @@ it('给出 foldLabel 时过程块被隐藏，展开后可见，最后一块始�
   expect(process.hidden).toBe(false);
   expect(host.querySelectorAll('[hidden]')).toHaveLength(0);
 });
+
+it('运行中过程折叠为当前步骤一行，展开后显示处理时长与完整过程，正文始终可见', async () => {
+  const host = await render(
+    <Trace
+      blocks={[
+        { key: 0, node: <p>思考</p> },
+        { key: 1, node: <p>工具</p> },
+        { key: 2, node: <p>正文</p> },
+      ]}
+      running={{
+        current: '运行 pnpm test',
+        startedAt: Date.now(),
+        keepLast: true,
+        formatElapsed: () => '5 秒',
+      }}
+    />,
+  );
+  const toggle = host.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+  expect(toggle.textContent).toContain('运行 pnpm test');
+  expect(host.querySelector('[hidden]')!.textContent).toBe('思考工具');
+  await act(async () => toggle.click());
+  expect(toggle.textContent).toContain('处理中 5 秒');
+  expect(host.querySelectorAll('[hidden]')).toHaveLength(0);
+  expect(host.textContent).toContain('正文');
+});
