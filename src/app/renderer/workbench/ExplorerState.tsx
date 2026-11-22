@@ -3,6 +3,7 @@ import { Bars3BottomLeftIcon as PanelLeft } from '@heroicons/react/24/outline';
 import { usePreferences } from '../shell/preferences';
 import { NARROW_WINDOW_QUERY, useMobileDrawer } from '../shell/mobile-drawer';
 import { IconButton } from '../../../ui/IconButton';
+import { useWorkbenchLayout } from './layout-store';
 
 type Store = {
   narrow: boolean;
@@ -23,9 +24,10 @@ if (typeof window !== 'undefined') {
 
 export function useExplorerVisible(): boolean {
   const narrow = useExplorerState((s) => s.narrow);
+  const collapsedForReply = useWorkbenchLayout((s) => s.explorerCollapsedForReply);
   const mobileOpen = useMobileDrawer((s) => s.drawer === 'explorer');
   const collapsed = usePreferences((s) => s.workspaceSidebarCollapsed);
-  return narrow ? mobileOpen : !collapsed;
+  return narrow ? mobileOpen : !collapsed && !collapsedForReply;
 }
 
 export function ExplorerRevealButton({ className }: { className?: string }) {
@@ -37,7 +39,10 @@ export function ExplorerRevealButton({ className }: { className?: string }) {
       onClick={() => {
         const state = useExplorerState.getState();
         if (state.narrow) useMobileDrawer.getState().setDrawer('explorer');
-        else usePreferences.getState().setPreference('workspaceSidebarCollapsed', false);
+        else {
+          useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
+          usePreferences.getState().setPreference('workspaceSidebarCollapsed', false);
+        }
       }}
       title="展开目录"
     >

@@ -234,15 +234,68 @@ function UserMessage({
 }
 
 const INTERRUPT_PREFIX = '本次执行中断：';
-function splitInterrupt(parts: NonNullable<WorkspaceChat['messages'][number]['parts']>) {
+type ReplyParts = NonNullable<WorkspaceChat['messages'][number]['parts']>;
+type ReplyTraceData = { parts: ReplyParts; durationMs: number };
+
+function replyDuration({ startedAt, finishedAt }: WorkspaceChat['messages'][number]): number {
+  return startedAt !== undefined && finishedAt !== undefined
+    ? Math.max(0, finishedAt - startedAt)
+    : 0;
+}
+
+function splitInterrupt(parts: ReplyParts) {
   const last = parts.at(-1);
   if (last?.type === 'text' && last.text.startsWith(INTERRUPT_PREFIX))
     return { parts: parts.slice(0, -1), reason: last.text.slice(INTERRUPT_PREFIX.length) };
   return { parts, reason: null };
 }
 
+function foldContinuedReplies(
+  messages: WorkspaceChat['messages'],
+  turnEnds: ReadonlyMap<string, number>,
+  streaming: boolean,
+) {
+  const folded = new Map<number, ReplyTraceData | null>();
+  const pending: (ReplyTraceData & { index: number })[] = [];
+  messages.forEach((message, index) => {
+    if (message.task?.turnId || message.compacted) pending.length = 0;
+    if (
+      message.role !== 'assistant' ||
+      message.extension ||
+      message.task ||
+      message.compacted ||
+      (streaming && index === messages.length - 1)
+    )
+      return;
+
+    const { parts } = splitInterrupt(message.parts ?? []);
+    const last = parts.findLast((part) =>
+      part.type === 'tools' ? part.results.length > 0 : Boolean(part.text.trim()),
+    );
+    const continued = message.turnId !== undefined && turnEnds.get(message.turnId) !== index;
+    const complete = !continued && !message.stopped && !message.interrupted;
+    if (last?.type === 'text' && complete) {
+      if (pending.length) {
+        for (const trace of pending) folded.set(trace.index, null);
+        folded.set(index, {
+          parts: [...pending.flatMap((trace) => trace.parts), ...parts],
+          durationMs: pending.reduce(
+            (total, trace) => total + trace.durationMs,
+            replyDuration(message),
+          ),
+        });
+      }
+      pending.length = 0;
+    } else if (last && parts.some((part) => part.type !== 'text'))
+      pending.push({ index, parts, durationMs: replyDuration(message) });
+    else if (!last && complete && message.content.trim()) pending.length = 0;
+  });
+  return folded;
+}
+
 function AssistantMessage({
   message,
+  foldedTrace,
   live,
   turnEnd,
   animate,
@@ -253,8 +306,10 @@ function AssistantMessage({
   onFork,
   onRetry,
   onOpenFile,
+  fileMenu,
 }: {
   message: WorkspaceChat['messages'][number];
+  foldedTrace: ReplyTraceData | null | undefined;
   live: boolean;
   turnEnd: boolean;
   animate: boolean;
@@ -265,17 +320,28 @@ function AssistantMessage({
   onFork: ((entryId: string) => void) | undefined;
   onRetry: (() => void) | undefined;
   onOpenFile: ((path: string) => void) | undefined;
+  fileMenu: { sessionId: string; remote: boolean } | undefined;
 }) {
   const reduced = useMediaQuery('(prefers-reduced-motion: reduce)');
   const split = splitInterrupt(message.parts ?? []);
-  const parts = split.parts;
+  const parts = foldedTrace?.parts ?? split.parts;
   const reason = message.interrupted ? (split.reason ?? '未知错误') : null;
   const empty = !parts.some((part) =>
     part.type === 'tools' ? part.results.length > 0 : Boolean(part.text.trim()),
   );
-  const content = reason
-    ? parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n\n')
-    : message.content;
+  const moved = foldedTrace === null;
+  const content = moved
+    ? ''
+    : reason
+      ? split.parts.flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n\n')
+      : message.content;
+  const toolResults = moved
+    ? undefined
+    : foldedTrace
+      ? parts.flatMap((part) => (part.type === 'tools' ? part.results : []))
+      : message.toolResults;
+  const showChanges = showTurnChanges && !live && turnEnd && sessionId && message.turnId;
+  if (moved && !reason && !message.stopped && !showChanges) return null;
 
   return (
     <AssistantMessageFrame data-reply-live={live || undefined}>
@@ -284,32 +350,32 @@ function AssistantMessage({
           <Shimmer>Thinking</Shimmer>
         </p>
       )}
-      <ReplyTrace
-        key={message.startedAt}
-        live={live}
-        parts={parts}
-        startedAt={message.startedAt}
-        finishedAt={message.finishedAt}
-        renderText={(text) => (
-          <ChatMarkdown
-            mode={live ? 'streaming' : 'static'}
-            isAnimating={live && !activeTool}
-            animated={live && animate && !reduced ? textAnimation : false}
-            references={onOpenFile && { onOpen: onOpenFile }}
-            replyImages
-          >
-            {text}
-          </ChatMarkdown>
-        )}
-      />
+      {!moved && (
+        <ReplyTrace
+          key={foldedTrace ? 'continued' : message.startedAt}
+          live={live}
+          parts={parts}
+          startedAt={message.startedAt}
+          durationMs={foldedTrace?.durationMs ?? replyDuration(message)}
+          renderText={(text) => (
+            <ChatMarkdown
+              mode={live ? 'streaming' : 'static'}
+              isAnimating={live && !activeTool}
+              animated={live && animate && !reduced ? textAnimation : false}
+              references={onOpenFile && { onOpen: onOpenFile, fileMenu }}
+              replyImages
+            >
+              {text}
+            </ChatMarkdown>
+          )}
+        />
+      )}
       {reason && <ErrorCard onRetry={onRetry} reason={reason} />}
       {message.stopped && !live && <p className="my-2 text-ui-body text-ink-2">已停止</p>}
-      {showTurnChanges && !live && turnEnd && sessionId && message.turnId && (
-        <TurnChangesCard sessionId={sessionId} turnId={message.turnId} />
-      )}
-      {!live && (content || Boolean(message.toolResults?.length)) && (
+      {showChanges && <TurnChangesCard sessionId={sessionId} turnId={showChanges} />}
+      {!live && (content || Boolean(toolResults?.length)) && (
         <MessageActions className="mt-1 has-[[data-slot=popover-trigger]]:opacity-100">
-          {message.toolResults?.length ? <ReplySources steps={message.toolResults} /> : null}
+          {toolResults?.length ? <ReplySources steps={toolResults} /> : null}
           {content && <CopyAction label="复制回答" text={content} />}
           {content && onSaveNote && (
             <IconButton
@@ -373,11 +439,13 @@ export function ChatThread({
   onSidechat,
   onAskImage,
   draftKey,
+  fileSessionId = chat.sessionId,
 }: {
   chat: WorkspaceChat;
   onAskImage?: (text: string, context: string[]) => Promise<void>;
   onSidechat?: (quote: string) => void;
   draftKey?: string | null;
+  fileSessionId?: string | null;
   onOpenSource?: (key: string) => void;
   onOpenSession?: (id: string) => void;
   onSaveNote?: (text: string) => void;
@@ -385,13 +453,17 @@ export function ChatThread({
   onFork?: (entryId: string) => void;
 }) {
   const replyDraftKey = draftKey === undefined ? chat.sessionId : draftKey;
+  const { openReplyFile } = useChatTabSource();
   const remoteProject = useWorkspaceStore((state) =>
     state.workspace.entries.some((entry) => entry.id === chat.projectId && entry.remoteId),
   );
   const openFile =
     onOpenSource &&
-    ((path: string) =>
-      onOpenSource(fileLinkKey(path, chat.cwd, remoteProject ? chat.projectId : null)));
+    ((path: string) => {
+      const key = fileLinkKey(path, chat.cwd, remoteProject ? chat.projectId : null);
+      if (openReplyFile && fileSessionId) openReplyFile(key, fileSessionId, chat.projectId);
+      else onOpenSource(key);
+    });
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [scroll] = useState(() => {
@@ -445,6 +517,7 @@ export function ChatThread({
   messages.forEach((message, index) => {
     if (message.role === 'assistant' && message.turnId) turnEnds.set(message.turnId, index);
   });
+  const foldedTraces = foldContinuedReplies(messages, turnEnds, streaming);
 
   const replyStartedAt = messages[lastUserIndex + 1]?.startedAt;
   const observeScroll = (content: HTMLDivElement | null) => {
@@ -537,10 +610,14 @@ export function ChatThread({
                   turnEnd={message.turnId !== undefined && turnEnds.get(message.turnId) === index}
                   animate={message.startedAt !== resumedReplyAt}
                   message={message}
+                  foldedTrace={foldedTraces.get(index)}
                   activeTool={chat.activeTool}
                   onSaveNote={onSaveNote}
                   onFork={streaming ? undefined : onFork}
                   onOpenFile={openFile}
+                  fileMenu={
+                    fileSessionId ? { sessionId: fileSessionId, remote: remoteProject } : undefined
+                  }
                 />
               ),
             )}

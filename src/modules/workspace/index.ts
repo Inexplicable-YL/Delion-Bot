@@ -91,7 +91,7 @@ export {
 export { attachContextMenu } from './main/context-menu';
 export { availablePath, diskName } from './main/disk-name';
 export { localFileFormat, textRevision } from './main/files';
-export { openInVsCode } from './main/project';
+export { hasVsCode, openInVsCode } from './main/project';
 export {
   previewFileResponse,
   registerPreviewHost,

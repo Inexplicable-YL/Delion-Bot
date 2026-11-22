@@ -242,7 +242,12 @@ export function SidechatPanel({
         </header>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {view.messages.length > 0 ? (
-            <ChatThread chat={thread} draftKey={key} onOpenSource={onOpenSource} />
+            <ChatThread
+              chat={thread}
+              draftKey={key}
+              fileSessionId={parentId}
+              onOpenSource={onOpenSource}
+            />
           ) : (
             <EmptyState className="flex-1" icon={MessageCircleDashed} title="随口一问，不扰主线" />
           )}

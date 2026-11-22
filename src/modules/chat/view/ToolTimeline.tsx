@@ -223,13 +223,13 @@ export function ReplyTrace({
   parts,
   live,
   startedAt,
-  finishedAt,
+  durationMs,
   renderText,
 }: {
   parts: ChatParts;
   live: boolean;
   startedAt?: number;
-  finishedAt?: number;
+  durationMs: number;
   renderText?: (text: string) => ReactNode;
 }) {
   const blocks: { key: number; part: Part }[] = [];
@@ -282,10 +282,7 @@ export function ReplyTrace({
     return <ChatToolGroup live={blockLive} results={part.results} />;
   };
   const foldable = !live && blocks.length > 1 && blocks[lastIndex]!.part.type === 'text';
-  const duration =
-    startedAt !== undefined && finishedAt !== undefined && finishedAt > startedAt
-      ? formatDuration(finishedAt - startedAt)
-      : null;
+  const duration = durationMs > 0 ? formatDuration(durationMs) : null;
   const hasTools = blocks.some(({ part }) => part.type === 'tools');
   const foldLabel = duration
     ? `${hasTools ? '处理了' : '思考了'} ${duration}`

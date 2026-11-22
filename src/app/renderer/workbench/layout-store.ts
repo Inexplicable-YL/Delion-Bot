@@ -48,11 +48,21 @@ type Store = {
   root: LayoutNode;
   focus: string;
   maximized: string | null;
+  explorerCollapsedForReply: boolean;
   ready: boolean;
-  pendingReveal: { tabId: TabId; projectId: string | null; keep: boolean } | null;
+  pendingReveal: {
+    tabId: TabId;
+    projectId: string | null;
+    keep: boolean;
+    afterReveal?: () => void;
+  } | null;
   init(projectId: string | null): Promise<void>;
-  reveal(tabId: TabId, projectId: string | null, keep?: boolean): void;
-  openTab(tabId: TabId, targetGroupId?: string, options?: { preview?: boolean }): void;
+  reveal(tabId: TabId, projectId: string | null, keep?: boolean, afterReveal?: () => void): void;
+  openTab(
+    tabId: TabId,
+    targetGroupId?: string,
+    options?: { preview?: boolean; index?: number },
+  ): void;
   keepTab(tabId: TabId, groupId?: string): void;
   closeTab(tabId: TabId, groupId?: string): void;
   closeTabs(groupId: string, mode: 'others' | 'right' | 'all', anchor?: TabId): void;
@@ -124,6 +134,7 @@ export const useWorkbenchLayout = create<Store>((set, get) => ({
   root: createDefaultLayout().root,
   focus: 'primary',
   maximized: null,
+  explorerCollapsedForReply: false,
   ready: false,
   pendingReveal: null,
   persistTimer: null,
@@ -148,13 +159,14 @@ export const useWorkbenchLayout = create<Store>((set, get) => ({
     schedulePersist();
   },
 
-  reveal: (tabId, projectId, keep = false) => {
+  reveal: (tabId, projectId, keep = false, afterReveal) => {
     if (get().ready && get().projectId === projectId) {
       get().openTab(tabId, undefined, { preview: previewable(tabId) && projectId !== null });
       if (keep) get().keepTab(tabId);
+      afterReveal?.();
       return;
     }
-    set({ pendingReveal: { tabId, projectId, keep } });
+    set({ pendingReveal: { tabId, projectId, keep, afterReveal } });
   },
 
   init: async (projectId) => {
@@ -184,7 +196,7 @@ export const useWorkbenchLayout = create<Store>((set, get) => ({
     if (pendingReveal) {
       set({ pendingReveal: null });
       if (pendingReveal.projectId === projectId)
-        get().reveal(pendingReveal.tabId, projectId, pendingReveal.keep);
+        get().reveal(pendingReveal.tabId, projectId, pendingReveal.keep, pendingReveal.afterReveal);
     }
     if (!loadFailed) schedulePersist();
   },
@@ -226,7 +238,11 @@ export const useWorkbenchLayout = create<Store>((set, get) => ({
         ...node,
         tabs: replaced
           ? node.tabs.map((tab) => (tab === replaced ? tabId : tab))
-          : [...node.tabs, tabId],
+          : node.tabs.toSpliced(
+              Math.max(node.pinned?.length ?? 0, options?.index ?? node.tabs.length),
+              0,
+              tabId,
+            ),
         active: tabId,
         preview: options?.preview ? tabId : node.preview,
       })),

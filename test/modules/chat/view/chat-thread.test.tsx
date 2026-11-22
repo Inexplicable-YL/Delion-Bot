@@ -130,6 +130,58 @@ it.each([
   if (count) expect(cards[0]!.parentElement!.textContent).toContain('A 和 B 都做完了');
 });
 
+it.each([
+  ['同一轮补充要求', 'turn-1', {}],
+  ['手动打断后续问', 'turn-2', { stopped: true }],
+  ['进程重启后继续', 'turn-2', {}],
+] as const)('%s时等最终回复完成再一起折叠推理', async (_scenario, nextTurnId, flags) => {
+  const messages: WorkspaceChat['messages'] = [
+    { role: 'user', content: '先检查' },
+    {
+      role: 'assistant',
+      content: '',
+      turnId: 'turn-1',
+      startedAt: 1,
+      finishedAt: 2_001,
+      parts: [{ type: 'reasoning', text: '第一段推理' }],
+      ...flags,
+    },
+    { role: 'user', content: '继续检查' },
+    {
+      role: 'assistant',
+      content: '检查完毕',
+      turnId: nextTurnId,
+      startedAt: 60_001,
+      finishedAt: 64_001,
+      parts: [
+        { type: 'reasoning', text: '第二段推理' },
+        { type: 'text', text: '检查完毕' },
+      ],
+    },
+  ];
+  const traces = () => Array.from(host.querySelectorAll('[aria-label="对话过程"]'));
+  await act(async () => root.render(<ChatThread chat={{ ...chat, messages }} />));
+  expect(traces()).toHaveLength(2);
+  await act(async () => traces()[0]?.querySelector('button')?.click());
+  expect(traces()[0]?.textContent).toContain('第一段推理');
+
+  await act(async () => root.render(<ChatThread chat={{ ...chat, messages, running: false }} />));
+  expect(traces()).toHaveLength(1);
+  const trace = traces()[0]!;
+  expect(trace.querySelector('button')?.getAttribute('aria-expanded')).toBe('false');
+  expect(trace.querySelector('button')?.textContent).toContain('6 秒');
+  expect(trace.querySelector('[data-assistant-body]')?.textContent).toBe('检查完毕');
+  await act(async () => trace.querySelector('button')?.click());
+  expect(trace.querySelector('button')?.getAttribute('aria-expanded')).toBe('true');
+  await act(async () =>
+    Array.from(trace.querySelectorAll('button'))
+      .slice(1)
+      .forEach((button) => button.click()),
+  );
+  expect(trace.textContent).toContain('第一段推理');
+  expect(trace.textContent).toContain('第二段推理');
+});
+
 it('在回复操作栏左侧显示来源，点击可打开来源链接列表', async () => {
   const url = 'https://example.com/article';
   await act(async () =>

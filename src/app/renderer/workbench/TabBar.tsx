@@ -18,6 +18,7 @@ import { ExplorerRevealButton } from './ExplorerState';
 import { encodeTabDrag, hasTabDrag, parseTabDrag, setCurrentTabDrag, tabDragType } from './tab-dnd';
 import { GroupToolbar } from './GroupToolbar';
 import { IconButton } from '../../../ui/IconButton';
+import { openDroppedSession, sessionDragType } from '../navigation/session-dnd';
 
 export function TabBar({
   group,
@@ -90,19 +91,18 @@ export function TabBar({
   };
 
   const onDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (!hasTabDrag(event.dataTransfer)) return;
+    if (!hasTabDrag(event.dataTransfer) && !event.dataTransfer.types.includes(sessionDragType))
+      return;
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
   };
   const onDrop = (event: DragEvent<HTMLDivElement>) => {
-    if (!hasTabDrag(event.dataTransfer)) return;
+    const fromSidebar = event.dataTransfer.types.includes(sessionDragType);
+    if (!fromSidebar && !hasTabDrag(event.dataTransfer)) return;
     if (event.defaultPrevented) return;
     event.preventDefault();
     event.stopPropagation();
-    const payload = parseTabDrag(event.dataTransfer.getData(tabDragType));
-    setCurrentTabDrag(null);
-    if (!payload) return;
     const target = (event.target as HTMLElement).closest<HTMLElement>('[data-tab]');
     let index = group.tabs.length;
     if (target) {
@@ -111,6 +111,13 @@ export function TabBar({
       const rect = target.getBoundingClientRect();
       if (event.clientX > rect.left + rect.width / 2) index += 1;
     }
+    if (fromSidebar) {
+      openDroppedSession(event.dataTransfer, group.id, index);
+      return;
+    }
+    const payload = parseTabDrag(event.dataTransfer.getData(tabDragType));
+    setCurrentTabDrag(null);
+    if (!payload) return;
     moveTab(payload.tabId, payload.fromGroup, group.id, index);
   };
 

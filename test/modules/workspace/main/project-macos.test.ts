@@ -16,7 +16,7 @@ vi.mock('../../../../src/modules/workspace/main/api', () => ({
 }));
 vi.mock('../../../../src/modules/remotes', () => ({ remoteById: () => ({ host: 'gpu-box' }) }));
 
-import { openProjectDirectory } from '../../../../src/modules/workspace/main/project';
+import { hasVsCode, openProjectDirectory } from '../../../../src/modules/workspace/main/project';
 import { provideTestHostPorts } from '../../../core/host-mock';
 provideTestHostPorts({ paths: { home: () => '/Users/test' } });
 const id = '11111111-1111-4111-8111-111111111111';
@@ -25,7 +25,7 @@ beforeEach(() => {
   vi.stubGlobal('process', { ...process, platform: 'darwin' });
   vi.resetAllMocks();
   state.remote = false;
-  state.execFile.mockImplementation((_command, _args, callback) =>
+  state.execFile.mockImplementation((_command, _args, _options, callback) =>
     callback(new Error('not found'), ''),
   );
   state.spawn.mockImplementation(() => {
@@ -37,12 +37,17 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 it('优先使用 PATH 中的 code CLI，并将完整项目路径作为单个参数', async () => {
-  state.execFile.mockImplementation((_command, _args, callback) =>
+  state.execFile.mockImplementation((_command, _args, _options, callback) =>
     callback(null, '/usr/local/bin/code\n'),
   );
   state.exists.mockImplementation((path: string) => path === '/usr/local/bin/code');
   await openProjectDirectory(id, 'vscode');
-  expect(state.execFile).toHaveBeenCalledWith('/usr/bin/which', ['code'], expect.any(Function));
+  expect(state.execFile).toHaveBeenCalledWith(
+    '/usr/bin/which',
+    ['code'],
+    { windowsHide: true },
+    expect.any(Function),
+  );
   expect(state.spawn).toHaveBeenCalledWith('/usr/local/bin/code', ['/projects/项目 ; & 中文'], {
     detached: true,
     stdio: 'ignore',
@@ -63,6 +68,7 @@ it('没有 CLI 链接时使用 /Applications 中应用自带的 CLI', async () =
   );
   state.exists.mockImplementation((path: string) => path === cli);
   state.remote = true;
+  expect(await hasVsCode()).toBe(true);
   await openProjectDirectory(id, 'vscode');
   expect(state.spawn).toHaveBeenCalledWith(
     cli,
@@ -73,6 +79,7 @@ it('没有 CLI 链接时使用 /Applications 中应用自带的 CLI', async () =
 
 it('未安装时返回操作提示，不尝试启动 Windows 程序', async () => {
   state.exists.mockReturnValue(false);
+  expect(await hasVsCode()).toBe(false);
   await expect(openProjectDirectory(id, 'vscode')).rejects.toThrow('未找到 VS Code');
   expect(state.spawn).not.toHaveBeenCalled();
 });

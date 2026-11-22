@@ -83,47 +83,54 @@ export async function openProjectDirectory(id: unknown, target: unknown): Promis
       throw new Error(`无法打开项目目录：${error.message}`);
     });
 }
+async function findVsCode(): Promise<string | undefined> {
+  const windows = process.platform === 'win32';
+  const commands = await new Promise<string[]>((resolve) => {
+    execFile(
+      windows ? 'where' : '/usr/bin/which',
+      ['code'],
+      { windowsHide: true },
+      (error, stdout) =>
+        resolve(
+          error
+            ? []
+            : stdout
+                .split(/\r?\n/)
+                .map((line) => line.trim())
+                .filter(Boolean),
+        ),
+    );
+  });
+  const candidates = windows
+    ? [
+        ...commands.map((cli) => join(dirname(cli), '..', 'Code.exe')),
+        ...[
+          process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'Programs'),
+          process.env.ProgramFiles,
+          process.env['ProgramFiles(x86)'],
+        ].flatMap((directory) =>
+          directory ? [join(directory, 'Microsoft VS Code', 'Code.exe')] : [],
+        ),
+      ]
+    : [
+        ...commands,
+        ...['/Applications', join(hostPorts().paths.home(), 'Applications')].map((directory) =>
+          join(directory, 'Visual Studio Code.app', 'Contents', 'Resources', 'app', 'bin', 'code'),
+        ),
+      ];
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
+export async function hasVsCode(): Promise<boolean> {
+  return (await findVsCode()) !== undefined;
+}
+
 export async function openInVsCode(
   path: string,
   remoteAuthority: string | null = null,
 ): Promise<void> {
-  const locate = () =>
-    new Promise<string>((resolve, reject) => {
-      execFile(
-        process.platform === 'darwin' ? '/usr/bin/which' : 'where',
-        ['code'],
-        (error, stdout) => {
-          let first = error ? undefined : stdout.split(/\r?\n/).find((line) => line.trim());
-          if (!first && process.platform === 'darwin') {
-            first = ['/Applications', join(hostPorts().paths.home(), 'Applications')]
-              .map((directory) =>
-                join(
-                  directory,
-                  'Visual Studio Code.app',
-                  'Contents',
-                  'Resources',
-                  'app',
-                  'bin',
-                  'code',
-                ),
-              )
-              .find((candidate) => existsSync(candidate));
-          }
-          if (!first)
-            reject(
-              new Error(
-                remoteAuthority
-                  ? `未找到 VS Code 命令（code）。${remoteSshHint}`
-                  : '未找到 VS Code 命令（code）。可先安装 VS Code，或在文件夹中显示后手动打开。',
-              ),
-            );
-          else resolve(first.trim());
-        },
-      );
-    });
-  const cli = await locate();
-  const executable = process.platform === 'darwin' ? cli : join(dirname(cli), '..', 'Code.exe');
-  if (!existsSync(executable))
+  const executable = await findVsCode();
+  if (!executable)
     throw new Error(
       remoteAuthority
         ? `未找到 VS Code 程序。${remoteSshHint}`

@@ -5,7 +5,9 @@ import {
   updateSession,
   useSessions,
 } from '../../../modules/chat/view';
-import { useWorkbenchLayout } from '../workbench/layout-store';
+import { previewable, useWorkbenchLayout } from '../workbench/layout-store';
+import { openTarget } from '../workbench/open-target';
+import { walkGroups } from '../workbench/layout-schema';
 import { useEntryDialog } from '../workspace/entry-dialog-store';
 import { useMobileDrawer } from '../shell/mobile-drawer';
 import type { SettingsSectionId } from '../../../modules/settings/contract';
@@ -45,7 +47,12 @@ interface NavigationState {
   homeSeq: number;
   restoreRequest: RestoreRequest | null;
   requestDocumentRestore(key: string, open: (id: string) => void): boolean;
-  requestChatRestore(sessionId: string, projectId: string | null, title: string): void;
+  requestChatRestore(
+    sessionId: string,
+    projectId: string | null,
+    title: string,
+    open?: () => void,
+  ): void;
   navigate(next: ShellView | NavTarget): boolean;
   goBack(): boolean;
   goForward(): boolean;
@@ -55,6 +62,7 @@ interface NavigationState {
   openChat(sessionId: string, projectId: string | null): boolean;
   openChatTab(sessionId: string, projectId: string | null): boolean;
   openDocument(key: string, options?: { keep?: boolean }): boolean;
+  openReplyFile(key: string, sessionId: string, projectId: string | null): boolean;
   openTerminal(projectId: string): boolean;
   openSettings(section?: SettingsSectionId): boolean;
   newProject(): boolean;
@@ -98,12 +106,36 @@ export function documentTabId(key: string): TabId {
     : `preview:${key}`;
 }
 
+function openExistingReplyFile(key: string): boolean {
+  const layout = useWorkbenchLayout.getState();
+  if (!layout.ready) return false;
+  const { entries } = useWorkspaceStore.getState().workspace;
+  const fileIdentity = (key: string) => {
+    const path = entries.find((entry) => entry.id === key)?.path ?? key;
+    return /^(?:[a-z]:[\\/]|\\\\)/i.test(path) ? path.replaceAll('\\', '/').toLowerCase() : path;
+  };
+  const identity = fileIdentity(key);
+  const existing = walkGroups(layout.root)
+    .flatMap((group) => group.tabs)
+    .find((tab) => previewable(tab) && fileIdentity(tab.slice(tab.indexOf(':') + 1)) === identity);
+  if (!existing) return false;
+  layout.openTab(existing);
+  if (layout.maximized && useWorkbenchLayout.getState().focus !== layout.maximized)
+    layout.setMaximized(null);
+  return true;
+}
+
 export const useNavigationStore = create<NavigationState>((set, get) => {
-  const revealInProject = (tabId: TabId, projectId: string | null, keep = false): boolean => {
+  const revealInProject = (
+    tabId: TabId,
+    projectId: string | null,
+    keep = false,
+    afterReveal?: () => void,
+  ): boolean => {
     if (projectId !== get().projectId) {
       if (!get().openProject(projectId ?? '')) return false;
     } else if (!get().navigate('workbench')) return false;
-    useWorkbenchLayout.getState().reveal(tabId, projectId, keep);
+    useWorkbenchLayout.getState().reveal(tabId, projectId, keep, afterReveal);
     return true;
   };
   return {
@@ -134,14 +166,14 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       return true;
     },
 
-    requestChatRestore: (sessionId, projectId, title) => {
+    requestChatRestore: (sessionId, projectId, title, open) => {
       set({
         restoreRequest: {
           kind: 'chat',
           title: title || '新对话',
           restore: async () => {
             await updateSession(sessionId, { archived: false });
-            return () => void get().openChat(sessionId, projectId);
+            return open ?? (() => void get().openChat(sessionId, projectId));
           },
         },
       });
@@ -172,6 +204,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
         if (target) set({ target });
       } else {
         useMobileDrawer.getState().setDrawer(null);
+        useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
         set({
           view,
           target,
@@ -192,6 +225,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       if (prev === undefined || !leaveViews(() => get().goBack())) return false;
       rememberProject(prev.projectId);
       useMobileDrawer.getState().setDrawer(null);
+      useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
       set({
         view: prev.view,
         target: prev.target,
@@ -210,6 +244,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       if (next === undefined || !leaveViews(() => get().goForward())) return false;
       rememberProject(next.projectId);
       useMobileDrawer.getState().setDrawer(null);
+      useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
       set({
         view: next.view,
         target: next.target,
@@ -229,6 +264,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       if (!get().navigate('workbench')) return false;
       useMobileDrawer.getState().setDrawer(null);
       if (get().projectId !== next) {
+        useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
         if (fromWorkbench && currentProjectLive()) {
           set((state) => ({ backStack: [...state.backStack, routeOf(state)], forwardStack: [] }));
         }
@@ -281,6 +317,20 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
     openDocument: (key, options) => {
       if (get().requestDocumentRestore(key, (id) => get().openDocument(id, options))) return false;
       return revealInProject(documentTabId(key), get().projectId, options?.keep);
+    },
+
+    openReplyFile: (key, sessionId, projectId) => {
+      if (get().requestDocumentRestore(key, (id) => get().openReplyFile(id, sessionId, projectId)))
+        return false;
+      if (get().view === 'workbench')
+        return openExistingReplyFile(key) || revealInProject(documentTabId(key), get().projectId);
+      const opened = revealInProject(`chat:${sessionId}`, projectId, false, () => {
+        const layout = useWorkbenchLayout.getState();
+        if (layout.maximized) layout.setMaximized(null);
+        if (!openExistingReplyFile(key)) openTarget(documentTabId(key), { aside: true });
+      });
+      if (opened) useWorkbenchLayout.setState({ explorerCollapsedForReply: true });
+      return opened;
     },
     openTerminal: (projectId) => revealInProject(`terminal:${projectId}`, projectId),
 

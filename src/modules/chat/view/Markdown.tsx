@@ -1,6 +1,8 @@
 import 'katex/dist/katex.min.css';
 
-import { createContext, use, type ComponentProps, type ReactNode } from 'react';
+import { createContext, use, type ComponentProps, type ReactElement, type ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FolderIcon } from '@heroicons/react/24/outline';
 import { code } from '@streamdown/code';
 import { createMathPlugin } from '@streamdown/math';
 import type { MermaidConfig } from '@streamdown/mermaid';
@@ -15,6 +17,7 @@ import {
 } from 'streamdown';
 import { cn } from '../../../ui/cn';
 import { FileIcon } from '../../../ui/FileIcon';
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '../../../ui/ContextMenu';
 import { mermaidConfig, renderMermaid } from '../../preview/view';
 import { useChatTabSource } from './ChatSource';
 import type { ChatReference } from './drafts';
@@ -22,6 +25,10 @@ import { matchReferenceTokens } from './reference-tokens';
 import { ReplyImages } from './ReplyImage';
 import { useReplyImageContext } from './ReplyImageContext';
 import type { ReplyImageItem } from './reply-images';
+import { ReplyFileMenu } from './ReplyFileMenu';
+import { chatClient } from './client';
+import { showToast } from '../../../ui/Toast';
+import { errorMessage } from '../../../core/protocol/contract';
 
 const lazyMermaidPlugin: DiagramPlugin = {
   name: 'mermaid',
@@ -212,7 +219,13 @@ function markReferences(node: MarkdownNode, options: ChatReference[]): void {
 
 const referenceTags = { 'chat-reference': ['path'], 'chat-file-link': ['path'] };
 
-const OpenReferenceContext = createContext<(key: string) => void>(() => {});
+type MarkdownReferences = {
+  options?: ChatReference[];
+  onOpen: (key: string) => void;
+  fileMenu?: { sessionId: string; remote: boolean };
+};
+
+const ReferenceContext = createContext<MarkdownReferences | undefined>(undefined);
 
 function FileReference({
   path,
@@ -223,31 +236,86 @@ function FileReference({
   underline: boolean;
   children?: ReactNode;
 }) {
-  const open = use(OpenReferenceContext);
+  const references = use(ReferenceContext);
+  const menu = underline ? references?.fileMenu : undefined;
   const label = children ?? path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
   const [lead, ...rest] = typeof label === 'string' ? Array.from(label) : [label];
-  return (
+  const open = (key = path) => references?.onOpen(key);
+  const link = (activate: () => void, directory = false) => (
     <span
       className={cn(
         'cursor-pointer font-semibold text-accent-ink',
         underline && 'border-b border-current',
       )}
-      onClick={() => open(path)}
+      onClick={() => activate()}
       onKeyDown={(event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
-        open(path);
+        activate();
       }}
       role="button"
       tabIndex={0}
       title={path}
     >
       <span className="whitespace-nowrap">
-        <FileIcon className="mr-1 inline size-4 align-text-bottom text-accent-ink" path={path} />
+        {directory ? (
+          <FolderIcon className="mr-1 inline size-4 align-text-bottom" />
+        ) : (
+          <FileIcon className="mr-1 inline size-4 align-text-bottom text-accent-ink" path={path} />
+        )}
         {lead}
       </span>
       {rest.join('')}
     </span>
+  );
+  return menu ? (
+    <ReplyReference {...menu} path={path} onOpenFile={open}>
+      {link}
+    </ReplyReference>
+  ) : (
+    link(open)
+  );
+}
+
+function ReplyReference({
+  path,
+  sessionId,
+  remote,
+  onOpenFile,
+  children,
+}: NonNullable<MarkdownReferences['fileMenu']> & {
+  path: string;
+  onOpenFile: (key: string) => void;
+  children: (open: () => void, directory: boolean) => ReactElement;
+}) {
+  const queryClient = useQueryClient();
+  const file = { sessionId, path };
+  const options = {
+    queryKey: ['chat', 'reference-file-info', sessionId, path],
+    queryFn: () => chatClient.referenceFileInfo(file).catch(() => null),
+    staleTime: 30_000,
+  };
+  const { data: info } = useQuery(options);
+  const directory = info?.directory ?? false;
+  const open = async () => {
+    const current = await queryClient.fetchQuery(options);
+    if (!current?.directory) {
+      onOpenFile(current?.path ?? path);
+      return;
+    }
+    await chatClient
+      .openReferenceDirectory(file)
+      .catch((cause: unknown) =>
+        showToast({ variant: 'error', title: '打开失败', description: errorMessage(cause) }),
+      );
+  };
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children(() => void open(), directory)}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ReplyFileMenu directory={directory} path={path} remote={remote} sessionId={sessionId} />
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -272,7 +340,7 @@ export function ChatMarkdown({
   ...props
 }: ComponentProps<typeof Streamdown> & {
   replyImages?: boolean;
-  references?: { options?: ChatReference[]; onOpen: (key: string) => void };
+  references?: MarkdownReferences;
 }) {
   const { opensLink } = useChatTabSource();
   const linkSafety: LinkSafetyConfig = { enabled: true, onLinkCheck: opensLink };
@@ -293,7 +361,7 @@ export function ChatMarkdown({
     ...(references ? referenceComponents : {}),
   } as Components;
   return (
-    <OpenReferenceContext value={references?.onOpen ?? (() => {})}>
+    <ReferenceContext value={references}>
       <Streamdown
         allowedTags={Object.keys(allowedTags).length ? allowedTags : undefined}
         className={cn(markdownStyles, className)}
@@ -315,6 +383,6 @@ export function ChatMarkdown({
       >
         {children}
       </Streamdown>
-    </OpenReferenceContext>
+    </ReferenceContext>
   );
 }

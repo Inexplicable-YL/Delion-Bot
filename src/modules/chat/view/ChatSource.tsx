@@ -16,6 +16,7 @@ export interface ChatTabSource {
   navigate: Navigate;
   workbench: Workbench;
   opensLink(url: string): boolean;
+  openReplyFile?(key: string, sessionId: string, projectId: string | null): void;
   referenceSource?: ReferenceSource;
   onCreateProject?(): void;
   onSaveNote?(text: string): void;

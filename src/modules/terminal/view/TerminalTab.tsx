@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Terminal } from '@xterm/xterm';
+import { Terminal, type ITheme } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import {
   ClipboardIcon as ClipboardPaste,
@@ -28,6 +28,21 @@ function terminalColor(value: string): string {
 
 function withAlpha(color: string, alpha: number): string {
   return color.replace('rgb(', 'rgba(').replace(')', `, ${alpha})`);
+}
+
+function terminalTheme(style: CSSStyleDeclaration): ITheme {
+  const foreground = terminalColor(style.color);
+  const background = terminalColor(
+    style.getPropertyValue('--workbench-surface') || style.getPropertyValue('--page'),
+  );
+  return {
+    background: withAlpha(background, 0),
+    foreground,
+    cursor: foreground,
+    cursorAccent: background,
+    selectionBackground: withAlpha(foreground, 0.28),
+    selectionInactiveBackground: withAlpha(foreground, 0.16),
+  };
 }
 
 const noTabs: never[] = [];
@@ -101,19 +116,11 @@ export function TerminalTab({ tabId }: { tabId: string }) {
     const session = useTerminalStore.getState().output[activeId ?? ''];
     if (!activeId || !session) return;
     const style = getComputedStyle(element);
-    const foreground = terminalColor(style.color);
     const terminal = new Terminal({
       allowTransparency: true,
       fontFamily: style.fontFamily,
       fontSize: parseFloat(style.fontSize),
-      theme: {
-        background: withAlpha(foreground, 0),
-        foreground,
-        cursor: foreground,
-        cursorAccent: terminalColor(style.getPropertyValue('--page')),
-        selectionBackground: withAlpha(foreground, 0.28),
-        selectionInactiveBackground: withAlpha(foreground, 0.16),
-      },
+      theme: terminalTheme(style),
       minimumContrastRatio: 4.5,
       disableStdin: active?.exitCode !== null,
       altClickMovesCursor: true,
@@ -168,15 +175,7 @@ export function TerminalTab({ tabId }: { tabId: string }) {
     observer.observe(element);
     const themeObserver = new MutationObserver(() => {
       const style = getComputedStyle(element);
-      const foreground = terminalColor(style.color);
-      terminal.options.theme = {
-        background: withAlpha(foreground, 0),
-        foreground,
-        cursor: foreground,
-        cursorAccent: terminalColor(style.getPropertyValue('--page')),
-        selectionBackground: withAlpha(foreground, 0.28),
-        selectionInactiveBackground: withAlpha(foreground, 0.16),
-      };
+      terminal.options.theme = terminalTheme(style);
       terminal.options.fontSize = parseFloat(style.fontSize);
       resize();
     });
@@ -184,6 +183,12 @@ export function TerminalTab({ tabId }: { tabId: string }) {
       attributes: true,
       attributeFilter: ['class', 'style'],
     });
+    const workbench = element.closest('[data-workbench-surface]');
+    if (workbench)
+      themeObserver.observe(workbench, {
+        attributes: true,
+        attributeFilter: ['data-workbench-surface'],
+      });
     resize();
     terminal.focus();
     return () => {
@@ -297,6 +302,7 @@ export function TerminalTab({ tabId }: { tabId: string }) {
       <div
         key={activeId}
         ref={attachTerminal}
+        data-slot="terminal-screen"
         title="拖动选取文本；Alt+单击移动输入光标；右键复制选区或粘贴"
         onContextMenu={(event) => {
           event.preventDefault();

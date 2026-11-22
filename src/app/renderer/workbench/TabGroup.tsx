@@ -9,6 +9,7 @@ import { walkGroups } from './layout-schema';
 import { useWorkbenchLayout } from './layout-store';
 import { kindOf, registry, titleOf } from './registry';
 import { TabBar } from './TabBar';
+import { openDroppedSession, sessionDragType } from '../navigation/session-dnd';
 import {
   getCurrentTabDrag,
   hasTabDrag,
@@ -76,7 +77,8 @@ export function TabGroup({ group, onNewChat }: { group: GroupNode; onNewChat: ()
   };
 
   const onDragOver = (event: DragEvent<HTMLElement>) => {
-    if (!hasTabDrag(event.dataTransfer)) return;
+    const fromSidebar = event.dataTransfer.types.includes(sessionDragType);
+    if (!hasTabDrag(event.dataTransfer) && !(fromSidebar && !group.tabs.length)) return;
     if (!contentRef.current?.contains(event.target as Node)) {
       clearDropPreview();
       return;
@@ -84,6 +86,7 @@ export function TabGroup({ group, onNewChat }: { group: GroupNode; onNewChat: ()
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
+    if (fromSidebar) return;
     const zone = zoneAt(event);
     const sameGroup = getCurrentTabDrag()?.fromGroup === group.id;
     if (sameGroup && (!zone || group.tabs.length === 1)) {
@@ -103,12 +106,17 @@ export function TabGroup({ group, onNewChat }: { group: GroupNode; onNewChat: ()
     }
   };
   const onDrop = (event: DragEvent<HTMLElement>) => {
-    if (!hasTabDrag(event.dataTransfer)) return;
+    const fromSidebar = event.dataTransfer.types.includes(sessionDragType);
+    if (!hasTabDrag(event.dataTransfer) && !(fromSidebar && !group.tabs.length)) return;
     if (!contentRef.current?.contains(event.target as Node)) return;
     event.preventDefault();
     event.stopPropagation();
-    const zone = zoneAt(event);
     clearDropPreview();
+    if (fromSidebar) {
+      openDroppedSession(event.dataTransfer, group.id);
+      return;
+    }
+    const zone = zoneAt(event);
     const payload = parseTabDrag(event.dataTransfer.getData(tabDragType));
     setCurrentTabDrag(null);
     if (!payload) return;
@@ -154,7 +162,7 @@ export function TabGroup({ group, onNewChat }: { group: GroupNode; onNewChat: ()
         <div
           aria-hidden
           className={cn(
-            'pointer-events-none absolute z-10 rounded-card bg-accent-tint ring-1 ring-inset ring-accent/30 transition-[top,left,width,height,opacity] duration-base ease-out motion-reduce:transition-none',
+            'pointer-events-none absolute z-10 rounded-card ring-1 ring-inset ring-line-strong transition-opacity duration-base ease-out motion-reduce:transition-none',
             dropPreviewClass[dropPreview.zone],
             dropPreview.visible ? 'opacity-100' : 'opacity-0',
           )}

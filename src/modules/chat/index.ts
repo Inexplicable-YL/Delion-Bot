@@ -21,7 +21,7 @@ import { invalidateSessions } from '../../core/agent/session/run';
 import { exportSession } from '../../core/agent/session-export';
 import { hostPorts } from '../../core/ports';
 import { implement } from '../../core/protocol/contract';
-import { openInVsCode, registerPreviewHost, workspaceFilePath } from '../workspace';
+import { hasVsCode, registerPreviewHost, workspaceFilePath } from '../workspace';
 import { chatContract } from './contract';
 import {
   chatMediaResponse,
@@ -31,6 +31,13 @@ import {
   saveReplyImage,
   stageReplyImage,
 } from './main/reply-image';
+import {
+  openReferenceDirectory,
+  openReferenceInVsCode,
+  readReferenceFile,
+  referenceFileInfo,
+  referenceFilePath,
+} from './main/reference-file';
 
 function withPi<I, O>(fn: (input: I) => O | Promise<O>): (input: I) => Promise<O> {
   return async (input) => {
@@ -110,7 +117,12 @@ export const chatModule = defineModule({
     saveCommand: saveChatCommand,
     deleteCommand: deleteChatCommand,
     locateFile: ({ sessionId, path }) => locateSessionFile(sessionId, path),
-    openInVsCode: ({ sessionId, path }) => openInVsCode(locateSessionFile(sessionId, path)),
+    referenceFilePath: ({ sessionId, path }) => referenceFilePath(sessionId, path),
+    referenceFileInfo: ({ sessionId, path }) => referenceFileInfo(sessionId, path),
+    openReferenceDirectory: ({ sessionId, path }) => openReferenceDirectory(sessionId, path),
+    readReferenceFile: ({ sessionId, path }) => readReferenceFile(sessionId, path),
+    hasVsCode,
+    openInVsCode: ({ sessionId, path }) => openReferenceInVsCode(sessionId, path),
     revealFile: ({ sessionId, path }) => revealSessionFile(sessionId, path),
     openFile: ({ sessionId, path }) => openSessionFile(sessionId, path),
     saveReplyImage: ({ sessionId, image }) => saveReplyImage(sessionId, image),

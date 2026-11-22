@@ -12,6 +12,7 @@ import { useSessionRunStatus } from '../../../modules/chat/view';
 import { navSubRow, rowActions, rowStatus } from './nav-styles';
 import { SessionMenu } from './SessionMenu';
 import { useNavigationStore } from './view';
+import { archivedSessionDragType, sessionDragType } from './session-dnd';
 
 export interface NavSessionSummary {
   id: string;
@@ -21,8 +22,6 @@ export interface NavSessionSummary {
   pinned?: boolean;
   archived?: boolean;
 }
-export const sessionDragType = 'application/x-delion-session';
-export const projectSessionDragType = 'application/x-delion-project-session';
 const rowMarker = 'grid size-control-xs shrink-0 place-items-center';
 const badgeVisual: Record<RunStatus, { className: string; label: string }> = {
   pending: { className: 'bg-accent animate-pulse', label: '等待运行' },
@@ -66,10 +65,10 @@ export function SessionRow({
   return (
     <div
       className={navSubRow(active, nested)}
-      draggable={!session.archived}
+      draggable
       onDragStart={(event) => {
         event.dataTransfer.setData(sessionDragType, session.id);
-        if (projectId !== null) event.dataTransfer.setData(projectSessionDragType, '');
+        if (session.archived) event.dataTransfer.setData(archivedSessionDragType, title);
         event.dataTransfer.effectAllowed = 'move';
       }}
     >

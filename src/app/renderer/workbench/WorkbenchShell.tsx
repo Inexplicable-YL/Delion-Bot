@@ -127,7 +127,7 @@ const draftBase: Omit<NoteDraftSource, 'saveAsNewNote'> = {
 };
 
 export function WorkbenchShell({ home }: { home?: boolean }) {
-  const explorerVisible = useExplorerVisible();
+  const useSurface = useExplorerVisible() && !home;
   const projectId = useNavigationStore((s) => (home ? null : s.projectId));
   const generalChat = useNavigationStore((s) => s.generalChat);
   const loaded = useWorkspaceStore((s) => s.loaded);
@@ -208,6 +208,8 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
       close: closeTabEverywhere,
     },
     opensLink: opensInApp,
+    openReplyFile: (key, sessionId, projectId) =>
+      void useNavigationStore.getState().openReplyFile(key, sessionId, projectId),
     onSaveNote: (text) =>
       openDialog(
         'note',
@@ -300,9 +302,10 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
               </ErrorText>
             )}
             <div
+              data-workbench-surface={useSurface ? 'surface' : 'page'}
               className={cn(
                 'relative isolate flex min-h-0 flex-1 bg-page before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:bg-surface before:transition-opacity before:duration-base before:ease-in-out motion-reduce:before:transition-none',
-                !home && explorerVisible ? 'before:opacity-100' : 'before:opacity-0',
+                useSurface ? 'before:opacity-100' : 'before:opacity-0',
               )}
             >
               {home ? (

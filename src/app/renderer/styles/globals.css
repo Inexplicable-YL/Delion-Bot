@@ -318,6 +318,19 @@ svg[viewBox='0 0 24 24'][data-slot='icon']:is(.size-5, .size-6),
   border-radius: 0.125rem;
 }
 
+[data-workbench-surface='surface'] {
+  --workbench-surface: var(--surface);
+}
+
+[data-slot='terminal-screen'] .xterm .xterm-viewport {
+  background-color: transparent;
+}
+
+[data-slot='terminal-screen'] .xterm .composition-view {
+  background-color: var(--workbench-surface, var(--page));
+  color: var(--ink);
+}
+
 /* streamdown 代码块行号（其 dist 内写死 text-[13px]，随包分发无法改）改用 rem，
    否则字号调大时行号不跟随，与同块的 text-sm 正文脱节。 */
 [data-streamdown='code-block-body'] > pre > code > span::before {

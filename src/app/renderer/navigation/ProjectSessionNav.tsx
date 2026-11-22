@@ -33,12 +33,8 @@ import type { WorkspaceEntry } from '../../../modules/workspace/contract';
 import { remoteAccent } from '../../../modules/remotes/view';
 import { useVisibleNavEntries, type NavEntryId } from './entries';
 import { showToast } from '../../../ui/Toast';
-import {
-  SessionRow,
-  projectSessionDragType,
-  sessionDragType,
-  type NavSessionSummary,
-} from './SessionRow';
+import { SessionRow, type NavSessionSummary } from './SessionRow';
+import { archivedSessionDragType, sessionDragType } from './session-dnd';
 import {
   usePreferences,
   type ChatListSort,
@@ -203,8 +199,7 @@ export function ProjectSessionNav({
       showToast({ variant: 'error', title, description: errorMessage(cause) });
     }
   };
-  const [dropTarget, setDropTarget] = useState<{ projectId: string | null } | null>(null);
-  const isDropTarget = (projectId: string | null) => dropTarget?.projectId === projectId;
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const ownerOf = (sessionId: string): string | null | undefined =>
     generalSessions.some((session) => session.id === sessionId)
       ? null
@@ -219,24 +214,23 @@ export function ProjectSessionNav({
       if (projectId) toggleProject(projectId, true);
       if (sessionId === activeSessionId) onOpenSession(sessionId);
     });
-  const dropZone = (projectId: string | null) => ({
+  const dropZone = (projectId: string) => ({
     onDragOver: (event: DragEvent) => {
       const { types } = event.dataTransfer;
-      if (!types.includes(sessionDragType)) return;
-      if (projectId === null && types.includes(projectSessionDragType)) return;
+      if (!types.includes(sessionDragType) || types.includes(archivedSessionDragType)) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
-      if (!isDropTarget(projectId)) setDropTarget({ projectId });
+      if (dropTarget !== projectId) setDropTarget(projectId);
     },
     onDragLeave: (event: DragEvent) => {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropTarget(null);
     },
     onDrop: (event: DragEvent) => {
       setDropTarget(null);
+      if (event.dataTransfer.types.includes(archivedSessionDragType)) return;
       const sessionId = event.dataTransfer.getData(sessionDragType);
       const owner = ownerOf(sessionId);
-      if (owner === undefined || owner === projectId || (projectId === null && owner !== null))
-        return;
+      if (owner === undefined || owner === projectId) return;
       event.preventDefault();
       moveChat(sessionId, projectId);
     },
@@ -293,7 +287,7 @@ export function ProjectSessionNav({
             navRow(rowActive),
             'group',
             rowEndInset,
-            isDropTarget(key) && 'bg-accent-tint text-ink',
+            dropTarget === key && 'bg-hover-strong text-ink',
           )}
         >
           {project.remoteId ? (
@@ -575,11 +569,7 @@ export function ProjectSessionNav({
         </section>
         <section
           aria-labelledby="general-session-nav-title"
-          className={cn(
-            'group/list mt-5 grid content-start gap-px rounded-control pb-1',
-            isDropTarget(null) && 'bg-accent-tint',
-          )}
-          {...dropZone(null)}
+          className="group/list mt-5 grid content-start gap-px rounded-control pb-1"
         >
           <NavListHeader
             createLabel="新建聊天"

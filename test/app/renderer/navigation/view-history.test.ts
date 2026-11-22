@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { WorkspaceEntry, WorkspaceState } from '../../../../src/modules/workspace/contract';
 import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
 import { useNavigationStore } from '../../../../src/app/renderer/navigation/view';
 import { useMobileDrawer } from '../../../../src/app/renderer/shell/mobile-drawer';
+import { usePreferences } from '../../../../src/app/renderer/shell/preferences';
+import {
+  saveWorkbenchLayout,
+  useWorkbenchLayout,
+} from '../../../../src/app/renderer/workbench/layout-store';
+import {
+  createDefaultLayout,
+  walkGroups,
+} from '../../../../src/app/renderer/workbench/layout-schema';
 
 const project: WorkspaceEntry = {
   id: 'p1',
@@ -24,6 +33,85 @@ function seed(view: 'home' | 'workbench' | 'settings', projectId: string | null)
 
 beforeEach(() => {
   useWorkspaceStore.setState({ workspace, loaded: true, error: null });
+});
+
+describe('打开回复引用的文件', () => {
+  const path = 'D:/code/readme.md';
+  const fileTab = `note:${path}`;
+  const groups = () => walkGroups(useWorkbenchLayout.getState().root);
+
+  beforeEach(() => {
+    seed('home', null);
+    useWorkbenchLayout.setState({
+      ...createDefaultLayout(),
+      projectId: null,
+      ready: false,
+      pendingReveal: null,
+      explorerCollapsedForReply: false,
+    });
+    usePreferences.setState({ workspaceSidebarCollapsed: false });
+  });
+  afterEach(async () => {
+    await saveWorkbenchLayout();
+  });
+
+  it('从首页进入时等待项目布局，再把会话和文件分到两组', async () => {
+    useMobileDrawer.getState().setDrawer('explorer');
+    expect(useNavigationStore.getState().openReplyFile(path, 'session', 'p1')).toBe(true);
+    expect(useNavigationStore.getState()).toMatchObject({ view: 'workbench', projectId: 'p1' });
+    expect(useMobileDrawer.getState().drawer).toBeNull();
+    await useWorkbenchLayout.getState().init('p1');
+    expect(groups().map((group) => group.active)).toEqual(['chat:session', fileTab]);
+    expect(useWorkbenchLayout.getState().explorerCollapsedForReply).toBe(true);
+    expect(usePreferences.getState().workspaceSidebarCollapsed).toBe(false);
+    useNavigationStore.getState().goBack();
+    expect(useWorkbenchLayout.getState().explorerCollapsedForReply).toBe(false);
+  });
+
+  it('重复从首页打开同一会话的引用时复用已有标签及分组', async () => {
+    const navigation = useNavigationStore.getState();
+    await useWorkbenchLayout.getState().init(null);
+    navigation.openReplyFile(path, 'session', null);
+    useWorkbenchLayout.getState().setMaximized(groups()[1]!.id);
+    navigation.goBack();
+    navigation.openReplyFile(path, 'session', null);
+    expect(groups().map((group) => group.tabs)).toEqual([['chat:session'], [fileTab]]);
+    expect(useWorkbenchLayout.getState().maximized).toBeNull();
+  });
+
+  it('工作台内仍在当前组打开文件并保留侧栏状态', async () => {
+    seed('workbench', 'p1');
+    await useWorkbenchLayout.getState().init('p1');
+    useWorkbenchLayout.getState().openTab('chat:session');
+    useNavigationStore.getState().openReplyFile(path, 'session', 'p1');
+    expect(groups().map((group) => group.tabs)).toEqual([['chat:session', fileTab]]);
+    expect(useWorkbenchLayout.getState().explorerCollapsedForReply).toBe(false);
+  });
+
+  it('首页引用已用条目 ID 打开的文件时复用该标签', async () => {
+    useWorkspaceStore.setState({
+      workspace: {
+        ...workspace,
+        entries: [
+          ...workspace.entries,
+          {
+            id: 'saved-file',
+            kind: 'file',
+            name: 'readme.md',
+            parentId: null,
+            sourceId: null,
+            updatedAt: '',
+            path: 'D:\\CODE\\readme.md',
+          },
+        ],
+      },
+    });
+    await useWorkbenchLayout.getState().init(null);
+    useWorkbenchLayout.getState().openTab('note:saved-file');
+    useNavigationStore.getState().openReplyFile(path, 'session', null);
+    expect(groups().map((group) => group.tabs)).toEqual([['note:saved-file', 'chat:session']]);
+    expect(groups()[0]?.active).toBe('note:saved-file');
+  });
 });
 
 describe('导航历史', () => {

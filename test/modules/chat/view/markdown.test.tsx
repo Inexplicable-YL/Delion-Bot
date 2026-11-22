@@ -29,6 +29,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -170,4 +171,96 @@ it('回复里指向本地文件的链接渲染为文件引用，网页链接保�
   expect(host.querySelector('[data-streamdown=link]')?.textContent).toBe('文档');
   await act(async () => file?.click());
   expect(onOpen).toHaveBeenCalledWith('scripts/winter demo/winter.py');
+});
+
+it('单击目录引用会等待路径类型确认，然后打开系统文件管理器', async () => {
+  const onOpen = vi.fn();
+  let identify!: (info: { path: string; directory: boolean }) => void;
+  vi.spyOn(chatClient, 'referenceFileInfo').mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        identify = resolve;
+      }),
+  );
+  const openDirectory = vi.spyOn(chatClient, 'openReferenceDirectory').mockResolvedValue(undefined);
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ChatMarkdown references={{ onOpen, fileMenu: { sessionId, remote: false } }}>
+          {'[目录](src/v2.1)'}
+        </ChatMarkdown>
+      </QueryClientProvider>,
+    ),
+  );
+  await act(async () => host.querySelector<HTMLElement>('[role=button]')!.click());
+  expect(openDirectory).not.toHaveBeenCalled();
+  await act(async () => identify({ path: '/project/src/v2.1', directory: true }));
+  expect(openDirectory).toHaveBeenCalledWith({ sessionId, path: 'src/v2.1' });
+  expect(onOpen).not.toHaveBeenCalled();
+});
+
+it.each([true, false])('文件引用菜单根据 VS Code 可用性 %s 显示并执行操作', async (available) => {
+  const queryClient = new QueryClient();
+  const path = 'scripts/example.ts';
+  const file = { sessionId, path };
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } });
+  const detect = vi.spyOn(chatClient, 'hasVsCode').mockResolvedValue(available);
+  vi.spyOn(chatClient, 'referenceFileInfo').mockResolvedValue({
+    path: `/project/${path}`,
+    directory: false,
+  });
+  vi.spyOn(chatClient, 'referenceFilePath').mockResolvedValue(`/project/${path}`);
+  vi.spyOn(chatClient, 'readReferenceFile').mockResolvedValue('export {};');
+  const reveal = vi.spyOn(chatClient, 'revealFile').mockResolvedValue(undefined);
+  const openInVsCode = vi.spyOn(chatClient, 'openInVsCode').mockResolvedValue(undefined);
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={queryClient}>
+        <ChatMarkdown references={{ onOpen: vi.fn(), fileMenu: { sessionId, remote: false } }}>
+          {`[example.ts](${path})`}
+        </ChatMarkdown>
+      </QueryClientProvider>,
+    ),
+  );
+  expect(detect).not.toHaveBeenCalled();
+  const menuItem = (label: string) =>
+    Array.from(document.querySelectorAll<HTMLElement>('[role=menuitem]')).find(
+      (item) => item.textContent === label,
+    );
+  const openMenu = async () => {
+    const link = host.querySelector<HTMLElement>('[role=button]')!;
+    await act(async () => {
+      link.focus();
+      link.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }),
+      );
+    });
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(queryClient.getQueryData(['chat', 'has-vs-code'])).toBe(available);
+      expect(menuItem('复制路径')).toBeDefined();
+    });
+  };
+  const select = async (label: string) => {
+    await act(async () => menuItem(label)!.click());
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(host.querySelector('[role=button]')),
+    );
+  };
+  await openMenu();
+  expect(Boolean(menuItem('在 VS Code 中打开'))).toBe(available);
+  await select('复制路径');
+  expect(writeText).toHaveBeenLastCalledWith(`/project/${path}`);
+  await openMenu();
+  await select('复制文件内容');
+  expect(writeText).toHaveBeenLastCalledWith('export {};');
+  await openMenu();
+  await select('在资源管理器中打开');
+  expect(reveal).toHaveBeenCalledWith(file);
+  if (available) {
+    await openMenu();
+    await select('在 VS Code 中打开');
+    expect(openInVsCode).toHaveBeenCalledWith(file);
+  }
 });
