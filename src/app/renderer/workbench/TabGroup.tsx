@@ -20,7 +20,7 @@ import {
 } from './tab-dnd';
 
 function TabSuspenseFallback() {
-  return <div className="min-h-0 min-w-0 flex-1 bg-inset" />;
+  return <div className="min-h-0 min-w-0 flex-1" />;
 }
 
 function GroupTabContent({ groupId, tabId }: { groupId: string; tabId: TabId }) {

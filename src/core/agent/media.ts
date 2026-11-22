@@ -75,7 +75,7 @@ export function stageChatMedia(name: string, bytes: Buffer): ChatMediaView {
       name,
       size: bytes.length,
       kind: 'image',
-      previewUrl: hostPorts().imageCodec.previewDataUrl(bytes),
+      previewUrl: hostPorts().imageCodec.preview(bytes)?.url ?? null,
     };
   }
   if (bytes.length > CHAT_TEXT_ATTACHMENT_MAX_BYTES) throw new Error('文本附件超过 1 MB 上限');
@@ -144,7 +144,7 @@ export function readChatMediaPreview(id: string): string | null {
   if (!isUuid(id)) return null;
   for (const file of readdirSync(mediaDir())) {
     if (!file.startsWith(id)) continue;
-    return hostPorts().imageCodec.previewDataUrl(join(mediaDir(), file));
+    return hostPorts().imageCodec.preview(join(mediaDir(), file))?.url ?? null;
   }
   return null;
 }

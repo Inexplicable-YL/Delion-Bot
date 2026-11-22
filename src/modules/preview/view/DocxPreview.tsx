@@ -71,7 +71,7 @@ export function DocxPreview({ url }: { url: string }) {
       <div className="relative min-h-0 flex-1">
         <div
           ref={pinchZoomRef(setZoom, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP)}
-          className="absolute inset-0 overflow-auto overscroll-contain bg-inset [overflow-anchor:none] [scrollbar-gutter:stable]"
+          className="absolute inset-0 overflow-auto overscroll-contain [overflow-anchor:none] [scrollbar-gutter:stable]"
         >
           <div
             key={run}

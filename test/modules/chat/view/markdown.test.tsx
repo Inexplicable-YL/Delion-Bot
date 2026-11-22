@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ChatMarkdown } from '../../../../src/modules/chat/view/Markdown';
 import { ReplyImageContext } from '../../../../src/modules/chat/view/ReplyImageContext';
+import { sourceReferences } from '../../../../src/modules/chat/view/reference-tokens';
+import { chatClient } from '../../../../src/modules/chat/view/client';
+import { ZoomableImage } from '../../../../src/modules/chat/view/ZoomableImage';
 
 let host: HTMLDivElement;
 let root: Root;
@@ -49,9 +53,11 @@ const localSrc = (path: string) =>
 async function renderReply(markdown: string) {
   await act(async () => {
     root.render(
-      <ReplyImageContext.Provider value={{ sessionId, cwd: '/project' }}>
-        <ChatMarkdown replyImages>{markdown}</ChatMarkdown>
-      </ReplyImageContext.Provider>,
+      <QueryClientProvider client={new QueryClient()}>
+        <ReplyImageContext.Provider value={{ sessionId, cwd: '/project' }}>
+          <ChatMarkdown replyImages>{markdown}</ChatMarkdown>
+        </ReplyImageContext.Provider>
+      </QueryClientProvider>,
     );
   });
   return [...host.querySelectorAll('img')].map((image) => image.getAttribute('src'));
@@ -67,6 +73,56 @@ it('回复里被文字隔开的图片各自单张显示在原文位置', async (
   expect(host.querySelectorAll('[aria-label^="放大查看"]')).toHaveLength(2);
 });
 
+it('loads reply thumbnails instead of originals in the message', async () => {
+  vi.stubGlobal('delionBot', {});
+  const url = 'data:image/png;base64,thumbnail';
+  const preview = vi
+    .spyOn(chatClient, 'imagePreview')
+    .mockResolvedValue({ url, width: 4000, height: 2000 });
+  try {
+    await renderReply('![图表](chart.png)');
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(host.querySelector('img')?.getAttribute('src')).toBe(url);
+    });
+    expect(preview).toHaveBeenCalledExactlyOnceWith({
+      sessionId,
+      image: { path: 'chart.png', alt: '图表' },
+    });
+  } finally {
+    preview.mockRestore();
+  }
+});
+
+it('keeps the thumbnail visible until the original image has decoded', async () => {
+  const url = 'data:image/png;base64,thumbnail';
+  const original = localSrc('chart.png');
+  await act(async () =>
+    root.render(
+      <ZoomableImage alt="图表" preview={{ url, width: 4000, height: 2000 }} src={original} />,
+    ),
+  );
+  const thumbnail = host.querySelector('img')!;
+  expect(thumbnail.getAttribute('src')).toBe(url);
+
+  await act(async () => thumbnail.dispatchEvent(new Event('load')));
+  const full = host.querySelectorAll('img')[1]!;
+  expect(full.getAttribute('src')).toBe(original);
+  expect(full.getAttribute('aria-hidden')).toBe('true');
+
+  let finishDecode!: () => void;
+  full.decode = () =>
+    new Promise((resolve) => {
+      finishDecode = resolve;
+    });
+  await act(async () => full.dispatchEvent(new Event('load')));
+  expect(host.querySelector('img')).toBe(thumbnail);
+  await act(async () => finishDecode());
+  expect(host.querySelectorAll('img')).toHaveLength(1);
+  expect(host.querySelector('img')).toBe(full);
+  expect(full.hasAttribute('aria-hidden')).toBe(false);
+});
+
 it('相邻行的多张图片合成一组', async () => {
   const sources = await renderReply('说明\n\n![一](a.png)\n![二](b.png)\n![三](c.png)');
 
@@ -80,4 +136,21 @@ it('含空格的 Windows 图片路径也按图片显示，代码里的不处理'
 
   expect(sources).toEqual([localSrc(path)]);
   expect(host.textContent).toContain('![代码](a b.png)');
+});
+
+it('用户消息里的 @ 文件引用渲染为可点击的链接并打开源文件', async () => {
+  const onOpen = vi.fn();
+  const key = '/project/chat/images/slope.jpg';
+  await act(async () => {
+    root.render(
+      <ChatMarkdown references={{ options: sourceReferences([{ key }]), onOpen }}>
+        {'@images/slope.jpg 这是什么'}
+      </ChatMarkdown>,
+    );
+  });
+
+  const link = host.querySelector('button');
+  expect(link?.textContent).toBe('slope.jpg');
+  await act(async () => link?.click());
+  expect(onOpen).toHaveBeenCalledWith(key);
 });

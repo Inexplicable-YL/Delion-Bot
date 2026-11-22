@@ -21,12 +21,15 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export function ExplorerRevealButton({ className }: { className?: string }) {
+export function useExplorerVisible(): boolean {
   const narrow = useExplorerState((s) => s.narrow);
   const mobileOpen = useMobileDrawer((s) => s.drawer === 'explorer');
   const collapsed = usePreferences((s) => s.workspaceSidebarCollapsed);
-  const hidden = narrow ? !mobileOpen : collapsed;
-  if (!hidden) return null;
+  return narrow ? mobileOpen : !collapsed;
+}
+
+export function ExplorerRevealButton({ className }: { className?: string }) {
+  if (useExplorerVisible()) return null;
   return (
     <IconButton
       aria-label="展开目录"

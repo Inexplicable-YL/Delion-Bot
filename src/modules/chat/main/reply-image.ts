@@ -10,7 +10,7 @@ import type { ChatMediaView } from '../../../core/protocol/agent';
 import { extensionOf, imageMimeOf } from '../../../core/protocol/files';
 import { readRemoteRange, statRemoteFile } from '../../../core/remote/operations';
 import type { RemoteTarget } from '../../../core/remote/transport';
-import type { ReplyImageSource } from '../contract';
+import type { ImagePreview, ImagePreviewSource, ReplyImageSource } from '../contract';
 
 const REPLY_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 const REMOTE_CHUNK_BYTES = 1024 * 1024;
@@ -63,13 +63,30 @@ async function assertLocalImage(path: string): Promise<void> {
 }
 
 async function downloadImage(url: string): Promise<{ name: string; bytes: Buffer }> {
-  const response = await hostPorts().network.fetch(url);
+  const response = await hostPorts().network.fetch(url, { credentials: 'omit' });
   if (!response.ok) throw new Error(`图片下载失败（HTTP ${response.status}）`);
   const mime = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() ?? '';
   const extension = mimeExtension[mime];
   if (!extension) throw new Error('链接内容不是图片');
-  const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > REPLY_IMAGE_MAX_BYTES) throw new Error('图片超过 20MB');
+  if (!response.body) throw new Error('链接内容不是图片');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > REPLY_IMAGE_MAX_BYTES) {
+        await reader.cancel();
+        throw new Error('图片超过 20MB');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = Buffer.concat(chunks, size);
   const name = decodeURIComponent(posix.basename(new URL(url).pathname)) || 'image';
   return { name: imageMimeOf(name) ? name : `${name}${extension}`, bytes };
 }
@@ -110,6 +127,23 @@ export async function saveReplyImage(
 
 export function saveChatImage(id: string, name: string): Promise<boolean> {
   return saveImage({ name, bytes: readChatMediaBytes(id) });
+}
+
+export async function readImagePreview(
+  source: ImagePreviewSource,
+): Promise<ImagePreview | { bytes: ArrayBuffer; mime: string } | null> {
+  let image: { name: string; bytes: Buffer };
+  if ('id' in source) {
+    const path = chatMediaPath(source.id);
+    if (!path || !imageMimeOf(path)) return null;
+    image = { name: path, bytes: await readFile(path) };
+  } else {
+    image = await readReplyImage(source.sessionId, source.image);
+  }
+  const mime = imageMimeOf(image.name);
+  if (!mime) return null;
+  const preview = mime === 'image/jpeg' ? null : hostPorts().imageCodec.preview(image.bytes);
+  return preview ?? { bytes: Uint8Array.from(image.bytes).buffer, mime };
 }
 
 export async function stageReplyImage(

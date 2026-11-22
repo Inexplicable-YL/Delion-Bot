@@ -161,14 +161,22 @@ export const electronPorts: HostPorts = {
     },
   },
   imageCodec: {
-    previewDataUrl(source) {
+    preview(source) {
       const image =
         typeof source === 'string'
           ? nativeImage.createFromPath(source)
           : nativeImage.createFromBuffer(source);
       if (image.isEmpty()) return null;
-      const { width } = image.getSize();
-      return (width > 480 ? image.resize({ width: 480, quality: 'good' }) : image).toDataURL();
+      const { width, height } = image.getSize();
+      const scale = 480 / Math.max(width, height);
+      const thumbnail =
+        scale < 1
+          ? image.resize({
+              width: Math.max(1, Math.round(width * scale)),
+              height: Math.max(1, Math.round(height * scale)),
+            })
+          : image;
+      return { url: thumbnail.toDataURL(), width, height };
     },
   },
   desktop,

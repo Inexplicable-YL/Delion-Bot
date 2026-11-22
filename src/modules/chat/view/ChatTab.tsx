@@ -259,10 +259,7 @@ function ChatSessionView({
     <div
       ref={attachSession}
       aria-label="对话"
-      className={cn(
-        'relative flex min-h-0 min-w-0 flex-1 flex-col @container',
-        home && !conversation ? 'bg-page' : 'bg-surface',
-      )}
+      className={cn('relative flex min-h-0 min-w-0 flex-1 flex-col @container')}
     >
       <div className="flex min-h-toolbar shrink-0 items-center gap-1 px-app">
         <IconButton aria-label="历史对话" onClick={() => setSessionsOpen(true)} title="历史对话">

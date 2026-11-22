@@ -96,7 +96,7 @@ export function SheetPreview({ url }: { url: string }) {
       <div className="relative min-h-0 flex-1">
         <div
           ref={pinchZoomRef(setZoom, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP)}
-          className="absolute inset-0 overflow-auto overscroll-contain bg-surface [overflow-anchor:none] [scrollbar-gutter:stable]"
+          className="absolute inset-0 overflow-auto overscroll-contain [overflow-anchor:none] [scrollbar-gutter:stable]"
         >
           {loaded && !sheets.length && (
             <p className="p-6 text-ui-body text-ink-2">工作簿没有工作表。</p>

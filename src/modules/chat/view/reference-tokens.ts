@@ -86,6 +86,13 @@ export function referenceContext(text: string, options: ChatReference[]): ChatRe
   return refs;
 }
 
+export function sourceReferences(sources: { key: string }[]): ChatReference[] {
+  return sources.flatMap(({ key }) => {
+    const segments = key.split(/[\\/]/).filter(Boolean);
+    return segments.map((_, index) => ({ key, title: segments.slice(index).join('/') }));
+  });
+}
+
 const pad = (value: number) => String(value).padStart(2, '0');
 
 export function sessionReferences(

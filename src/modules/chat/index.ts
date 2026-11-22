@@ -25,6 +25,7 @@ import { openInVsCode, registerPreviewHost, workspaceFilePath } from '../workspa
 import { chatContract } from './contract';
 import {
   chatMediaResponse,
+  readImagePreview,
   replyImageResponse,
   saveChatImage,
   saveReplyImage,
@@ -113,6 +114,7 @@ export const chatModule = defineModule({
     revealFile: ({ sessionId, path }) => revealSessionFile(sessionId, path),
     openFile: ({ sessionId, path }) => openSessionFile(sessionId, path),
     saveReplyImage: ({ sessionId, image }) => saveReplyImage(sessionId, image),
+    imagePreview: readImagePreview,
     stageReplyImage: ({ sessionId, image }) => stageReplyImage(sessionId, image),
     saveChatImage: ({ id, name }) => saveChatImage(id, name),
     readUncommittedChanges: (projectId) => readUncommittedChanges(localProjectDirectory(projectId)),

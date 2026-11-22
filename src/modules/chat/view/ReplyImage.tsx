@@ -1,13 +1,16 @@
 import { useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { cn } from '../../../ui/cn';
 import { useReplyImageContext } from './ReplyImageContext';
 import { ReplyImageViewer } from './ReplyImageViewer';
 import {
   FALLBACK_RATIO,
   GALLERY_MIN_TILE,
+  fetchImagePreview,
   galleryLayout,
   replyImageSrc,
   type ReplyImageItem,
+  type ReplyImagePreview,
 } from './reply-images';
 
 const tileClass = 'relative shrink-0 cursor-zoom-in overflow-hidden rounded-control bg-inset';
@@ -26,8 +29,7 @@ function FailedImage({ className, style }: { className?: string; style?: object 
   );
 }
 
-function SingleImage({ image, onOpen }: { image: ReplyImageItem; onOpen: () => void }) {
-  const reply = useReplyImageContext()!;
+function SingleImage({ image, onOpen }: { image: ReplyImagePreview; onOpen: () => void }) {
   const [failed, setFailed] = useState(false);
   return (
     <button
@@ -39,13 +41,16 @@ function SingleImage({ image, onOpen }: { image: ReplyImageItem; onOpen: () => v
     >
       {failed ? (
         <FailedImage className="size-40 max-w-full rounded-control" />
+      ) : image.preview === undefined ? (
+        <span className="block size-40 max-w-full rounded-control bg-inset" />
       ) : (
         <img
           alt={image.alt}
           className="h-40 w-auto max-w-full rounded-control object-contain"
           loading="lazy"
           onError={() => setFailed(true)}
-          src={replyImageSrc(reply.sessionId, image)}
+          decoding="async"
+          src={image.preview?.url ?? image.src}
         />
       )}
     </button>
@@ -56,10 +61,9 @@ function ImageGallery({
   images,
   onOpen,
 }: {
-  images: ReplyImageItem[];
+  images: ReplyImagePreview[];
   onOpen: (index: number) => void;
 }) {
-  const reply = useReplyImageContext()!;
   const [width, setWidth] = useState(0);
   const [ratios, setRatios] = useState<Record<number, number>>({});
   const [failed, setFailed] = useState<Record<number, true>>({});
@@ -69,8 +73,12 @@ function ImageGallery({
     observer.observe(element);
     return () => observer.disconnect();
   });
-  const ratioList = images.map((_, index) =>
-    failed[index] ? 1 : (ratios[index] ?? FALLBACK_RATIO),
+  const ratioList = images.map(({ preview }, index) =>
+    failed[index]
+      ? 1
+      : preview
+        ? preview.width / preview.height
+        : (ratios[index] ?? FALLBACK_RATIO),
   );
   const { height, shown, overflow } = galleryLayout(ratioList, width);
   return (
@@ -93,19 +101,22 @@ function ImageGallery({
           >
             {failed[index] ? (
               <FailedImage className="size-full" />
-            ) : (
+            ) : image.preview !== undefined && index < shown ? (
               <img
                 alt={image.alt}
                 className="size-full object-cover"
                 onError={() => setFailed((current) => ({ ...current, [index]: true }))}
+                loading="lazy"
                 onLoad={(event) => {
+                  if (image.preview) return;
                   const { naturalWidth, naturalHeight } = event.currentTarget;
                   if (naturalHeight)
                     setRatios((current) => ({ ...current, [index]: naturalWidth / naturalHeight }));
                 }}
-                src={replyImageSrc(reply.sessionId, image)}
+                decoding="async"
+                src={image.preview?.url ?? image.src}
               />
-            )}
+            ) : null}
             {last && (
               <span className="absolute inset-0 grid place-items-center bg-media/50 text-ui-title-1 text-on-media">
                 +{images.length - shown + 1}
@@ -120,16 +131,33 @@ function ImageGallery({
 
 export function ReplyImages({ images }: { images: ReplyImageItem[] }) {
   const [viewing, setViewing] = useState<number | null>(null);
+  const { sessionId } = useReplyImageContext()!;
+  const sources = images.map((image) => replyImageSrc(sessionId, image));
+  const previews = useQueries({
+    queries: images.map((image, index) => ({
+      queryKey: ['chat', 'image-preview', sources[index]],
+      queryFn: () => fetchImagePreview({ sessionId, image }),
+      enabled: Boolean(window.delionBot),
+      staleTime: 5 * 60 * 1000,
+      retry: false,
+    })),
+  });
+  const items = images.map((image, index) => ({
+    ...image,
+    src: sources[index]!,
+    preview:
+      window.delionBot && previews[index]!.isPending ? undefined : (previews[index]!.data ?? null),
+  }));
   return (
     <>
-      {images.length === 1 ? (
-        <SingleImage image={images[0]!} onOpen={() => setViewing(0)} />
+      {items.length === 1 ? (
+        <SingleImage image={items[0]!} onOpen={() => setViewing(0)} />
       ) : (
-        <ImageGallery images={images} onOpen={setViewing} />
+        <ImageGallery images={items} onOpen={setViewing} />
       )}
       {viewing !== null && (
         <ReplyImageViewer
-          images={images}
+          images={items}
           index={viewing}
           onClose={() => setViewing(null)}
           onIndexChange={setViewing}

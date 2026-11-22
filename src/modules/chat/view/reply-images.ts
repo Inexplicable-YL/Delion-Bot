@@ -1,8 +1,9 @@
 import { chatImageToken } from '../../../core/protocol/chat-input';
-import type { ReplyImageSource } from '../contract';
+import type { ImagePreview, ImagePreviewSource, ReplyImageSource } from '../contract';
 import { chatClient } from './client';
 
 export type ReplyImageItem = ReplyImageSource & { alt: string };
+export type ReplyImagePreview = ReplyImageItem & { src: string; preview?: ImagePreview | null };
 
 export const SINGLE_IMAGE_HEIGHT = 160;
 export const GALLERY_MAX_HEIGHT = (SINGLE_IMAGE_HEIGHT * 2) / 3;
@@ -43,6 +44,30 @@ export function chatMediaUrl(id: string): string {
 
 export function replyImageSrc(sessionId: string, image: ReplyImageItem): string {
   return 'url' in image ? image.url : replyImageUrl(sessionId, image.path);
+}
+
+export async function fetchImagePreview(source: ImagePreviewSource): Promise<ImagePreview | null> {
+  const preview = await chatClient.imagePreview(source);
+  if (!preview || 'url' in preview) return preview;
+
+  const image = new Image();
+  const url = URL.createObjectURL(new Blob([preview.bytes], { type: preview.mime }));
+  try {
+    image.src = url;
+    await image.decode();
+    const { naturalWidth: width, naturalHeight: height } = image;
+    if (!width || !height) return null;
+    const scale = Math.min(1, 480 / Math.max(width, height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return { url: canvas.toDataURL(), width, height };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function absolutePath(path: string, cwd: string | null): string {

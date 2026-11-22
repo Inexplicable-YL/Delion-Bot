@@ -28,7 +28,6 @@ import { TaskNotice } from '../../../ui/agent/Task';
 import { Shimmer } from '../../../ui/Shimmer';
 import type { ChatComment, TaskNoticeDetails, WorkspaceChat } from '../../../core/protocol/agent';
 import { chatImageToken } from '../../../core/protocol/chat-input';
-import { openLightbox } from '../../../ui/Lightbox';
 import { IconButton } from '../../../ui/IconButton';
 import { useMediaQuery } from '../../../ui/use-media-query';
 import { useChatTabSource } from './ChatSource';
@@ -39,7 +38,11 @@ import { ReplyCommentLayer } from './ReplyComment';
 import { fetchChatMediaPreview, getChatMediaPreview } from './media';
 import { TurnChangesCard } from './TurnChangesCard';
 import { ReplySources } from './ReplySources';
-import { ReplyImageContext } from './ReplyImageContext';
+import { ReplyImageContext, useReplyImageContext } from './ReplyImageContext';
+import { ImageQuestionForm, ImageViewer } from './ReplyImageViewer';
+import { chatMediaUrl } from './reply-images';
+import { chatClient } from './client';
+import { matchReferenceTokens, sourceReferences } from './reference-tokens';
 
 const textAnimation = { animation: 'fadeIn', sep: 'char' } as const;
 
@@ -50,20 +53,48 @@ function MessageImage({ id, name }: { id: string; name: string }) {
     initialData: getChatMediaPreview(id),
     staleTime: Infinity,
   });
+  const ask = useReplyImageContext()?.ask;
+  const [viewing, setViewing] = useState(false);
+  const title = name || '图片';
   return url ? (
-    <button
-      aria-label={`放大查看 ${name || '图片'}`}
-      className="cursor-zoom-in"
-      onClick={() => openLightbox(url, name)}
-      title={name || undefined}
-      type="button"
-    >
-      <img
-        alt={name}
-        className="size-20 rounded-card border border-line border-line/60 object-cover"
-        src={url}
-      />
-    </button>
+    <>
+      <button
+        aria-label={`放大查看 ${title}`}
+        className="cursor-zoom-in"
+        onClick={() => setViewing(true)}
+        title={name || undefined}
+        type="button"
+      >
+        <img
+          alt={name}
+          className="size-20 rounded-card border border-line border-line/60 object-cover"
+          src={url}
+        />
+      </button>
+      {viewing && (
+        <ImageViewer
+          footer={
+            ask && (
+              <ImageQuestionForm
+                label={`关于“${title}”的询问`}
+                onAsk={async (question) => {
+                  setViewing(false);
+                  void ask(
+                    `${question}
+${chatImageToken(id, name)}`,
+                    [],
+                  );
+                }}
+              />
+            )
+          }
+          images={[{ src: chatMediaUrl(id), title, mediaId: id }]}
+          index={0}
+          onClose={() => setViewing(false)}
+          onDownload={() => chatClient.saveChatImage({ id, name: title })}
+        />
+      )}
+    </>
   ) : (
     <span
       className="grid size-20 place-items-center rounded-card border border-line border-line/60 bg-inset text-ui-subhead text-ink-2"
@@ -97,6 +128,11 @@ function UserMessage({
     setEditing(false);
     onEdit(next);
   };
+  const sourceOptions = sourceReferences(message.sources ?? []);
+  const inlineSources = new Set(
+    matchReferenceTokens(message.content, sourceOptions).map((token) => token.ref.key),
+  );
+  const looseSources = (message.sources ?? []).filter((source) => !inlineSources.has(source.key));
   const images = message.images?.length ? (
     <MessageChips>
       {message.images.map((image) => (
@@ -125,6 +161,11 @@ function UserMessage({
           <ChatMarkdown
             className="[&_code]:bg-transparent [&_code]:px-0 [&_pre]:bg-transparent [&_[data-streamdown=code-block]]:bg-transparent [&_[data-streamdown=code-block-header]]:bg-transparent"
             mode="static"
+            references={
+              onOpenSource && inlineSources.size
+                ? { options: sourceOptions, onOpen: onOpenSource }
+                : undefined
+            }
           >
             {message.content}
           </ChatMarkdown>
@@ -144,14 +185,16 @@ function UserMessage({
           ))}
         </MessageChips>
       ) : null}
-      {message.sources?.length ? (
+      {looseSources.length ? (
         <MessageChips>
-          {message.sources.map((source) => (
+          {looseSources.map((source) => (
             <MessageChip
+              icon={<FileText className="size-4 shrink-0 text-ink-2" />}
               key={source.key}
               onClick={onOpenSource && (() => onOpenSource(source.key))}
+              title={source.title}
             >
-              {source.title}
+              {source.title.split(/[\\/]/).at(-1)}
             </MessageChip>
           ))}
         </MessageChips>

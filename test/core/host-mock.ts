@@ -36,7 +36,7 @@ const testPorts: HostPorts = {
     send: vi.fn(),
   },
   imageCodec: {
-    previewDataUrl: vi.fn(() => null),
+    preview: vi.fn(() => null),
   },
   desktop: {
     pickFiles: vi.fn(async () => []),

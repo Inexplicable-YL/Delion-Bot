@@ -50,7 +50,7 @@ import { usePreferenceWidth, usePreferences } from '../shell/preferences';
 import { useMobileDrawer } from '../shell/mobile-drawer';
 import { RemotePortsDialog } from '../workspace/RemotePortsDialog';
 import { openTarget } from './open-target';
-import { useExplorerState } from './ExplorerState';
+import { useExplorerState, useExplorerVisible } from './ExplorerState';
 import { useViewportWidth } from '../../../ui/use-viewport-width';
 import { cn } from '../../../ui/cn';
 import { overlayFade } from '../../../ui/motion';
@@ -118,9 +118,8 @@ export function WorkbenchExplorer({
   const query = useTreeState((s) => s.query);
   const pendingCreate = useTreeState((s) => s.pendingCreate);
   const { width, onChange } = usePreferenceWidth('workspaceSidebarWidth');
-  const collapsed = usePreferences((s) => s.workspaceSidebarCollapsed);
-  const mobileOpen = useMobileDrawer((s) => s.drawer === 'explorer');
   const narrow = useExplorerState((s) => s.narrow);
+  const visible = useExplorerVisible();
   const viewportWidth = useViewportWidth();
   const [mode, setMode] = useState<'files' | 'changes'>('files');
   const changesProjectId = root?.kind === 'project' && root.path && !remoteRoot ? root.id : null;
@@ -129,7 +128,7 @@ export function WorkbenchExplorer({
   const [draggingEntry, setDraggingEntry] = useState(false);
 
   const drawerRef = (drawer: HTMLElement | null) => {
-    if (!drawer || !narrow || !mobileOpen) return;
+    if (!drawer || !narrow || !visible) return;
     drawer.focus();
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') useMobileDrawer.getState().setDrawer(null);
@@ -234,7 +233,6 @@ export function WorkbenchExplorer({
     else onAction(action, id);
   };
 
-  const visible = narrow ? mobileOpen : !collapsed;
   const effectiveWidth = Math.min(width, Math.max(200, Math.round(viewportWidth * 0.28)));
   const wrapHeaderActions = !narrow && changesProjectId !== null && effectiveWidth < 220;
   const sectionClass = 'flex h-8 items-center gap-1 px-3 text-ui-subhead text-ink-2';
@@ -242,7 +240,7 @@ export function WorkbenchExplorer({
 
   return (
     <>
-      {narrow && mobileOpen && !draggingEntry && (
+      {narrow && visible && !draggingEntry && (
         <div
           aria-hidden="true"
           className={cn(overlayFade, 'absolute inset-0 z-nav bg-scrim')}
@@ -259,9 +257,9 @@ export function WorkbenchExplorer({
           narrow &&
             'absolute inset-y-app-inset left-app-inset z-drawer w-sidebar max-w-sheet rounded-panel glass-thick animate-drawer-left',
           narrow && !visible ? 'hidden' : 'flex',
-          !narrow && collapsed && 'w-0',
+          !narrow && !visible && 'w-0',
         )}
-        style={narrow || collapsed ? undefined : { width: effectiveWidth }}
+        style={narrow || !visible ? undefined : { width: effectiveWidth }}
         onDragStart={(event) => {
           if (narrow && event.dataTransfer.types.includes(explorerDragType)) setDraggingEntry(true);
         }}
@@ -270,7 +268,7 @@ export function WorkbenchExplorer({
         <div
           className={cn(
             'flex min-h-0 flex-1 flex-col transition-opacity duration-base motion-reduce:transition-none',
-            collapsed && !narrow && 'pointer-events-none opacity-0',
+            !narrow && !visible && 'pointer-events-none opacity-0',
           )}
           style={narrow ? undefined : { width: effectiveWidth }}
         >
@@ -282,8 +280,7 @@ export function WorkbenchExplorer({
 
               onClick={() => {
                 if (narrow) useMobileDrawer.getState().setDrawer(null);
-                else
-                  usePreferences.getState().setPreference('workspaceSidebarCollapsed', !collapsed);
+                else usePreferences.getState().setPreference('workspaceSidebarCollapsed', true);
               }}
               title={visible ? '收起目录' : '展开目录'}
             >

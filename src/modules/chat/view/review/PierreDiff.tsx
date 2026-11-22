@@ -57,7 +57,6 @@ export function PatchDiffView({
   const themeType = useAppThemeType();
   return (
     <PatchDiff
-      className="bg-surface"
       options={{
         ...baseOptions,
         themeType,

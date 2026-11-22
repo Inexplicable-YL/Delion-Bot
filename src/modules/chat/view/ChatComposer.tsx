@@ -838,7 +838,7 @@ export function ChatComposer({
   return previewed ? (
     <ImageViewer
       footer={composer}
-      images={[{ src: chatMediaUrl(previewed.id), title: previewed.name }]}
+      images={[{ src: chatMediaUrl(previewed.id), title: previewed.name, mediaId: previewed.id }]}
       index={0}
       onClose={() => setPreviewing(null)}
       onDownload={() => chatClient.saveChatImage({ id: previewed.id, name: previewed.name })}

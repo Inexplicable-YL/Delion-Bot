@@ -103,13 +103,14 @@ export function TerminalTab({ tabId }: { tabId: string }) {
     const style = getComputedStyle(element);
     const foreground = terminalColor(style.color);
     const terminal = new Terminal({
+      allowTransparency: true,
       fontFamily: style.fontFamily,
       fontSize: parseFloat(style.fontSize),
       theme: {
-        background: terminalColor(style.backgroundColor),
+        background: withAlpha(foreground, 0),
         foreground,
         cursor: foreground,
-        cursorAccent: terminalColor(style.backgroundColor),
+        cursorAccent: terminalColor(style.getPropertyValue('--page')),
         selectionBackground: withAlpha(foreground, 0.28),
         selectionInactiveBackground: withAlpha(foreground, 0.16),
       },
@@ -169,10 +170,10 @@ export function TerminalTab({ tabId }: { tabId: string }) {
       const style = getComputedStyle(element);
       const foreground = terminalColor(style.color);
       terminal.options.theme = {
-        background: terminalColor(style.backgroundColor),
+        background: withAlpha(foreground, 0),
         foreground,
         cursor: foreground,
-        cursorAccent: terminalColor(style.backgroundColor),
+        cursorAccent: terminalColor(style.getPropertyValue('--page')),
         selectionBackground: withAlpha(foreground, 0.28),
         selectionInactiveBackground: withAlpha(foreground, 0.16),
       };
@@ -205,7 +206,7 @@ export function TerminalTab({ tabId }: { tabId: string }) {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-surface">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1">
         <div
           aria-label="终端会话"
@@ -304,7 +305,7 @@ export function TerminalTab({ tabId }: { tabId: string }) {
           else void paste();
         }}
         className={cn(
-          'min-h-0 flex-1 overflow-hidden bg-surface p-2 font-mono text-ui-body text-ink',
+          'min-h-0 flex-1 overflow-hidden p-2 font-mono text-ui-body text-ink',
           !activeId && 'hidden',
         )}
       />

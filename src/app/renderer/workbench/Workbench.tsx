@@ -61,7 +61,7 @@ export function Workbench({
     }
   };
 
-  if (!ready) return <div className="flex min-h-0 flex-1 overflow-hidden bg-surface" />;
+  if (!ready) return <div className="flex min-h-0 flex-1 overflow-hidden" />;
 
   const maximizedGroup = maximized ? findGroup(root, maximized) : null;
   const content = maximizedGroup ? (
@@ -74,7 +74,7 @@ export function Workbench({
     <div
       tabIndex={-1}
       onKeyDown={onKeyDown}
-      className="relative flex min-h-0 flex-1 overflow-hidden bg-surface outline-none"
+      className="relative flex min-h-0 flex-1 overflow-hidden outline-none"
     >
       {content}
     </div>

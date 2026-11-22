@@ -1,5 +1,5 @@
 import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import { ArrowDownTrayIcon, ArrowUpIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Dialog } from 'radix-ui';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -8,15 +8,21 @@ import { IconButton } from '../../../ui/IconButton';
 import { overlayFade } from '../../../ui/motion';
 import { showToast } from '../../../ui/Toast';
 import { WindowControls } from '../../../ui/WindowControls';
+import type { ImagePreview } from '../contract';
 import { chatClient } from './client';
 import { useReplyImageContext } from './ReplyImageContext';
-import { imageQuestion, replyImageSrc, type ReplyImageItem } from './reply-images';
+import { fetchImagePreview, imageQuestion, type ReplyImagePreview } from './reply-images';
 import { ZoomableImage } from './ZoomableImage';
 
 const mediaSurface = 'bg-on-media/12 ring-1 ring-inset ring-on-media/5';
 const mediaButton = `${mediaSurface} size-control-md rounded-full text-on-media hover:bg-on-media/20 hover:text-on-media`;
 
-export type ViewerImage = { src: string; title: string };
+export type ViewerImage = {
+  src: string;
+  title: string;
+  preview?: ImagePreview | null;
+  mediaId?: string;
+};
 
 function isBackdrop(target: EventTarget): boolean {
   return target instanceof HTMLElement && target.dataset.backdrop !== undefined;
@@ -57,6 +63,18 @@ export function ImageViewer({
 }) {
   const image = images[index]!;
   const [pressedBackdrop, setPressedBackdrop] = useState(false);
+  const mediaId = image.mediaId;
+  const mediaPreview = useQuery({
+    queryKey: ['chat', 'image-preview', image.src],
+    queryFn: mediaId ? () => fetchImagePreview({ id: mediaId }) : skipToken,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const preview = mediaId
+    ? mediaPreview.isPending
+      ? undefined
+      : (mediaPreview.data ?? null)
+    : image.preview;
 
   const download = () =>
     void onDownload()
@@ -114,12 +132,17 @@ export function ImageViewer({
               <ViewerWindowControls />
             </div>
           </div>
-          <ZoomableImage
-            alt={image.title}
-            className="mt-15 min-h-0 w-full flex-1"
-            key={image.src}
-            src={image.src}
-          />
+          {preview === undefined ? (
+            <div className="mt-15 min-h-0 w-full flex-1" data-backdrop />
+          ) : (
+            <ZoomableImage
+              alt={image.title}
+              className="mt-15 min-h-0 w-full flex-1"
+              key={image.src}
+              preview={preview}
+              src={image.src}
+            />
+          )}
           <p className="mt-4.5 text-ui-subhead tabular-nums text-on-media/50">
             {images.length > 1 ? `${image.title} · ${index + 1} / ${images.length}` : image.title}
           </p>
@@ -139,14 +162,18 @@ export function ImageViewer({
                   onClick={() => onIndexChange?.(itemIndex)}
                   type="button"
                 >
-                  <img
-                    alt=""
-                    className={cn(
-                      'size-full object-cover',
-                      itemIndex === index ? 'rounded-chip' : 'rounded-control',
-                    )}
-                    src={item.src}
-                  />
+                  {item.preview !== undefined && (
+                    <img
+                      alt=""
+                      className={cn(
+                        'size-full object-cover',
+                        itemIndex === index ? 'rounded-chip' : 'rounded-control',
+                      )}
+                      decoding="async"
+                      loading="lazy"
+                      src={item.preview?.url ?? item.src}
+                    />
+                  )}
                 </button>
               ))}
             </div>
@@ -158,66 +185,84 @@ export function ImageViewer({
   );
 }
 
-export function ReplyImageViewer({
-  images,
-  index,
-  onIndexChange,
-  onClose,
+export function ImageQuestionForm({
+  label,
+  onAsk,
 }: {
-  images: ReplyImageItem[];
-  index: number;
-  onIndexChange: (index: number) => void;
-  onClose: () => void;
+  label: string;
+  onAsk: (question: string) => Promise<void>;
 }) {
-  const reply = useReplyImageContext();
   const [question, setQuestion] = useState('');
-  if (!reply) return null;
-  const image = images[index]!;
-  const title = image.alt || '图片';
-  const { sessionId, cwd, ask } = reply;
-  const source = 'url' in image ? { url: image.url } : { path: image.path };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const text = question.trim();
-    if (!ask || !text) return;
+    if (!text) return;
     try {
-      const input = await imageQuestion(sessionId, cwd, image, text);
-      onClose();
-      void ask(input.text, input.context);
+      await onAsk(text);
     } catch (error) {
       showToast({ variant: 'error', title: '发送失败', description: errorMessage(error) });
     }
   };
 
   return (
+    <form
+      className={`${mediaSurface} mt-5 flex h-control-lg w-full max-w-138 shrink-0 items-center gap-2 rounded-full pl-4 pr-2`}
+      onSubmit={(event) => void submit(event)}
+    >
+      <input
+        aria-label={label}
+        className="min-w-0 flex-1 bg-transparent text-ui-body text-on-media outline-none placeholder:text-on-media/40"
+        onChange={(event) => setQuestion(event.target.value)}
+        placeholder={label}
+        value={question}
+      />
+      <IconButton
+        aria-label="发送"
+        className="size-7 rounded-full bg-on-media text-media hover:bg-on-media hover:text-media disabled:opacity-100"
+        disabled={!question.trim()}
+        type="submit"
+      >
+        <ArrowUpIcon />
+      </IconButton>
+    </form>
+  );
+}
+
+export function ReplyImageViewer({
+  images,
+  index,
+  onIndexChange,
+  onClose,
+}: {
+  images: ReplyImagePreview[];
+  index: number;
+  onIndexChange: (index: number) => void;
+  onClose: () => void;
+}) {
+  const reply = useReplyImageContext();
+  if (!reply) return null;
+  const image = images[index]!;
+  const { sessionId, cwd, ask } = reply;
+  const source = 'url' in image ? { url: image.url } : { path: image.path };
+
+  return (
     <ImageViewer
       footer={
         ask && (
-          <form
-            className={`${mediaSurface} mt-5 flex h-control-lg w-full max-w-138 shrink-0 items-center gap-2 rounded-full pl-4 pr-2`}
-            onSubmit={(event) => void submit(event)}
-          >
-            <input
-              aria-label={`关于“${title}”的消息`}
-              className="min-w-0 flex-1 bg-transparent text-ui-body text-on-media outline-none placeholder:text-on-media/40"
-              onChange={(event) => setQuestion(event.target.value)}
-              placeholder={`关于“${title}”的消息`}
-              value={question}
-            />
-            <IconButton
-              aria-label="发送"
-              className="size-7 rounded-full bg-on-media text-media hover:bg-on-media hover:text-media disabled:opacity-100"
-              disabled={!question.trim()}
-              type="submit"
-            >
-              <ArrowUpIcon />
-            </IconButton>
-          </form>
+          <ImageQuestionForm
+            label={`关于“${image.alt || '图片'}”的追问`}
+            onAsk={async (question) => {
+              const input = await imageQuestion(sessionId, cwd, image, question);
+              onClose();
+              void ask(input.text, input.context);
+            }}
+          />
         )
       }
       images={images.map((item) => ({
-        src: replyImageSrc(sessionId, item),
+        preview: item.preview,
+        src: item.src,
         title: item.alt || '图片',
       }))}
       index={index}

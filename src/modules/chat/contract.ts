@@ -22,6 +22,16 @@ const chatImage = z.object({ id: z.uuid(), name: z.string().min(1).max(255) });
 
 export type ReplyImageSource = z.infer<typeof replyImageSource>;
 
+const imagePreview = z.object({
+  url: z.string(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+});
+const imagePreviewSource = z.union([replyImage, z.object({ id: z.uuid() })]);
+
+export type ImagePreview = z.infer<typeof imagePreview>;
+export type ImagePreviewSource = z.infer<typeof imagePreviewSource>;
+
 export const chatContract = defineContract('chat', {
   projectContext: { input: projectId, output: projectContext },
   setProjectInstruction: {
@@ -65,6 +75,12 @@ export const chatContract = defineContract('chat', {
   revealFile: { input: sessionFile, output: z.void() },
   openFile: { input: sessionFile, output: z.void() },
   saveReplyImage: { input: replyImage, output: z.boolean() },
+  imagePreview: {
+    input: imagePreviewSource,
+    output: z
+      .union([imagePreview, z.object({ bytes: z.instanceof(ArrayBuffer), mime: z.string() })])
+      .nullable(),
+  },
   stageReplyImage: { input: replyImage, output: z.custom<ChatMediaView>() },
   saveChatImage: { input: chatImage, output: z.boolean() },
   readUncommittedChanges: { input: projectId, output: z.custom<UncommittedChanges>() },

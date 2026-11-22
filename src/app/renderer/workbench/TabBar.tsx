@@ -118,7 +118,7 @@ export function TabBar({
   if (!group.tabs.length) return null;
 
   return (
-    <div className="relative z-raised @container flex min-h-toolbar min-w-0 shrink-0 items-center gap-2 bg-surface px-app">
+    <div className="relative z-raised @container flex min-h-toolbar min-w-0 shrink-0 items-center gap-2 px-app">
       {showReveal && <ExplorerRevealButton className="self-center" />}
       <div
         ref={horizontalWheelRef}

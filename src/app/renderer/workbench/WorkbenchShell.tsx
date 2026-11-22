@@ -45,6 +45,8 @@ import { showToast } from '../../../ui/Toast';
 import { currentContainerOf, WorkbenchExplorer } from './WorkbenchExplorer';
 import { openTarget } from './open-target';
 import { ErrorText } from '../../../ui/Alert';
+import { cn } from '../../../ui/cn';
+import { useExplorerVisible } from './ExplorerState';
 import { officeRefOf, opensInApp, sourceOf, sourceOfLink } from '../../views';
 import { workspaceClient, useWorkspaceStore } from '../../../modules/workspace/view';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -125,6 +127,7 @@ const draftBase: Omit<NoteDraftSource, 'saveAsNewNote'> = {
 };
 
 export function WorkbenchShell({ home }: { home?: boolean }) {
+  const explorerVisible = useExplorerVisible();
   const projectId = useNavigationStore((s) => (home ? null : s.projectId));
   const generalChat = useNavigationStore((s) => s.generalChat);
   const loaded = useWorkspaceStore((s) => s.loaded);
@@ -284,7 +287,7 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
   };
 
   if (!home && !loaded && workspaceError === null && window.delionBot)
-    return <div className="min-h-0 flex-1 bg-surface" />;
+    return <div className="min-h-0 flex-1 bg-page" />;
 
   return (
     <ChatTabSourceProvider source={chatSource}>
@@ -296,7 +299,12 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
                 {workspaceError}
               </ErrorText>
             )}
-            <div className="relative flex min-h-0 flex-1">
+            <div
+              className={cn(
+                'relative isolate flex min-h-0 flex-1 bg-page before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:bg-surface before:transition-opacity before:duration-base before:ease-in-out motion-reduce:before:transition-none',
+                !home && explorerVisible ? 'before:opacity-100' : 'before:opacity-0',
+              )}
+            >
               {home ? (
                 <ChatHome request={generalChat} />
               ) : (

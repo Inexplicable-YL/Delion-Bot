@@ -79,7 +79,7 @@ export interface ClientBroadcaster {
 }
 
 export interface ImageCodec {
-  previewDataUrl(source: string | Buffer): string | null;
+  preview(source: string | Buffer): { url: string; width: number; height: number } | null;
 }
 
 export interface SavePathOptions {
