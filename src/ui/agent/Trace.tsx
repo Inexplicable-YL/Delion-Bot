@@ -6,10 +6,21 @@ import { Collapse, CollapseChevron } from '../Collapse';
 import { fadeIn } from '../motion';
 
 const toggleClass =
-  'group/row flex h-7 w-full min-w-0 items-center gap-1 text-left text-ui-body text-ink-2 transition-colors duration-base hover:text-ink-2 focus-visible:outline-none focus-visible:text-ink-2';
+  'group/row flex h-7 w-full min-w-0 items-center gap-2 text-left text-ui-body text-ink-2 transition-colors duration-base hover:text-ink focus-visible:outline-none focus-visible:text-ink aria-expanded:text-ink';
 
-export function TraceDisclosure({ head, children }: { head: ReactNode; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function TraceDisclosure({
+  head,
+  icon,
+  forceOpen = false,
+  children,
+}: {
+  head: ReactNode;
+  icon?: ReactNode;
+  forceOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [userOpen, setOpen] = useState(false);
+  const open = forceOpen || userOpen;
   return (
     <div className="min-w-0">
       <button
@@ -19,10 +30,18 @@ export function TraceDisclosure({ head, children }: { head: ReactNode; children:
         onClick={() => setOpen(!open)}
         className={toggleClass}
       >
-        <CollapseChevron className="opacity-60 group-hover/row:opacity-100" open={open} />
-        {head}
+        {icon && (
+          <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center">
+            {icon}
+          </span>
+        )}
+        <span className="flex min-w-0 items-center gap-1">{head}</span>
+        <CollapseChevron
+          className="opacity-0 group-hover/row:opacity-100 group-focus-visible/row:opacity-100 group-aria-expanded/row:opacity-100"
+          open={open}
+        />
       </button>
-      <Collapse className="ml-[1.125rem]" open={open}>
+      <Collapse className={icon ? 'ml-6' : undefined} open={open}>
         <div className="min-w-0 pb-2">{children}</div>
       </Collapse>
     </div>
@@ -47,19 +66,15 @@ export function Trace({
           aria-expanded={expanded}
           data-trace-toggle
           onClick={() => setExpanded(!expanded)}
-          className={cn(toggleClass, 'mb-1')}
+          className={cn(toggleClass, 'mb-1 w-auto max-w-full gap-1')}
         >
-          <CollapseChevron className="opacity-60 group-hover/row:opacity-100" open={expanded} />
           <span className="min-w-0 truncate">{foldLabel}</span>
+          <CollapseChevron open={expanded} />
         </button>
       )}
       {blocks.map(({ key, node }, index) =>
         foldable && index < lastIndex ? (
-          <div
-            key={key}
-            hidden={!expanded}
-            className={cn(fadeIn, 'ml-[0.4375rem] border-l border-line pl-[0.6875rem]')}
-          >
+          <div key={key} hidden={!expanded} className={fadeIn}>
             {node}
           </div>
         ) : (

@@ -233,7 +233,7 @@ function AssistantMessage({
     <AssistantMessageFrame data-reply-live={live || undefined}>
       {live && empty && (
         <p className="h-7 text-ui-body" role="status">
-          <Shimmer>正在思考</Shimmer>
+          <Shimmer>Thinking</Shimmer>
         </p>
       )}
       <ReplyTrace

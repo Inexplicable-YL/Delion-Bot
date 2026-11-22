@@ -47,6 +47,8 @@ vi.mock('../../../src/core/agent/pi', () => ({
   resolveModel: async ({ model }: { model: string }) => ({ model, thinking: 'off' }),
   openPiSession: async (input: { beforeTool?: () => Promise<void> | undefined }) => {
     state.beforeTool = input.beforeTool;
+    const getBranch = () =>
+      state.messages.map((message, index) => ({ type: 'message', id: `e${index}`, message }));
     return {
       setModel: async (model: string) => {
         state.modelSwitches.push(model);
@@ -58,10 +60,11 @@ vi.mock('../../../src/core/agent/pi', () => ({
         return state.messages;
       },
       sessionManager: {
+        getBranch,
         buildSessionProjection: () => ({
-          entries: state.messages.map((message, index) => ({
-            sourceEntry: { type: 'message', id: `e${index}` },
-            messages: [message],
+          entries: getBranch().map((sourceEntry) => ({
+            sourceEntry,
+            messages: [sourceEntry.message],
           })),
         }),
       },

@@ -18,17 +18,20 @@ import { chatAttachmentView, releaseChatAttachments } from '../media';
 import { openPiSession } from '../pi';
 import { taskTool, type SubagentResult } from '../subagent';
 import { backgroundTools, stopAllTasks, type TaskNotice, type TaskParent } from '../tasks';
-import { live, liveSteps, type Live, type Run } from './live';
+import { live, liveSteps, liveThinking, type Live, type Run } from './live';
 import {
   encodeMeta,
   projectMessages,
   publish,
   queuedTexts,
   snapshot,
+  thinkingKey,
+  thinkingTimes,
   toolOutput,
   usageOf,
   withoutToolImages,
   TASK_NOTICE,
+  THINKING_TIME,
 } from './projection';
 import { composePrompt } from './prompt';
 import {
@@ -155,9 +158,20 @@ function onEvent(id: string, entry: Live, event: AgentSessionEvent) {
       publish(id);
       break;
     }
-    case 'message_update':
+    case 'message_update': {
+      const update = event.assistantMessageEvent;
+      const times = liveThinking.get(id);
+      if (times && update.type === 'thinking_start')
+        times.set(thinkingKey(update.partial.timestamp, update.contentIndex), {
+          startedAt: Date.now(),
+        });
+      else if (times && update.type === 'thinking_end') {
+        const time = times.get(thinkingKey(update.partial.timestamp, update.contentIndex));
+        if (time) time.finishedAt = Date.now();
+      }
       stream(id, entry);
       break;
+    }
     case 'compaction_end':
       if (event.result?.estimatedTokensAfter !== undefined)
         entry.compactedTokens = event.result.estimatedTokensAfter;
@@ -187,6 +201,8 @@ function stream(id: string, entry: Live) {
     streaming ? [...entry.session.messages, streaming] : entry.session.messages,
     liveSteps.get(id),
     true,
+    undefined,
+    thinkingTimes(entry.session.sessionManager, liveThinking.get(id)),
   );
   const last = messages.at(-1);
   if (last?.role === 'assistant')
@@ -392,6 +408,7 @@ async function runTurn(
   };
   entry.run = run;
   liveSteps.set(id, new Map());
+  liveThinking.set(id, new Map());
   runEvent(id, 'running');
   let status: TurnStatus = 'completed';
   const startedAt = new Date().toISOString();
@@ -443,8 +460,17 @@ async function runTurn(
         ...attachments,
         ...run.steers.flatMap((steer) => steer.input.attachments),
       ]);
+      const finishedThinking = [...(liveThinking.get(id) ?? [])].filter(
+        ([, time]) => time.finishedAt !== undefined,
+      );
+      if (finishedThinking.length)
+        entry.session.sessionManager.appendCustomEntry(
+          THINKING_TIME,
+          Object.fromEntries(finishedThinking),
+        );
       entry.run = undefined;
       liveSteps.delete(id);
+      liveThinking.delete(id);
       if (entry.session.sessionFile) storeSessionFile(id, entry.session.sessionFile);
       touch(id, entry);
       runEvent(id, status, undefined, turnId, changesError);

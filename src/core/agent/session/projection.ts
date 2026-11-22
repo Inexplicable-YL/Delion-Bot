@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import type { AgentSession, SessionManager } from '@earendil-works/pi-coding-agent';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { ImageContent, TextContent } from '@earendil-works/pi-ai';
+import { z } from 'zod';
 import type {
   AgentToolResult,
   ContextUsageView,
@@ -11,12 +12,36 @@ import type {
 import { emit } from '../../ports';
 import { agentContract } from '../../protocol/agent';
 import { runningTasks } from '../tasks';
-import { live, liveSteps, type Live } from './live';
+import { live, liveSteps, liveThinking, type Live, type ThinkingTime } from './live';
 import { modelChoice, requirePiSync, row, sessionCwd, type ModelChoice } from './store';
 
 type ChatMessage = WorkspaceChat['messages'][number];
 
 export const TASK_NOTICE = 'delion-task';
+
+export const THINKING_TIME = 'delion-thinking-time';
+
+export const thinkingKey = (timestamp: number, contentIndex: number) =>
+  `${timestamp}:${contentIndex}`;
+
+const storedThinking = z.record(
+  z.string(),
+  z.object({ startedAt: z.number(), finishedAt: z.number() }),
+);
+
+export function thinkingTimes(
+  manager: Pick<SessionManager, 'getBranch'>,
+  pending?: ReadonlyMap<string, ThinkingTime>,
+): Map<string, ThinkingTime> {
+  const times = new Map<string, ThinkingTime>();
+  for (const entry of manager.getBranch()) {
+    if (entry.type !== 'custom' || entry.customType !== THINKING_TIME) continue;
+    const stored = storedThinking.safeParse(entry.data);
+    if (stored.success) for (const [key, time] of Object.entries(stored.data)) times.set(key, time);
+  }
+  for (const [key, time] of pending ?? []) times.set(key, time);
+  return times;
+}
 
 export const textOf = (content: string | (TextContent | ImageContent)[]) =>
   typeof content === 'string'
@@ -66,6 +91,7 @@ export function projectMessages(
   pending?: Map<string, AgentToolResult>,
   running = false,
   entryIds?: (string | undefined)[],
+  thinking?: ReadonlyMap<string, ThinkingTime>,
 ): ChatMessage[] {
   const out: ChatMessage[] = [];
   let reply: ChatMessage | null = null;
@@ -92,9 +118,13 @@ export function projectMessages(
         };
         out.push(reply);
       }
-      for (const block of message.content) {
+      for (const [contentIndex, block] of message.content.entries()) {
         if (block.type === 'thinking' && block.thinking.trim())
-          reply.parts!.push({ type: 'reasoning', text: block.thinking });
+          reply.parts!.push({
+            type: 'reasoning',
+            text: block.thinking,
+            ...thinking?.get(thinkingKey(message.timestamp, contentIndex)),
+          });
         else if (block.type === 'text' && block.text)
           reply.parts!.push({ type: 'text', text: block.text });
         else if (block.type === 'toolCall') {
@@ -174,7 +204,9 @@ export function projectMessages(
   return out;
 }
 
-function storedMessages(manager: Pick<SessionManager, 'buildSessionProjection'>): ChatMessage[] {
+function storedMessages(
+  manager: Pick<SessionManager, 'buildSessionProjection' | 'getBranch'>,
+): ChatMessage[] {
   const projected = manager
     .buildSessionProjection()
     .entries.flatMap(({ sourceEntry, messages }) =>
@@ -187,6 +219,7 @@ function storedMessages(manager: Pick<SessionManager, 'buildSessionProjection'>)
     projected.map(({ sourceEntry }) =>
       sourceEntry.type === 'message' ? sourceEntry.id : undefined,
     ),
+    thinkingTimes(manager),
   );
 }
 
@@ -296,7 +329,13 @@ export function snapshot(id: string): WorkspaceChat {
     contextUsage: usageOf(entry),
     messages: entry
       ? entry.run
-        ? projectMessages(entry.session.messages, liveSteps.get(id), true)
+        ? projectMessages(
+            entry.session.messages,
+            liveSteps.get(id),
+            true,
+            undefined,
+            thinkingTimes(entry.session.sessionManager, liveThinking.get(id)),
+          )
         : storedMessages(entry.session.sessionManager)
       : readMessages(id),
     running: Boolean(entry?.run),

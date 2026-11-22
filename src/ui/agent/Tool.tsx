@@ -7,6 +7,7 @@ export type ToolStepStatus = 'running' | 'done' | 'error' | 'interrupted';
 
 export type ToolStepProps = {
   status: ToolStepStatus;
+  icon: ReactNode;
   label: string;
   target?: { text: string; title?: string; mono?: boolean };
   stats?: { added: number; deleted: number };
@@ -14,10 +15,19 @@ export type ToolStepProps = {
   children: ReactNode;
 };
 
-export function ToolStep({ status, label, target, stats, progress, children }: ToolStepProps) {
+export function ToolStep({
+  status,
+  icon,
+  label,
+  target,
+  stats,
+  progress,
+  children,
+}: ToolStepProps) {
   const running = status === 'running';
   return (
     <TraceDisclosure
+      icon={icon}
       head={
         <>
           <span className="shrink-0">
@@ -54,10 +64,12 @@ export function ToolStep({ status, label, target, stats, progress, children }: T
 
 export function ToolGroup({
   summary,
+  icon,
   failed = false,
   children,
 }: {
   summary?: string;
+  icon?: ReactNode;
   failed?: boolean;
   children: ReactNode;
 }) {
@@ -67,6 +79,7 @@ export function ToolGroup({
         children
       ) : (
         <TraceDisclosure
+          icon={icon}
           head={
             <>
               <span className="min-w-0 truncate">{summary}</span>
