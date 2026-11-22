@@ -19,6 +19,7 @@ import { useNoteDrafts } from '../../../modules/note/view';
 import { useWorkspaceStore } from '../../../modules/workspace/view';
 import { showToast } from '../../../ui/Toast';
 import { useNavigationStore } from '../navigation/view';
+import { RestoreDialog } from '../navigation/RestoreDialog';
 import { useMobileDrawer } from './mobile-drawer';
 import { useNotificationCounts } from '../../../modules/notifications/view';
 import { useAppearance } from './theme';
@@ -168,7 +169,11 @@ export default function App() {
   };
 
   const openSearchResult = (result: SearchHit) => {
-    useNavigationStore.getState().navigate(result.target);
+    const navigation = useNavigationStore.getState();
+    const { target } = result;
+    if (result.archived && target.page === 'chat' && target.sessionId)
+      navigation.requestChatRestore(target.sessionId, target.projectId, result.title);
+    else navigation.navigate(target);
   };
 
   return (
@@ -266,6 +271,7 @@ export default function App() {
           onSelect={openSearchResult}
         />
       )}
+      {appVisible && <RestoreDialog />}
       {onboarding.data && !appVisible && (
         <OnboardingFlow views={views} onWizardDone={() => setWizardFinished(true)} />
       )}

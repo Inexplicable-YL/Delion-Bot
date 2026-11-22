@@ -25,10 +25,11 @@ import {
   walkGroups,
 } from './layout-schema';
 import type { EdgeZone } from './tab-dnd';
-import { workspaceClient } from '../../../modules/workspace/view';
+import { useWorkspaceStore, workspaceClient } from '../../../modules/workspace/view';
 import { terminalClient } from '../../../modules/terminal/view';
 import { showToast } from '../../../ui/Toast';
 import { errorMessage } from '../../../core/protocol/contract';
+import { archivedDocumentOf } from '../workspace/library-entries';
 
 const PERSIST_DEBOUNCE_MS = 800;
 
@@ -172,7 +173,12 @@ export const useWorkbenchLayout = create<Store>((set, get) => ({
       }
     }
     if (token !== get().initToken) return;
-    const next = collapseEmptyGroups(parseWorkbenchLayout(saved) ?? createDefaultLayout());
+    const { workspace } = useWorkspaceStore.getState();
+    const layout = parseWorkbenchLayout(
+      saved,
+      (tab) => !previewable(tab) || !archivedDocumentOf(workspace, tab.slice(tab.indexOf(':') + 1)),
+    );
+    const next = collapseEmptyGroups(layout ?? createDefaultLayout());
     set({ projectId, root: next.root, focus: next.focus, maximized: next.maximized, ready: true });
     const { pendingReveal } = get();
     if (pendingReveal) {

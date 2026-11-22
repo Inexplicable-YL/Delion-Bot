@@ -31,7 +31,7 @@ export const chatSearch: SearchProvider = {
     const rows = hostPorts()
       .database()
       .prepare(
-        `SELECT sessions.id, sessions.project_id AS projectId, sessions.title,
+        `SELECT sessions.id, sessions.project_id AS projectId, sessions.title, sessions.archived,
            coalesce(project.name, '首页') AS projectName
          FROM sessions LEFT JOIN workspace_entries AS project
            ON project.id=sessions.project_id AND project.kind='project'
@@ -43,11 +43,13 @@ export const chatSearch: SearchProvider = {
       projectId: string | null;
       title: string;
       projectName: string;
+      archived: number;
     }[];
     return rows.map((row) => ({
       id: row.id,
       title: row.title,
       subtitle: row.projectName,
+      archived: Boolean(row.archived),
       target: { page: 'chat', projectId: row.projectId, sessionId: row.id },
     }));
   },

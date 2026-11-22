@@ -16,14 +16,17 @@ import { refreshSessionLists, useSessions, updateSession } from './sessions';
 import { SectionHeader, SettingsGroup } from '../../settings/view';
 import { Callout, ErrorText } from '../../../ui/Alert';
 import { errorMessage } from '../../../core/protocol/contract';
-import type { Navigate } from '../../../app/module';
 
 const allProjects = '__all__';
 const generalProject = '__general__';
 
 type Group = { id: string | null; name: string; sessions: ChatSessionSummary[] };
 
-export function ArchivedSection({ navigate }: { navigate: Navigate }) {
+export function ArchivedSection({
+  onOpenArchived,
+}: {
+  onOpenArchived: (sessionId: string, projectId: string | null, title: string) => void;
+}) {
   const queryClient = useQueryClient();
   const archived = useQuery({
     queryKey: ['chat', 'archived'],
@@ -237,11 +240,7 @@ export function ArchivedSection({ navigate }: { navigate: Navigate }) {
                             <Button
                               aria-label={`查看 ${session.title}`}
                               onClick={() =>
-                                navigate({
-                                  page: 'chat',
-                                  projectId: session.projectId ?? null,
-                                  sessionId: session.id,
-                                })
+                                onOpenArchived(session.id, session.projectId ?? null, session.title)
                               }
                               size="icon-sm"
                               title="查看对话"

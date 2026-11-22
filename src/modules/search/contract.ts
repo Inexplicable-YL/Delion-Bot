@@ -11,6 +11,7 @@ export interface SearchHit {
   title: string;
   subtitle: string | null;
   target: NavTarget;
+  archived?: boolean;
 }
 
 export interface SearchGroup {
