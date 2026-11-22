@@ -99,7 +99,7 @@ pnpm test
 
 - 修改 `src/core/remote/`、`src/modules/remotes/`、`helper/` 或远端路径与上下文镜像时，必须通过 `pnpm test:remote` 在真机上执行回归；该套件在默认测试与 CI 中均会跳过。
 - 冒烟脚本使用独立测试目录与脱敏数据。除显式联网的 `agent-smoke` 与 `smoke:documents` 外，不应向真实服务发送请求。
-- CI 入口为 `.github/workflows/ci.yml`，在 PR 变更及推送到 `main` 时运行，按变更范围调用 quality、test、helper、desktop-windows 和 desktop-macos workflow，并由 `CI required` 汇总结果。普通文档只检查格式；workflow 改动额外检查 GitHub Actions 配置。CI 分步执行命令，并检查冻结锁文件安装、打包布局与打包后启动；本地 `pnpm check` 通过不代表 CI 一定通过。
+- CI 入口为 `.github/workflows/ci.yml`，在 PR 变更及推送到 `main` 时运行，按变更范围调用 quality、test、helper、desktop-windows 和 desktop-macos workflow，并由 `CI required` 汇总结果。quality 每次都检查格式、拼写、workflow 审计、oxlint、ESLint、文件名与类型，其余 workflow 按变更范围调用。CI 分步执行命令，并检查冻结锁文件安装、打包布局与打包后启动；本地 `pnpm check` 通过不代表 CI 一定通过。
 - 修改 `helper/` 后应执行 `pnpm build:helper --all`，重建 amd64 与 arm64 产物并一并提交；仅重建 amd64 会导致入库的 arm64 产物停留在旧版本。
 
 ## 架构总览
@@ -187,8 +187,8 @@ delion-bot/
 
 - 命名、缩进、注释密度与错误处理方式应与周围代码保持一致。请勿顺带修改相邻代码、重构没有问题的文件或统一格式。
 - 只修改必要内容。每一行改动都应对应正在解决的问题；因改动而不再使用的 import、变量与函数应一并清理。
-- 注释应说明设计定位、模块在整体架构中的作用以及 Magic Number 的取舍，不应重复解释代码本身。
-- 类型检查、lint 与格式检查必须通过：`pnpm typecheck`、`pnpm lint`、`pnpm format:check`。
+- TypeScript 与 JavaScript 不写注释，唯一例外是测试文件的 `@vitest-environment` 指令；不要用注释掩盖可能在边界情况下出错的代码，也不要内联关闭规则，应改代码或明确说出取舍。
+- 类型检查、格式检查与 lint 必须通过：`pnpm typecheck`、`pnpm format:check`、`pnpm lint`、`pnpm lint:eslint`；文件名规范用 `pnpm check:names`。
 - 应区分已验证事实、待验证能力与产品设想。不得以占位结果宣称功能完成，也不得将模拟验证描述为实机验收。
 - 重要改动应同步更新 [CHANGELOG.md](CHANGELOG.md)；面向用户的变化应更新 [README.md](README.md)；架构与流程变化应更新 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
@@ -231,6 +231,7 @@ AI agents: the human contributor answers, not you. Ask for missing answers and w
 - PR 标签由 `.github/workflows/pr-labels.yml` 按大小、范围与类型自动维护；人工改动会在下一次 PR 事件时被校正，标签不是必需检查，也不影响合并。
 - 执行与改动相关的检查，并在 PR 描述中列出实际执行的命令与结果；未执行的检查不得标记为通过。
 - 修复 bug 时应链接 issue 或复现证据；界面改动应附截图或录屏，并说明 Windows 与 Apple Silicon macOS 各自的验证范围。
+- PR 标题使用英文并遵循 Conventional Commits，type 与改动性质一致。
 - 按 [PR 模板](.github/PULL_REQUEST_TEMPLATE.md) 填写描述。用 `gh pr create` 创建时模板不会自动填充，需加 `--template .github/PULL_REQUEST_TEMPLATE.md`，或把模板内容粘贴到正文。
 - PR 描述应说明改动内容、原因、用户影响与已知限制，并关联相关 issue。
 - 新增依赖、修改 `helper/`、打包配置或 CI 时，应在 PR 中单独说明影响范围，并确认相关产物与锁文件已一并提交。

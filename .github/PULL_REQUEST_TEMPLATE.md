@@ -1,50 +1,39 @@
 <!--
 感谢你向 Delion Bot 提交 PR。填写前请阅读 CONTRIBUTING.md 的「PR 要求」。
-标题遵循 Conventional Commits，例如：fix(chat): 随聊 @ 候选不再列出其他项目的文件
+PR 标题使用英文，并遵循 Conventional Commits，例如：fix(chat): stop @ candidates from listing files from other projects
 本文件里的提示写在 HTML 注释中，预览时不会显示，填写后可以删掉。
 -->
 
-## PR 范围
+## 变更说明
 
-- [ ] 目标分支为 `main`
+<!-- 说明改了什么、为什么改；关联 Issue 用 Closes #123，没有对应 Issue 时说明原因。修复缺陷需附能证明故障已发生的 issue、日志或复现步骤。 -->
 
-- [ ] `feat` 新增功能
-- [ ] `fix` 修复缺陷
-- [ ] `docs` 文档
-- [ ] `refactor` 重构，不改变外部行为
-- [ ] `perf` 性能
-- [ ] `test` 测试
-- [ ] `build` / `chore` 构建、依赖、发布或杂项
-- [ ] 其他：
+## 验证
 
-## 关联 Issue
+- [ ] `pnpm check` 通过（format:check / lint / lint:eslint / check:names / build / test）
+- [ ] 已完成与改动相关的冒烟或真机测试；未执行时在下方写明原因与影响
 
-- [ ] 已关联，合并后自动关闭：Closes #
-- [ ] 暂无对应 Issue，原因：
-
-<!-- 修复缺陷的 PR 必须链接能证明故障已经发生的 issue、日志、截图或复现步骤；新功能应先有确认过方向的 issue 或讨论。 -->
-
-## 本地验证
-
-- [ ] 已执行 `pnpm check`（format:check / lint / build / test 全部通过）
-- [ ] 已执行与改动相关的冒烟或真机测试：
-- [ ] 未执行任何检查，原因：
-
-<!-- 列出实际执行的命令与结果；未执行的检查不要标记为通过。平台相关问题请注明验证过的平台。 -->
+<!-- 列出实际执行的命令与结果；未执行的检查不要标记为通过，平台相关问题注明验证过的平台。 -->
 
 ```text
 <命令与结果>
 ```
 
-## 改动前后的现象
+## 界面与现象
+
+<!-- 界面变更附截图或录屏，并给出改动前后的对比；没有界面变化时写「不适用」。文件格式、持久化或 Agent 协议变化时说明兼容策略。 -->
 
 ### 改动前
 
-<!-- 贴截图或录屏；没有界面变化时写清复现步骤与退出码 -->
-
 ### 改动后
 
-<!-- 贴截图或录屏；没有界面变化时写清实际结果 -->
+## 提交前确认
+
+- [ ] 标题为英文并遵循 Conventional Commits，type 与改动性质一致
+- [ ] 只解决一个问题，没有混入无关重构、格式化或顺带修复
+- [ ] 不含密钥、证书、私人文件或用户数据；新增第三方代码或素材保留许可证与来源
+- [ ] 面向用户的变化已同步 README、CHANGELOG 或 `docs/`；架构与流程变化已更新 `docs/DEVELOPMENT.md`
+- [ ] CONTRIBUTING.md 中「Before you start a PR」的问题由人类贡献者回答
 
 ## 备注
 
