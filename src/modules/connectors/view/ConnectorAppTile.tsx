@@ -29,9 +29,11 @@ export function ConnectorAppTile({
   onAuthorize: (slug: Infer<typeof toolkit>) => void;
   onDisconnect: (id: string, label: string) => void;
 }) {
-  const active = accounts.filter((item) => item.status === 'ACTIVE').length;
-  const waiting =
-    active === 0 && (authorizing || accounts.some((item) => item.status === 'INITIATED'));
+  const managed = accounts.filter(
+    (item) => !['INITIALIZING', 'INITIATED', 'FAILED', 'EXPIRED'].includes(item.status),
+  );
+  const active = managed.some((item) => item.status === 'ACTIVE');
+  const waiting = !active && authorizing;
   const status = waiting
     ? { text: '等待授权', tone: 'text-ink-2' }
     : { text: featuredApps[app.slug].description, tone: 'text-ink-3' };
@@ -44,7 +46,7 @@ export function ConnectorAppTile({
           {status.text}
         </span>
       </div>
-      {accounts.length > 0 ? (
+      {managed.length > 0 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -58,7 +60,7 @@ export function ConnectorAppTile({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {accounts.map((item, index) => {
+            {managed.map((item, index) => {
               const label = item.alias?.trim() || `账户 ${index + 1}`;
               return (
                 <DropdownMenuItem
@@ -72,7 +74,7 @@ export function ConnectorAppTile({
             })}
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled={!canAuthorize} onSelect={() => onAuthorize(app.slug)}>
-              {authorizing ? '打开授权页' : active > 0 ? '连接其他账户' : '重新授权'}
+              {authorizing ? '打开授权页' : active ? '连接其他账户' : '重新授权'}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

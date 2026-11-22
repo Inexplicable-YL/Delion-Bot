@@ -7,6 +7,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { RunStatus } from '../../../core/protocol/agent';
 import { cn } from '../../../ui/cn';
+import { IconButton } from '../../../ui/IconButton';
 import { useSessionRunStatus } from '../../../modules/chat/view';
 import { navSubRow, rowActions, rowStatus } from './nav-styles';
 import { SessionMenu } from './SessionMenu';
@@ -57,6 +58,11 @@ export function SessionRow({
   const title = session.title || '新对话';
   const badge = useSessionRunStatus(session.id);
   const visual = badge === null ? null : badgeVisual[badge];
+  const open = () => {
+    if (session.archived)
+      useNavigationStore.getState().requestChatRestore(session.id, projectId, title);
+    else onOpen(session.id);
+  };
   return (
     <div
       className={navSubRow(active, nested)}
@@ -72,11 +78,7 @@ export function SessionRow({
           <button
             aria-current={active ? 'page' : undefined}
             className="flex min-w-0 flex-1 items-center gap-2 rounded-chip text-left"
-            onClick={() => {
-              if (session.archived)
-                useNavigationStore.getState().requestChatRestore(session.id, projectId, title);
-              else onOpen(session.id);
-            }}
+            onClick={open}
             type="button"
           >
             {visual && (
@@ -108,9 +110,9 @@ export function SessionRow({
       </HoverCard>
 
       {session.archived ? (
-        <span className={cn(rowMarker, 'text-ink-3')}>
-          <Archive className="size-4" role="img" aria-label="已归档" />
-        </span>
+        <IconButton aria-label={`恢复“${title}”`} onClick={open} size="sm" title="恢复已归档对话">
+          <Archive aria-hidden="true" className={active ? 'text-ink' : 'text-ink-4'} />
+        </IconButton>
       ) : (
         <>
           {session.pinned && (

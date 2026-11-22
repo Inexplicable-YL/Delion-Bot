@@ -11,7 +11,6 @@ import {
 } from '@heroicons/react/24/outline';
 import { Button } from '../Button';
 import { cn } from '../cn';
-import { IconButton } from '../IconButton';
 
 const MENU_ROW_UNITS = 9;
 const scrollRowIntoView = (node: HTMLLIElement | null) =>
@@ -64,35 +63,6 @@ export function PromptInputAttachments({
   children: ReactNode;
 }) {
   return <div className={cn('grid gap-1.5', className ?? 'px-3 pt-3')}>{children}</div>;
-}
-
-export function PromptInputChip({
-  icon,
-  label,
-  detail,
-  onRemove,
-  removeLabel,
-}: {
-  icon: ReactNode;
-  label: string;
-  detail?: string;
-  onRemove: () => void;
-  removeLabel: string;
-}) {
-  return (
-    <span
-      className="flex h-7 min-w-0 max-w-full items-center gap-1.5 rounded-full bg-field pr-0.5 pl-2 text-ui-subhead text-ink-2 shadow-hairline [&>svg]:size-3.5 [&>svg]:shrink-0 [&>svg]:text-ink-2"
-
-      title={label}
-    >
-      {icon}
-      <span className="truncate">{label}</span>
-      {detail && <span className="shrink-0 text-ink-2">{detail}</span>}
-      <IconButton aria-label={removeLabel} onClick={onRemove} size="sm">
-        <X />
-      </IconButton>
-    </span>
-  );
 }
 
 export function PromptInputToolbar({

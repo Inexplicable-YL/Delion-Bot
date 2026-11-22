@@ -97,7 +97,10 @@ export function useChat(
   });
 
   const busy = pending > 0 || Boolean(chat?.running);
-  const setPrompt = (text: string) => updateDraft(sessionId, { prompt: text });
+  const setPrompt = (update: (current: string) => string) => {
+    const draft = useChatDrafts.getState().drafts[sessionId] ?? emptyDraft;
+    updateDraft(sessionId, { prompt: update(draft.prompt) });
+  };
   const setComments = (comments: ChatComment[]) => updateDraft(sessionId, { comments });
 
   const addAttachmentFile = async (file: File) => {
@@ -134,9 +137,11 @@ export function useChat(
     if (!window.delionBot || !canSendInput(text, false, attachments.length, comments.length))
       return;
     const requested = sessionId;
-    const command = parseSessionCommand(text);
+    const hasImages = hasChatImages(text);
+    const command = parseSessionCommand(hasImages ? stripChatImageTokens(text) : text);
     if (command) {
       if (busy) setError('运行中不能执行命令，请等待当前回答完成');
+      else if (hasImages) setError('命令不能附带图片，请先移除图片');
       else if (comments.length) setError('命令不能附带评论，请先移除评论');
       else await runCommand(command.name, command.args, text);
       return;
@@ -284,6 +289,27 @@ export function useChat(
     }
   };
 
+  const askAbout = async (text: string, context: string[]) => {
+    if (!window.delionBot) return;
+    const requested = sessionId;
+    setPending((count) => count + 1);
+    setError(null);
+    try {
+      const result = await agentClient.ask({
+        sessionId: requested,
+        text,
+        attachments: [],
+        context,
+        comments: [],
+      });
+      if (result.sessionId) useSessions.getState().putChat(result.sessionId, result);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setPending((count) => Math.max(0, count - 1));
+    }
+  };
+
   const optimisticChat = (patch: Partial<WorkspaceChat>) => {
     const current = useSessions.getState().chats[sessionId];
     if (current) useSessions.getState().putChat(sessionId, { ...current, ...patch });
@@ -355,6 +381,7 @@ export function useChat(
       withdrawQueued,
       stopTask,
       editLast,
+      askAbout,
       selectModel,
       selectEffort,
       fork,

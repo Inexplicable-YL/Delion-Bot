@@ -9,6 +9,8 @@ import {
   GlobeAltIcon as Globe,
   LinkIcon,
   ListBulletIcon,
+  PhotoIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { PlayIcon } from '@heroicons/react/24/solid';
 import {
@@ -18,6 +20,9 @@ import {
 } from '../../connectors/view';
 import { cn } from '../../../ui/cn';
 import { Button } from '../../../ui/Button';
+import { FileIcon } from '../../../ui/FileIcon';
+import { IconButton } from '../../../ui/IconButton';
+import { formatBytes } from '../../../ui/format-bytes';
 import type { ComposerContext } from './composer-context';
 import { ChatComposerMenu } from './ChatComposerMenu';
 import { ChatModelPicker } from './ChatModelPicker';
@@ -29,7 +34,6 @@ import { ContextIndicator } from '../../../ui/agent/ContextIndicator';
 import {
   PromptInput,
   PromptInputAttachments,
-  PromptInputChip,
   PromptInputMenu,
   PromptInputMenuItem,
   PromptInputNotice,
@@ -50,14 +54,22 @@ import {
   CHAT_ATTACHMENT_MAX,
   chatFileKindOfFile,
   chatImageToken,
-  hasChatImages,
   INLINE_IMAGE_MAX,
   matchChatImageTokens,
+  parseChatBlocks,
+  stripChatImageTokens,
 } from '../../../core/protocol/chat-input';
 import type { ChatReference } from './use-chat';
 import { ComposerEditor, type ComposerEditorHandle } from './ComposerEditor';
+import { ImageViewer } from './ReplyImageViewer';
+import { chatMediaUrl } from './reply-images';
 import { connectorPrompt } from './connector-tokens';
-import { releaseChatMedia, setChatMediaPreview } from './media';
+import {
+  fetchChatMediaPreview,
+  getChatMediaPreview,
+  releaseChatMedia,
+  setChatMediaPreview,
+} from './media';
 import { agentClient, capabilitiesClient, chatClient, onWebSearchChanged } from './client';
 import { errorMessage } from '../../../core/protocol/contract';
 
@@ -130,11 +142,6 @@ function detectMenu(text: string, caret: number): MenuState {
   return null;
 }
 
-function formatSize(size: number): string {
-  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(size / 1024))} KB`;
-}
-
 export function cacheHitRateText(usage: ContextUsageView): string {
   const { inputTokens, cachedTokens } = usage;
   if (inputTokens === undefined || cachedTokens === undefined) return '—';
@@ -143,9 +150,66 @@ export function cacheHitRateText(usage: ContextUsageView): string {
 }
 
 const webSearchOptionsKey = ['capabilities', 'webSearchOptions'];
+const attachmentRemoveVisibility =
+  'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100 touch:pointer-events-auto touch:opacity-100';
+
+function ComposerImage({
+  id,
+  name,
+  onOpen,
+  onRemove,
+}: {
+  id: string;
+  name: string;
+  onOpen: () => void;
+  onRemove: () => void;
+}) {
+  const { data: url } = useQuery({
+    queryKey: ['chat', 'media', id],
+    queryFn: () => fetchChatMediaPreview(id),
+    initialData: getChatMediaPreview(id),
+    staleTime: Infinity,
+  });
+  return (
+    <div className="group relative size-14 shrink-0 select-none">
+      {url ? (
+        <button
+          aria-label={`放大查看 ${name}`}
+          className="block size-full cursor-zoom-in overflow-hidden rounded-chip border border-line"
+          onClick={onOpen}
+          type="button"
+        >
+          <img alt={name} className="size-full object-cover" draggable={false} src={url} />
+        </button>
+      ) : (
+        <div
+          className="grid size-full place-items-center rounded-chip border border-line bg-inset text-ink-2"
+          role="img"
+          aria-label={name}
+        >
+          <PhotoIcon className="size-5" />
+        </div>
+      )}
+      <IconButton
+        aria-label={`移除图片 ${name}`}
+        className={cn(
+          'absolute top-0 right-0 rounded-pill hover:bg-transparent [&_svg]:size-3',
+          attachmentRemoveVisibility,
+        )}
+        onClick={onRemove}
+        onMouseDown={(event) => event.preventDefault()}
+        size="xs"
+      >
+        <span className="grid size-badge place-items-center rounded-pill bg-surface shadow-hairline">
+          <XMarkIcon />
+        </span>
+      </IconButton>
+    </div>
+  );
+}
 
 export function ChatComposer({
-  value,
+  value: draft,
   onChange,
   onSend,
   onStop,
@@ -191,7 +255,7 @@ export function ChatComposer({
   notice?: string | null;
   onDismissNotice?: () => void;
   value: string;
-  onChange: (value: string) => void;
+  onChange: (update: (current: string) => string) => void;
   onSend: () => void;
   onStop: () => void;
   busy: boolean;
@@ -216,13 +280,21 @@ export function ChatComposer({
   const { navigate } = useChatTabSource();
   const editorRef = useRef<ComposerEditorHandle | null>(null);
   const [wrapped, setWrapped] = useState(false);
-  const expanded = value.length > 0 && (wrapped || value.includes('\n'));
+  const images = matchChatImageTokens(draft);
+  const value = images.length
+    ? parseChatBlocks(draft)
+        .map((block) => (block.type === 'text' ? block.text : ''))
+        .join('')
+    : draft;
+  const hasMedia = images.length > 0 || attachments.length > 0;
+  const expanded = hasMedia || (value.length > 0 && (wrapped || value.includes('\n')));
   const [menu, setMenu] = useState<MenuState>(null);
   const [index, setIndex] = useState(0);
   const menuListId = `${useId()}-list`;
   const menuOptionId = (position: number) => `${menuListId}-option-${position}`;
   const [dragging, setDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState<{ id: string; name: string } | null>(null);
   const queryClient = useQueryClient();
   const customCommands = useQuery({
     queryKey: ['settings', 'commands'],
@@ -414,22 +486,19 @@ export function ChatComposer({
     editorRef.current?.focus();
   };
 
-  const insertImageView = (view: ChatMediaView, pos: number) => {
+  const addImageView = (view: ChatMediaView) => {
     setChatMediaPreview(view.id, view.previewUrl);
-    const token = `${chatImageToken(view.id, view.name)} `;
-    editorRef.current?.insertAt(pos, token);
-    return pos + token.length;
+    onChange((current) => current + chatImageToken(view.id, view.name));
   };
 
-  const addFiles = async (files: File[], pos: number) => {
+  const addFiles = async (files: File[]) => {
     if (!window.delionBot) return;
-    let insertPos = pos;
-    let imageCount = matchChatImageTokens(value).length;
+    let imageCount = images.length;
     let attachmentCount = attachments.length;
     for (const file of files) {
       const kind = await chatFileKindOfFile(file);
       if (kind === 'image' && imageCount >= INLINE_IMAGE_MAX) {
-        setFileError(`最多插入 ${INLINE_IMAGE_MAX} 张图片`);
+        setFileError(`最多添加 ${INLINE_IMAGE_MAX} 张图片`);
         continue;
       }
       if (kind !== 'image' && attachmentCount >= CHAT_ATTACHMENT_MAX) {
@@ -440,7 +509,7 @@ export function ChatComposer({
         if (kind === 'image') {
           const bytes = new Uint8Array(await file.arrayBuffer());
           const view = await agentClient['stage-media']({ name: file.name, bytes });
-          insertPos = insertImageView(view, insertPos);
+          addImageView(view);
           imageCount += 1;
         } else {
           await onAddAttachmentFile(file);
@@ -458,18 +527,17 @@ export function ChatComposer({
     void chatClient
       .pickMedia()
       .then((views) => {
-        let insertPos = editorRef.current?.selectionStart() ?? value.length;
-        let imageCount = matchChatImageTokens(value).length;
+        let imageCount = images.length;
         let attachmentCount = attachments.length;
         for (const view of views) {
           try {
             if (view.kind === 'image') {
               if (imageCount >= INLINE_IMAGE_MAX) {
-                setFileError(`最多插入 ${INLINE_IMAGE_MAX} 张图片`);
+                setFileError(`最多添加 ${INLINE_IMAGE_MAX} 张图片`);
                 releaseChatMedia([view.id]);
                 continue;
               }
-              insertPos = insertImageView(view, insertPos);
+              addImageView(view);
               imageCount += 1;
             } else if (attachmentCount >= CHAT_ATTACHMENT_MAX) {
               releaseChatMedia([view.id]);
@@ -509,10 +577,7 @@ export function ChatComposer({
   };
 
   const canSend =
-    value.trim().length > 0 ||
-    hasChatImages(value) ||
-    attachments.length > 0 ||
-    comments.length > 0;
+    value.trim().length > 0 || images.length > 0 || attachments.length > 0 || comments.length > 0;
 
   const sendable = configured && !modelUnavailable && !projectSwitching && canSend;
   const stoppable = busy && (sidechat || !canSend);
@@ -527,11 +592,13 @@ export function ChatComposer({
     }
   };
 
-  return (
-    <div className="relative">
+  const previewed =
+    previewing && images.some(([, , id]) => id === previewing.id) ? previewing : null;
+  const composer = (
+    <div className={cn('relative', previewed && 'mt-13 w-full max-w-138 shrink-0 text-ink')}>
       {queued.length > 0 && (
         <QueuedMessages
-          messages={queued.map((text) => text.trim() || '图片或附件')}
+          messages={queued.map((text) => stripChatImageTokens(text) || '图片或附件')}
           onWithdraw={onWithdrawQueued}
         />
       )}
@@ -561,27 +628,58 @@ export function ChatComposer({
           const files = [...(event.dataTransfer?.files ?? [])];
           if (!files.length) return;
           event.preventDefault();
-          void addFiles(files, editorRef.current?.selectionStart() ?? value.length);
+          void addFiles(files);
         }}
       >
-        {(comments.length > 0 || attachments.length > 0) && (
-          <PromptInputAttachments className="-order-2 min-w-0 basis-full p-2">
-            {comments.length > 0 && (
-              <ReplyCommentRail comments={comments} onChange={onCommentsChange} />
-            )}
-            {attachments.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {attachments.map((item) => (
-                  <PromptInputChip
-                    detail={formatSize(item.size)}
-                    icon={<FileText />}
-                    key={item.id}
-                    label={item.name}
-                    onRemove={() => onRemoveAttachment(item.id)}
-                    removeLabel={`移除附件 ${item.name}`}
+        {(hasMedia || comments.length > 0) && (
+          <PromptInputAttachments
+            className={cn('-order-2 min-w-0 basis-full p-2', hasMedia && '-mb-1 pb-0')}
+          >
+            {hasMedia && (
+              <div
+                aria-label="待发送附件"
+                className="flex gap-2 overflow-x-auto p-1 -m-1"
+                role="group"
+              >
+                {images.map(([token, name, id], index) => (
+                  <ComposerImage
+                    id={id!}
+                    key={`${id}-${index}`}
+                    name={name || '图片'}
+                    onOpen={() => setPreviewing({ id: id!, name: name || '图片' })}
+                    onRemove={() => onChange((current) => current.replace(token, ''))}
                   />
                 ))}
+                {attachments.map((item) => (
+                  <div
+                    className="group flex h-14 w-48 max-w-full shrink-0 select-none items-center gap-2 rounded-chip border border-line bg-inset px-2"
+                    key={item.id}
+                    title={item.name}
+                  >
+                    <span className="grid size-control-sm shrink-0 place-items-center rounded-chip bg-field text-ink-2">
+                      <FileIcon path={item.name} className="size-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-ui-headline text-ink">{item.name}</div>
+                      <div className="text-ui-subhead text-ink-2">
+                        {formatBytes(item.size) ?? '0 B'}
+                      </div>
+                    </div>
+                    <IconButton
+                      aria-label={`移除附件 ${item.name}`}
+                      className={attachmentRemoveVisibility}
+                      onClick={() => onRemoveAttachment(item.id)}
+                      onMouseDown={(event) => event.preventDefault()}
+                      size="xs"
+                    >
+                      <XMarkIcon />
+                    </IconButton>
+                  </div>
+                ))}
               </div>
+            )}
+            {comments.length > 0 && (
+              <ReplyCommentRail comments={comments} onChange={onCommentsChange} />
             )}
           </PromptInputAttachments>
         )}
@@ -591,6 +689,7 @@ export function ChatComposer({
             expanded
               ? 'basis-full px-2 py-1'
               : 'flex-1 @max-sm:basis-full @max-sm:px-2 @max-sm:py-1',
+            hasMedia && 'pt-0',
           )}
           handleRef={editorRef}
           menu={menuApi}
@@ -599,10 +698,18 @@ export function ChatComposer({
             listId: menuListId,
             open: menuOpen,
           }}
-          onChange={onChange}
+          onChange={(text) =>
+            onChange(
+              (current) =>
+                text +
+                matchChatImageTokens(current)
+                  .map(([token]) => token)
+                  .join(''),
+            )
+          }
           onCaret={handleCaret}
           onDropHandled={() => setDragging(false)}
-          onFiles={(files, pos) => void addFiles(files, pos)}
+          onFiles={(files) => void addFiles(files)}
           onSend={() => {
             if (canSend && !modelUnavailable) onSend();
           }}
@@ -703,11 +810,11 @@ export function ChatComposer({
           </PromptInputMenu>
         )}
       </PromptInput>
-      {showAgentActions && agentActions.length > 0 && (
+      {showAgentActions && agentActions.length > 0 && !previewed && (
         <div
           className={cn(
             'mt-app-gap grid gap-1 pl-1',
-            (value.length > 0 || attachments.length > 0 || comments.length > 0) && 'invisible',
+            (draft.length > 0 || attachments.length > 0 || comments.length > 0) && 'invisible',
           )}
         >
           {agentActions.map(({ icon: Icon, label, prompt }) => (
@@ -727,6 +834,17 @@ export function ChatComposer({
         </div>
       )}
     </div>
+  );
+  return previewed ? (
+    <ImageViewer
+      footer={composer}
+      images={[{ src: chatMediaUrl(previewed.id), title: previewed.name }]}
+      index={0}
+      onClose={() => setPreviewing(null)}
+      onDownload={() => chatClient.saveChatImage({ id: previewed.id, name: previewed.name })}
+    />
+  ) : (
+    composer
   );
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SquaresPlusIcon as Blocks } from '@heroicons/react/24/outline';
 import { defineView } from '../../../app/module';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -13,7 +13,8 @@ import { ComposioDialog } from './ComposioDialog';
 import { ConnectorAppTile } from './ConnectorAppTile';
 import { type AppCategory, ConnectorFilterBar } from './ConnectorFilterBar';
 import {
-  authorizationCompleted,
+  authorizationPending,
+  connectorAccountsKey,
   connectorsClient as client,
   type ConnectorAuthorization,
   useConnectorAccounts,
@@ -28,6 +29,7 @@ function Connectors() {
   const [configuring, setConfiguring] = useState(false);
   const [confirm, setConfirm] = useState<{ id: string; app: string; label: string } | null>(null);
   const [waiting, setWaiting] = useState<ConnectorAuthorization[]>([]);
+  const queryClient = useQueryClient();
   const { configured, accounts } = useConnectorAccounts(waiting);
   const catalog = useConnectorCatalog(configured.data === true);
   const connected = new Set(
@@ -67,7 +69,8 @@ function Connectors() {
   const busy = action.isPending;
   const failure =
     (confirm ? null : action.error) ?? configured.error ?? accounts.error ?? catalog.error;
-  const pending = waiting.filter((link) => !authorizationCompleted(link, accounts.data));
+  const checkedAt = Math.max(accounts.dataUpdatedAt, accounts.errorUpdatedAt);
+  const pending = waiting.filter((link) => authorizationPending(link, accounts.data, checkedAt));
   if (pending.length !== waiting.length) setWaiting(pending);
   const authorize = (slug: ConnectorAuthorization['slug']) => {
     const link = pending.find((value) => value.slug === slug);
@@ -75,14 +78,9 @@ function Connectors() {
       window.open(link.url, '_blank', 'noopener');
       return;
     }
-    const previousAccounts = new Set(
-      accounts.data
-        ?.filter((account) => account.toolkit.slug === slug && account.status === 'ACTIVE')
-        .map((account) => account.id),
-    );
     action.mutate(async () => {
-      const url = await client.connect(slug);
-      const link = { slug, url, previousAccounts, until: Date.now() + 600_000 };
+      const { redirect_url: url, connected_account_id: accountId } = await client.connect(slug);
+      const link = { slug, url, accountId, until: Date.now() + 600_000 };
       setWaiting((current) => [...current.filter((value) => value.slug !== slug), link]);
       window.open(url, '_blank', 'noopener');
     });
@@ -207,6 +205,9 @@ function Connectors() {
             if (!confirm) return;
             action.mutate(async () => {
               await client.disconnect(confirm.id);
+              queryClient.setQueryData<typeof accounts.data>(connectorAccountsKey, (current) =>
+                current?.filter((account) => account.id !== confirm.id),
+              );
               setConfirm(null);
               await accounts.refetch();
             });

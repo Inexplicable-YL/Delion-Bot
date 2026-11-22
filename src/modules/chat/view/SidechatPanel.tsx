@@ -264,7 +264,10 @@ export function SidechatPanel({
                 current.some((item) => item.id === staged.id) ? current : [...current, staged],
               )
             }
-            onChange={(prompt) => useChatDrafts.getState().update(key, { prompt })}
+            onChange={(update) => {
+              const state = useChatDrafts.getState();
+              state.update(key, { prompt: update((state.drafts[key] ?? emptyDraft).prompt) });
+            }}
             onCommentsChange={(comments) => useChatDrafts.getState().update(key, { comments })}
             onDismissNotice={() => setError(null)}
             onEffortSelect={() => {}}

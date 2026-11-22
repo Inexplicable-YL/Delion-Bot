@@ -13,6 +13,14 @@ const sessionFile = z.object({ sessionId, path: z.string().min(1).max(32_767) })
 const projectId = z.uuid();
 const filePath = z.string().min(1).max(32_767);
 const projectContext = z.object({ instruction: z.string(), files: z.array(filePath) });
+const replyImageSource = z.union([
+  z.object({ path: filePath }),
+  z.object({ url: z.url({ protocol: /^https?$/ }) }),
+]);
+const replyImage = z.object({ sessionId, image: replyImageSource });
+const chatImage = z.object({ id: z.uuid(), name: z.string().min(1).max(255) });
+
+export type ReplyImageSource = z.infer<typeof replyImageSource>;
 
 export const chatContract = defineContract('chat', {
   projectContext: { input: projectId, output: projectContext },
@@ -56,6 +64,9 @@ export const chatContract = defineContract('chat', {
   openInVsCode: { input: sessionFile, output: z.void() },
   revealFile: { input: sessionFile, output: z.void() },
   openFile: { input: sessionFile, output: z.void() },
+  saveReplyImage: { input: replyImage, output: z.boolean() },
+  stageReplyImage: { input: replyImage, output: z.custom<ChatMediaView>() },
+  saveChatImage: { input: chatImage, output: z.boolean() },
   readUncommittedChanges: { input: projectId, output: z.custom<UncommittedChanges>() },
   readUncommittedFileChange: {
     input: z.object({ projectId, path: filePath }),

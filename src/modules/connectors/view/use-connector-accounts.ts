@@ -4,6 +4,7 @@ import { createClient } from '../../../core/protocol/contract';
 import { connectorsContract, type account, type app, type toolkit } from '../contract';
 
 export const connectorsClient = createClient(connectorsContract, window.delionBot?.bridge);
+export const connectorAccountsKey = ['connectors', 'accounts'] as const;
 
 export type ConnectorApp = Infer<typeof app>;
 
@@ -11,18 +12,18 @@ export type ConnectorAuthorization = {
   slug: Infer<typeof toolkit>;
   url: string;
   until: number;
-  previousAccounts: ReadonlySet<string>;
+  accountId: string;
 };
 
-export function authorizationCompleted(
+export function authorizationPending(
   waiting: ConnectorAuthorization,
   accounts: readonly Infer<typeof account>[] | undefined,
+  checkedAt: number,
 ) {
-  return accounts?.some(
-    (account) =>
-      account.toolkit.slug === waiting.slug &&
-      account.status === 'ACTIVE' &&
-      !waiting.previousAccounts.has(account.id),
+  const status = accounts?.find((account) => account.id === waiting.accountId)?.status;
+  return (
+    checkedAt < waiting.until &&
+    (status === undefined || status === 'INITIALIZING' || status === 'INITIATED')
   );
 }
 
@@ -33,16 +34,11 @@ export function useConnectorAccounts(waiting?: readonly ConnectorAuthorization[]
     enabled: enabled && Boolean(window.delionBot),
   });
   const accounts = useQuery({
-    queryKey: ['connectors', 'accounts'],
+    queryKey: connectorAccountsKey,
     queryFn: () => connectorsClient.accounts(),
     enabled: enabled && configured.data === true,
     refetchOnWindowFocus: 'always',
-    refetchInterval: (query) =>
-      waiting?.some(
-        (link) => Date.now() < link.until && !authorizationCompleted(link, query.state.data),
-      )
-        ? 5000
-        : false,
+    refetchInterval: waiting?.length ? 5000 : false,
   });
   return { configured, accounts };
 }

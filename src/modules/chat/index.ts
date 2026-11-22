@@ -21,8 +21,15 @@ import { invalidateSessions } from '../../core/agent/session/run';
 import { exportSession } from '../../core/agent/session-export';
 import { hostPorts } from '../../core/ports';
 import { implement } from '../../core/protocol/contract';
-import { openInVsCode, workspaceFilePath } from '../workspace';
+import { openInVsCode, registerPreviewHost, workspaceFilePath } from '../workspace';
 import { chatContract } from './contract';
+import {
+  chatMediaResponse,
+  replyImageResponse,
+  saveChatImage,
+  saveReplyImage,
+  stageReplyImage,
+} from './main/reply-image';
 
 function withPi<I, O>(fn: (input: I) => O | Promise<O>): (input: I) => Promise<O> {
   return async (input) => {
@@ -51,6 +58,10 @@ function localProjectDirectory(projectId: string): string {
 
 export const chatModule = defineModule({
   id: 'chat',
+  register: () => {
+    registerPreviewHost('reply-image', replyImageResponse);
+    registerPreviewHost('chat-media', chatMediaResponse);
+  },
   ipc: implement(chatContract, {
     projectContext: getProjectChatContext,
     setProjectInstruction: ({ projectId, instruction }) =>
@@ -101,6 +112,9 @@ export const chatModule = defineModule({
     openInVsCode: ({ sessionId, path }) => openInVsCode(locateSessionFile(sessionId, path)),
     revealFile: ({ sessionId, path }) => revealSessionFile(sessionId, path),
     openFile: ({ sessionId, path }) => openSessionFile(sessionId, path),
+    saveReplyImage: ({ sessionId, image }) => saveReplyImage(sessionId, image),
+    stageReplyImage: ({ sessionId, image }) => stageReplyImage(sessionId, image),
+    saveChatImage: ({ id, name }) => saveChatImage(id, name),
     readUncommittedChanges: (projectId) => readUncommittedChanges(localProjectDirectory(projectId)),
     readUncommittedFileChange: ({ projectId, path }) =>
       readUncommittedFileChange(localProjectDirectory(projectId), path),

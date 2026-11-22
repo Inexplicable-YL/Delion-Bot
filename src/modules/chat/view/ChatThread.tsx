@@ -39,6 +39,7 @@ import { ReplyCommentLayer } from './ReplyComment';
 import { fetchChatMediaPreview, getChatMediaPreview } from './media';
 import { TurnChangesCard } from './TurnChangesCard';
 import { ReplySources } from './ReplySources';
+import { ReplyImageContext } from './ReplyImageContext';
 
 const textAnimation = { animation: 'fadeIn', sep: 'char' } as const;
 
@@ -248,6 +249,7 @@ function AssistantMessage({
             mode={live ? 'streaming' : 'static'}
             isAnimating={live && !activeTool}
             animated={live && animate && !reduced ? textAnimation : false}
+            replyImages
           >
             {text}
           </ChatMarkdown>
@@ -326,9 +328,11 @@ export function ChatThread({
   onEditLast,
   onFork,
   onSidechat,
+  onAskImage,
   draftKey,
 }: {
   chat: WorkspaceChat;
+  onAskImage?: (text: string, context: string[]) => Promise<void>;
   onSidechat?: (quote: string) => void;
   draftKey?: string | null;
   onOpenSource?: (key: string) => void;
@@ -437,55 +441,61 @@ export function ChatThread({
             scroll.setFollowing(false);
         }}
       >
-        <div
-          ref={observeScroll}
-          className="relative mx-auto w-full max-w-reading px-app py-app-gap"
+        <ReplyImageContext.Provider
+          value={
+            chat.sessionId ? { sessionId: chat.sessionId, cwd: chat.cwd, ask: onAskImage } : null
+          }
         >
-          {messages.map((message, index) =>
-            message.compacted ? (
-              <CompactionDivider key={`${chat.sessionId}:${index}`} />
-            ) : message.task ? (
-              <TaskNoticeMessage
-                content={message.content}
-                key={`${chat.sessionId}:${index}`}
-                task={message.task}
-              />
-            ) : message.extension ? (
-              <ExtensionMessage
-                customType={message.extension.customType}
-                key={`${chat.sessionId}:${index}`}
-              >
-                <ChatMarkdown className="text-ui-body" mode="static">
-                  {message.content}
-                </ChatMarkdown>
-              </ExtensionMessage>
-            ) : message.role === 'user' ? (
-              <UserMessage
-                key={`${chat.sessionId}:${index}`}
-                message={message}
-                onOpenSource={onOpenSource}
-                onOpenSession={onOpenSession}
-                onEdit={handleEditLast}
-                editable={index === lastUserIndex && !streaming && onEditLast !== undefined}
-              />
-            ) : (
-              <AssistantMessage
-                key={`${chat.sessionId}:${index}`}
-                sessionId={chat.sessionId}
-                reviewEnabled={chat.projectId != null}
-                onRetry={index === messages.length - 1 && !streaming ? retry : undefined}
-                live={streaming && index === messages.length - 1}
-                turnEnd={message.turnId !== undefined && turnEnds.get(message.turnId) === index}
-                animate={message.startedAt !== resumedReplyAt}
-                message={message}
-                activeTool={chat.activeTool}
-                onSaveNote={onSaveNote}
-                onFork={streaming ? undefined : onFork}
-              />
-            ),
-          )}
-          {chat.compacting && <CompactionDivider pending />}
-        </div>
+          <div
+            ref={observeScroll}
+            className="relative mx-auto w-full max-w-reading px-app py-app-gap"
+          >
+            {messages.map((message, index) =>
+              message.compacted ? (
+                <CompactionDivider key={`${chat.sessionId}:${index}`} />
+              ) : message.task ? (
+                <TaskNoticeMessage
+                  content={message.content}
+                  key={`${chat.sessionId}:${index}`}
+                  task={message.task}
+                />
+              ) : message.extension ? (
+                <ExtensionMessage
+                  customType={message.extension.customType}
+                  key={`${chat.sessionId}:${index}`}
+                >
+                  <ChatMarkdown className="text-ui-body" mode="static">
+                    {message.content}
+                  </ChatMarkdown>
+                </ExtensionMessage>
+              ) : message.role === 'user' ? (
+                <UserMessage
+                  key={`${chat.sessionId}:${index}`}
+                  message={message}
+                  onOpenSource={onOpenSource}
+                  onOpenSession={onOpenSession}
+                  onEdit={handleEditLast}
+                  editable={index === lastUserIndex && !streaming && onEditLast !== undefined}
+                />
+              ) : (
+                <AssistantMessage
+                  key={`${chat.sessionId}:${index}`}
+                  sessionId={chat.sessionId}
+                  reviewEnabled={chat.projectId != null}
+                  onRetry={index === messages.length - 1 && !streaming ? retry : undefined}
+                  live={streaming && index === messages.length - 1}
+                  turnEnd={message.turnId !== undefined && turnEnds.get(message.turnId) === index}
+                  animate={message.startedAt !== resumedReplyAt}
+                  message={message}
+                  activeTool={chat.activeTool}
+                  onSaveNote={onSaveNote}
+                  onFork={streaming ? undefined : onFork}
+                />
+              ),
+            )}
+            {chat.compacting && <CompactionDivider pending />}
+          </div>
+        </ReplyImageContext.Provider>
       </div>
       {!atBottom && messages.length > 0 && (
         <button

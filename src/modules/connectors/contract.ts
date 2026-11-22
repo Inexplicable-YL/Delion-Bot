@@ -68,12 +68,16 @@ export const account = z.object({
   toolkit: z.object({ slug: z.string() }),
   status: z.string(),
 });
+export const authorization = z.object({
+  connected_account_id: z.string(),
+  redirect_url: z.url({ protocol: /^https$/ }),
+});
 export const connectorsContract = defineContract('connectors', {
   configured: { input: z.undefined(), output: z.boolean() },
   setup: { input: z.string().trim().min(1).max(4096), output: z.void() },
   catalog: { input: z.undefined(), output: z.array(app) },
   accounts: { input: z.undefined(), output: z.array(account) },
-  connect: { input: toolkit, output: z.url({ protocol: /^https$/ }) },
+  connect: { input: toolkit, output: authorization },
   disconnect: { input: z.string().min(1), output: z.void() },
 });
 declare module '../../app/module' {

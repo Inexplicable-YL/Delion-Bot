@@ -3,7 +3,8 @@ import { act, useState, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { notifyManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { ContextUsageView } from '../../../../src/core/protocol/agent';
+import type { ChatMediaView, ContextUsageView } from '../../../../src/core/protocol/agent';
+import { chatImageToken } from '../../../../src/core/protocol/chat-input';
 
 vi.hoisted(() => {
   window.delionBot = {
@@ -12,6 +13,7 @@ vi.hoisted(() => {
 });
 import { ChatComposer, cacheHitRateText } from '../../../../src/modules/chat/view/ChatComposer';
 import type { ComposerEditor } from '../../../../src/modules/chat/view/ComposerEditor';
+import { setChatMediaPreview } from '../../../../src/modules/chat/view/media';
 
 vi.mock('../../../../src/modules/chat/view/ComposerEditor', () => ({
   ComposerEditor: ({
@@ -49,17 +51,22 @@ function Harness({
   busy = false,
   sidechat = false,
   hero = false,
+  initialValue = '',
+  initialAttachments = [],
 }: {
   busy?: boolean;
   sidechat?: boolean;
   hero?: boolean;
+  initialValue?: string;
+  initialAttachments?: ChatMediaView[];
   contextUsage: ContextUsageView;
 }) {
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(initialValue);
+  const [attachments, setAttachments] = useState(initialAttachments);
   return (
     <QueryClientProvider client={queryClient}>
       <ChatComposer
-        attachments={[]}
+        attachments={attachments}
         comments={[]}
         onCommentsChange={() => {}}
         busy={busy}
@@ -76,7 +83,9 @@ function Harness({
         onChange={setValue}
         onEffortSelect={() => {}}
         onModelSelect={() => {}}
-        onRemoveAttachment={() => {}}
+        onRemoveAttachment={(id) =>
+          setAttachments((current) => current.filter((item) => item.id !== id))
+        }
         onSend={() => {}}
         onStop={() => {}}
         referenceOptions={[]}
@@ -151,6 +160,47 @@ it('运行中输入框有内容时按钮是发送（插队），清空后变回�
   await act(async () => root.render(<Harness busy contextUsage={usage()} sidechat />));
   typeText('顺便问一句');
   expect(button().getAttribute('aria-label')).toBe('停止执行');
+});
+
+it('图片和文件共用附件栏，清空文字后仍可发送，叉号只移除对应附件', async () => {
+  const first = 'f9c8e31f-1ec6-4b27-92db-88dd7f2018b2';
+  const second = 'b5b6a501-02ef-4d3f-abb4-8a4bd855b8ea';
+  setChatMediaPreview(first, 'https://example.test/first.png');
+  setChatMediaPreview(second, 'https://example.test/second.png');
+  const initialValue = `AB${chatImageToken(first, '第一张.png')}CD${chatImageToken(second, '第二张.png')}`;
+  const remove = (name: string) =>
+    host.querySelector<HTMLButtonElement>(`button[aria-label="移除图片 ${name}"]`);
+  const send = () => host.querySelector<HTMLButtonElement>('button[aria-label="发送"]')!;
+  const file: ChatMediaView = {
+    id: 'file',
+    name: 'main-1.json',
+    size: 407,
+    kind: 'attachment',
+    previewUrl: null,
+  };
+
+  await act(async () =>
+    root.render(
+      <Harness contextUsage={usage()} initialAttachments={[file]} initialValue={initialValue} />,
+    ),
+  );
+  expect(host.querySelector('textarea')?.value).toBe('ABCD');
+  typeText('');
+  expect(send().disabled).toBe(false);
+  const rail = host.querySelector('[aria-label="待发送附件"]')!;
+  expect(rail.querySelectorAll('img')).toHaveLength(2);
+  const removeFile = rail.querySelector<HTMLButtonElement>(
+    'button[aria-label="移除附件 main-1.json"]',
+  )!;
+  act(() => removeFile.click());
+  expect(rail.contains(removeFile)).toBe(false);
+  expect(rail.querySelectorAll('img')).toHaveLength(2);
+
+  act(() => remove('第一张.png')!.click());
+  expect(remove('第一张.png')).toBeNull();
+  expect(send().disabled).toBe(false);
+  act(() => remove('第二张.png')!.click());
+  expect(send().disabled).toBe(true);
 });
 
 it('新对话只建议可用的 Agent 操作，点击时将任务写入聊天草稿', async () => {

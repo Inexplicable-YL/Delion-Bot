@@ -14,7 +14,7 @@ const invoke = vi.hoisted(() => {
 
 import { connectorsView } from '../../../../src/modules/connectors/view';
 
-it('已连接应用单列一类，推荐区补位保持 6 个，重复打开待授权链接时复用原链接', async () => {
+it('已连接应用单列一类，推荐区保持 6 个，授权失败后可在当前页重新连接', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const open = vi.spyOn(window, 'open').mockReturnValue(null);
   const host = document.createElement('div');
@@ -23,6 +23,8 @@ it('已连接应用单列一类，推荐区补位保持 6 个，重复打开待�
   const queries = new QueryClient();
   const Page = connectorsView.pages!.connectors!.component;
   const authorizationUrl = 'https://example.test/connect';
+  let notionStatus: string | undefined;
+  let failAccountsRefresh = false;
   invoke.mockImplementation(async (channel: string) => {
     switch (channel) {
       case 'connectors:configured':
@@ -42,12 +44,19 @@ it('已连接应用单列一类，推荐区补位保持 6 个，重复打开待�
           logo: `https://logos.test/${slug}`,
         }));
       case 'connectors:accounts':
+        if (failAccountsRefresh) throw new Error('HTTP 400');
         return [
           { id: 'first', toolkit: { slug: 'gmail' }, status: 'ACTIVE' },
           { id: 'second', toolkit: { slug: 'gmail' }, status: 'ACTIVE' },
+          ...(notionStatus
+            ? [{ id: 'notion-account', toolkit: { slug: 'notion' }, status: notionStatus }]
+            : []),
         ];
       case 'connectors:connect':
-        return authorizationUrl;
+        return { redirect_url: authorizationUrl, connected_account_id: 'notion-account' };
+      case 'connectors:disconnect':
+        failAccountsRefresh = true;
+        return undefined;
       default:
         throw new Error(channel);
     }
@@ -80,11 +89,40 @@ it('已连接应用单列一类，推荐区补位保持 6 个，重复打开待�
       host.querySelector<HTMLButtonElement>('[role="group"][aria-label="notion"] button')!;
     await act(async () => notion().click());
     await vi.waitFor(() => expect(notion().textContent).toBe('打开授权页'));
+    notionStatus = 'INITIATED';
+    await act(async () => queries.refetchQueries({ queryKey: ['connectors', 'accounts'] }));
     await act(async () => notion().click());
     expect(open.mock.calls.map(([url]) => url)).toEqual([authorizationUrl, authorizationUrl]);
     expect(invoke.mock.calls.filter(([channel]) => channel === 'connectors:connect')).toHaveLength(
       1,
     );
+
+    notionStatus = 'FAILED';
+    await act(async () => queries.refetchQueries({ queryKey: ['connectors', 'accounts'] }));
+    await vi.waitFor(() => expect(notion().textContent).toBe('连接'));
+    await act(async () => notion().click());
+    await vi.waitFor(() =>
+      expect(
+        invoke.mock.calls.filter(([channel]) => channel === 'connectors:connect'),
+      ).toHaveLength(2),
+    );
+
+    notionStatus = 'ACTIVE';
+    await act(async () => queries.refetchQueries({ queryKey: ['connectors', 'accounts'] }));
+    await vi.waitFor(() => expect(section('Connected')).toContain('notion'));
+    await act(async () => {
+      notion().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    await act(async () => document.querySelector<HTMLElement>('[role="menuitem"]')!.click());
+    await act(async () => {
+      const dialog = document.querySelector('[role="alertdialog"]')!;
+      const disconnect = Array.from(dialog.querySelectorAll('button')).find(
+        (button) => button.textContent === '断开账户',
+      )!;
+      disconnect.click();
+    });
+    await vi.waitFor(() => expect(section('Connected')).toEqual(['gmail']));
+    expect(invoke).toHaveBeenCalledWith('connectors:disconnect', 'notion-account');
 
     const development = Array.from(host.querySelectorAll('button')).find(
       (button) => button.textContent === 'Development',

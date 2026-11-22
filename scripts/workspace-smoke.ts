@@ -78,7 +78,10 @@ app
           if (path.endsWith('/tool_router/session'))
             return Response.json({ session_id: 'smoke', mcp: { url: 'https://example.com/mcp' } });
           if (path.endsWith('/session/smoke/link'))
-            return Response.json({ redirect_url: 'https://example.com/authorize' });
+            return Response.json({
+              redirect_url: 'https://example.com/authorize',
+              connected_account_id: 'gmail-smoke',
+            });
           if (path.endsWith('/connected_accounts'))
             return Response.json({
               items: [

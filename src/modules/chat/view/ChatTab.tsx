@@ -196,7 +196,7 @@ function ChatSessionView({
   const startNewChat = () => navigate({ page: 'chat', projectId: home ? null : projectId });
   const openSession = (id: string) => navigate({ page: 'chat', projectId, sessionId: id });
   const [attachSession, chatState] = useChat(active, referenceSource, startNewChat);
-  const { chat, busy, editLast, fork } = chatState;
+  const { chat, busy, editLast, fork, askAbout } = chatState;
   const project = useWorkspaceStore((state) =>
     state.workspace.entries.find((entry) => entry.id === projectId),
   );
@@ -296,6 +296,7 @@ function ChatSessionView({
       {conversation ? (
         <ChatThread
           chat={chat}
+          onAskImage={subagent ? undefined : askAbout}
           onEditLast={subagent ? undefined : editLast}
           onFork={subagent ? undefined : fork}
           onSidechat={subagent ? undefined : sidechatFromQuote}

@@ -14,10 +14,6 @@ import {
   CommandLineIcon as SquareTerminal,
   FolderOpenIcon as FolderOpen,
   MagnifyingGlassIcon as Search,
-  MinusIcon as Minus,
-  Square2StackIcon as Restore,
-  StopIcon as Maximize,
-  XMarkIcon as X,
 } from '@heroicons/react/24/outline';
 import { Sheet, SheetContent, SheetTrigger } from '../../../ui/Sheet';
 import { useEditorSettings } from '../../../modules/preview/view';
@@ -52,7 +48,7 @@ import { pageHasDrawer } from '../../views';
 import { IconButton } from '../../../ui/IconButton';
 import { SidebarIcon } from '../../../ui/SidebarIcon';
 import { Button } from '../../../ui/Button';
-import { WindowControlButton } from '../../../ui/WindowControlButton';
+import { WindowControls as WindowControlBar } from '../../../ui/WindowControls';
 import { Kbd } from '../../../ui/Kbd';
 import { workspaceClient, useWorkspaceStore } from '../../../modules/workspace/view';
 import {
@@ -104,20 +100,12 @@ function WindowControls() {
   if (!window.delionBot || platform === 'mac') return null;
 
   return (
-    <div className="desktop-no-drag flex h-full items-center gap-2">
-      <WindowControlButton aria-label="最小化" onClick={() => window.delionBot?.window.minimize()}>
-        <Minus className="size-4" />
-      </WindowControlButton>
-      <WindowControlButton
-        aria-label={maximized ? '还原' : '最大化'}
-        onClick={() => window.delionBot?.window.toggleMaximize()}
-      >
-        {maximized ? <Restore className="-scale-x-100" /> : <Maximize />}
-      </WindowControlButton>
-      <WindowControlButton aria-label="关闭" close onClick={() => window.delionBot?.window.close()}>
-        <X className="size-4" />
-      </WindowControlButton>
-    </div>
+    <WindowControlBar
+      maximized={maximized}
+      onClose={() => window.delionBot?.window.close()}
+      onMinimize={() => window.delionBot?.window.minimize()}
+      onToggleMaximize={() => window.delionBot?.window.toggleMaximize()}
+    />
   );
 }
 

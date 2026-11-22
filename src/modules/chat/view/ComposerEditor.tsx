@@ -13,7 +13,6 @@ import {
   EditorState,
   Facet,
   Prec,
-  RangeSetBuilder,
   StateEffect,
   StateField,
   type Range,
@@ -30,9 +29,6 @@ import {
 import { cn } from '../../../ui/cn';
 import type { ConnectorApp } from '../../connectors/view';
 import { codeHighlightStyle, markdownHighlightStyle } from '../../preview/view';
-import { openLightbox } from '../../../ui/Lightbox';
-import { matchChatImageTokens } from '../../../core/protocol/chat-input';
-import { getChatMediaPreview } from './media';
 import type { ChatReference } from './drafts';
 import { matchReferenceTokens } from './reference-tokens';
 import { matchConnectorPrompts } from './connector-tokens';
@@ -45,7 +41,7 @@ type ComposerCallbacks = {
   onChange: (text: string) => void;
   onSend: () => void;
   onCaret: (text: string, caret: number) => void;
-  onFiles: (files: File[], pos: number) => void;
+  onFiles: (files: File[]) => void;
   onDropHandled?: () => void;
   onMenuKey: ComposerMenuApi['onKey'];
 };
@@ -62,83 +58,6 @@ export type ComposerEditorHandle = {
   replaceRange: (from: number, to: number, text: string) => void;
   selectionStart: () => number;
 };
-
-class InlineImageWidget extends WidgetType {
-  constructor(
-    readonly id: string,
-    readonly name: string,
-  ) {
-    super();
-  }
-
-  eq(other: InlineImageWidget) {
-    return other.id === this.id;
-  }
-
-  toDOM(view: EditorView) {
-    const wrap = document.createElement('span');
-    wrap.className = 'delion-chat-image';
-    const preview = getChatMediaPreview(this.id);
-    if (preview) {
-      const image = document.createElement('img');
-      image.src = preview;
-      image.alt = this.name;
-      image.draggable = false;
-      image.className = 'cursor-zoom-in';
-      image.addEventListener('click', () => openLightbox(preview, this.name));
-      wrap.appendChild(image);
-    } else {
-      const fallback = document.createElement('span');
-      fallback.className = 'delion-chat-image-fallback';
-      fallback.textContent = this.name || '图片';
-      wrap.appendChild(fallback);
-    }
-    const remove = document.createElement('button');
-    remove.setAttribute('aria-label', `移除图片 ${this.name || ''}`);
-    remove.textContent = '×';
-    remove.type = 'button';
-    remove.addEventListener('mousedown', (event) => event.preventDefault());
-    remove.addEventListener('click', () => {
-      const text = view.state.doc.toString();
-      const match = new RegExp(`!\\[[^\\]\\n]*\\]\\(delion-img:${this.id}\\)`).exec(text);
-      if (match)
-        view.dispatch({ changes: { from: match.index, to: match.index + match[0].length } });
-    });
-    wrap.appendChild(remove);
-    return wrap;
-  }
-
-  ignoreEvent() {
-    return true;
-  }
-}
-
-function imageDecorations(view: EditorView): DecorationSet {
-  const builder = new RangeSetBuilder<Decoration>();
-  for (const match of matchChatImageTokens(view.state.doc.toString())) {
-    const from = match.index ?? 0;
-    builder.add(
-      from,
-      from + match[0].length,
-      Decoration.replace({ widget: new InlineImageWidget(match[2]!, match[1] ?? '') }),
-    );
-  }
-  return builder.finish();
-}
-
-const imagePlugin = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-      this.decorations = imageDecorations(view);
-    }
-    update(update: ViewUpdate) {
-      if (update.docChanged || update.viewportChanged)
-        this.decorations = imageDecorations(update.view);
-    }
-  },
-  { decorations: (value) => value.decorations },
-);
 
 type ReferenceOptions = { files: ChatReference[]; connectors: readonly ConnectorApp[] };
 
@@ -273,49 +192,6 @@ const composerTheme = EditorView.theme({
     backgroundColor: 'transparent',
     color: 'inherit',
   },
-  '.delion-chat-image': {
-    position: 'relative',
-    display: 'inline-flex',
-    verticalAlign: 'bottom',
-    margin: '0.125rem 0',
-  },
-  '.delion-chat-image img': {
-    display: 'block',
-    maxHeight: '4.75rem',
-    maxWidth: '11.25rem',
-    borderRadius: 'var(--radius-window)',
-    border: '1px solid var(--line)',
-  },
-  '.delion-chat-image-fallback': {
-    display: 'inline-block',
-    maxWidth: '10rem',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    padding: '0.25rem 0.625rem',
-    borderRadius: 'var(--radius-control)',
-    border: '1px dashed var(--line)',
-    color: 'var(--ink-3)',
-    fontSize: '0.75rem',
-  },
-  '.delion-chat-image button': {
-    position: 'absolute',
-    top: '-0.4375rem',
-    right: '-0.4375rem',
-    display: 'grid',
-    placeItems: 'center',
-    width: '1rem',
-    height: '1rem',
-    borderRadius: '9999px',
-    backgroundColor: 'var(--surface)',
-    border: '1px solid var(--line)',
-    color: 'var(--ink-3)',
-    fontFamily: 'inherit',
-    fontSize: '0.6875rem',
-    lineHeight: '1',
-    cursor: 'pointer',
-  },
-  '.delion-chat-image button:hover': { color: 'var(--ink)' },
   '.cm-ref-name': { color: 'var(--accent-ink)', fontWeight: 600 },
   '.delion-ref-icon': {
     display: 'inline-flex',
@@ -357,7 +233,7 @@ export function ComposerEditor({
   onChange: (text: string) => void;
   onSend: () => void;
   onCaret: (text: string, caret: number) => void;
-  onFiles: (files: File[], pos: number) => void;
+  onFiles: (files: File[]) => void;
   onDropHandled?: () => void;
   menu: ComposerMenuApi;
   menuAria?: { open: boolean; listId: string; activeId: string | null };
@@ -388,20 +264,10 @@ export function ComposerEditor({
           markdown({ base: markdownLanguage, codeLanguages: languages }),
           EditorView.lineWrapping,
           referenceField,
-          imagePlugin,
           referencePlugin,
-          EditorView.atomicRanges.of((target) => {
-            const image = target.plugin(imagePlugin)?.decorations ?? Decoration.none;
-            const refs = target.plugin(referencePlugin)?.decorations ?? Decoration.none;
-            if (image === Decoration.none) return refs;
-            if (refs === Decoration.none) return image;
-            const ranges: Range<Decoration>[] = [];
-            for (let it = image.iter(); it.value; it.next())
-              ranges.push({ from: it.from, to: it.to, value: it.value });
-            for (let it = refs.iter(); it.value; it.next())
-              ranges.push({ from: it.from, to: it.to, value: it.value });
-            return Decoration.set(ranges, true);
-          }),
+          EditorView.atomicRanges.of(
+            (target) => target.plugin(referencePlugin)?.decorations ?? Decoration.none,
+          ),
           Prec.highest(
             keymap.of([
               { key: 'ArrowDown', run: (target) => handlers(target).onMenuKey('down') },
@@ -439,7 +305,7 @@ export function ComposerEditor({
               const files = filesFromTransfer(event.clipboardData);
               if (!files.length) return false;
               event.preventDefault();
-              handlers(target).onFiles(files, target.state.selection.main.head);
+              handlers(target).onFiles(files);
               return true;
             },
             drop: (event, target) => {
@@ -447,10 +313,7 @@ export function ComposerEditor({
               if (!files.length) return false;
               event.preventDefault();
               event.stopPropagation();
-              const pos =
-                target.posAtCoords({ x: event.clientX, y: event.clientY }) ??
-                target.state.selection.main.head;
-              handlers(target).onFiles(files, pos);
+              handlers(target).onFiles(files);
               handlers(target).onDropHandled?.();
               return true;
             },
