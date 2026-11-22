@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { skipToken, useQuery } from '@tanstack/react-query';
 import { ArrowDownTrayIcon, ArrowUpIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Dialog } from 'radix-ui';
@@ -14,8 +14,8 @@ import { useReplyImageContext } from './ReplyImageContext';
 import { fetchImagePreview, imageQuestion, type ReplyImagePreview } from './reply-images';
 import { ZoomableImage } from './ZoomableImage';
 
-const mediaSurface = 'bg-on-media/12 ring-1 ring-inset ring-on-media/5';
-const mediaButton = `${mediaSurface} size-control-md rounded-full text-on-media hover:bg-on-media/20 hover:text-on-media`;
+const viewerSurface = 'bg-surface ring-1 ring-inset ring-line';
+const viewerButton = `${viewerSurface} size-control-md rounded-full hover:bg-hover-strong`;
 
 export type ViewerImage = {
   src: string;
@@ -23,6 +23,10 @@ export type ViewerImage = {
   preview?: ImagePreview | null;
   mediaId?: string;
 };
+
+const thumbnailLimit = 9;
+const thumbnailSize = 12;
+const thumbnailGap = 2;
 
 function isBackdrop(target: EventTarget): boolean {
   return target instanceof HTMLElement && target.dataset.backdrop !== undefined;
@@ -37,12 +41,128 @@ function ViewerWindowControls() {
   if (!window.delionBot || window.delionBot.platform === 'darwin') return null;
   return (
     <WindowControls
-      className="dark -mr-4 ml-2"
+      className="-mr-4 ml-2"
       maximized={windowState.data?.maximized ?? false}
       onClose={() => window.delionBot?.window.close()}
       onMinimize={() => window.delionBot?.window.minimize()}
       onToggleMaximize={() => window.delionBot?.window.toggleMaximize()}
     />
+  );
+}
+
+function centerThumbnail(
+  rail: HTMLDivElement,
+  button: HTMLButtonElement,
+  behavior: ScrollBehavior,
+) {
+  rail.scrollTo({
+    left: button.offsetLeft + (button.offsetWidth - rail.clientWidth) / 2,
+    behavior,
+  });
+}
+
+function ImageThumbnailRail({
+  images,
+  index,
+  onIndexChange,
+}: {
+  images: ViewerImage[];
+  index: number;
+  onIndexChange?: (index: number) => void;
+}) {
+  const railRef = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ start: false, end: false });
+  const updateEdges = (rail: HTMLDivElement) => {
+    const start = rail.scrollLeft > 1;
+    const end = rail.scrollWidth - rail.clientWidth - rail.scrollLeft > 1;
+    setEdges((current) =>
+      current.start === start && current.end === end ? current : { start, end },
+    );
+  };
+  const [attachRail] = useState(() => (rail: HTMLDivElement | null) => {
+    if (!rail) return;
+    railRef.current = rail;
+    const align = () => {
+      const selected = rail.querySelector<HTMLButtonElement>('button[aria-current="true"]');
+      if (selected) centerThumbnail(rail, selected, 'instant');
+      updateEdges(rail);
+    };
+    align();
+    const observer = new ResizeObserver(align);
+    observer.observe(rail);
+    return () => {
+      observer.disconnect();
+      railRef.current = null;
+    };
+  });
+  const [selectThumbnail] = useState(() => (button: HTMLButtonElement | null) => {
+    const rail = railRef.current;
+    if (!button || !rail) return;
+    if (rail.contains(document.activeElement)) button.focus({ preventScroll: true });
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    centerThumbnail(rail, button, reduced ? 'instant' : 'smooth');
+  });
+  const width =
+    (thumbnailLimit - 1) * (thumbnailSize + thumbnailGap) +
+    (images.length > thumbnailLimit ? thumbnailGap : thumbnailSize);
+  const fade = `calc(var(--spacing) * ${thumbnailSize / 2})`;
+  const maskImage =
+    edges.start || edges.end
+      ? `linear-gradient(to right, ${edges.start ? 'transparent' : 'black'}, black ${fade}, black calc(100% - ${fade}), ${edges.end ? 'transparent' : 'black'})`
+      : undefined;
+
+  return (
+    <div
+      className="relative mt-8.5 flex w-max min-w-0 shrink-0 overflow-x-auto scrollbar-none"
+      onScroll={(event) => updateEdges(event.currentTarget)}
+      ref={attachRail}
+      style={{
+        gap: `calc(var(--spacing) * ${thumbnailGap})`,
+        maskImage,
+        maxWidth: `min(100%, calc(var(--spacing) * ${width}))`,
+      }}
+    >
+      {images.map((item, itemIndex) => {
+        const selected = itemIndex === index;
+        return (
+          <button
+            aria-current={selected || undefined}
+            aria-label={`查看第 ${itemIndex + 1} 张：${item.title}`}
+            className={cn(
+              'group shrink-0 overflow-hidden rounded-control',
+              selected && 'p-1 outline-2 -outline-offset-2 outline-ink',
+            )}
+            key={itemIndex}
+            onClick={() => onIndexChange?.(itemIndex)}
+            ref={selected ? selectThumbnail : undefined}
+            style={{ width: `calc(var(--spacing) * ${thumbnailSize})`, aspectRatio: 1 }}
+            tabIndex={selected ? 0 : -1}
+            type="button"
+          >
+            {item.preview !== undefined && (
+              <span
+                className={cn(
+                  'block size-full overflow-hidden bg-media',
+                  selected && 'rounded-chip',
+                )}
+              >
+                <img
+                  alt=""
+                  className={cn(
+                    'size-full object-cover',
+                    !selected &&
+                      'opacity-60 transition-opacity duration-fast group-hover:opacity-100',
+                  )}
+                  decoding="async"
+                  loading="lazy"
+                  src={item.preview?.url ?? item.src}
+                />
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -87,18 +207,20 @@ export function ImageViewer({
     if (event.target instanceof HTMLElement && event.target.closest('input, [contenteditable]'))
       return;
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
     const next = index + step;
-    if (step && next >= 0 && next < images.length) onIndexChange?.(next);
+    if (next >= 0 && next < images.length) onIndexChange?.(next);
   };
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className={`fixed inset-0 z-scrim bg-media ${overlayFade}`} />
+        <Dialog.Overlay className={`fixed inset-0 z-scrim bg-page ${overlayFade}`} />
         <Dialog.Content
           aria-describedby={undefined}
           aria-modal="true"
-          className="fixed inset-0 z-overlay flex flex-col items-center px-4 pb-3 pt-1.5 text-on-media outline-none [-webkit-app-region:no-drag]"
+          className="fixed inset-0 z-overlay flex flex-col items-center px-4 pb-3 pt-1.5 text-ink outline-none [-webkit-app-region:no-drag]"
           data-backdrop
           onClick={(event) => {
             if (pressedBackdrop && isBackdrop(event.target)) onClose();
@@ -111,21 +233,21 @@ export function ImageViewer({
             data-backdrop
           >
             <Dialog.Title
-              className={`${mediaSurface} flex h-10 max-w-1/2 items-center truncate rounded-full px-4 text-ui-title-3`}
+              className={`${viewerSurface} flex h-10 max-w-1/2 items-center truncate rounded-full px-4 text-ui-title-3`}
             >
               {image.title}
             </Dialog.Title>
             <div className="absolute -right-4 flex items-center gap-2 pr-4">
               <IconButton
                 aria-label="下载图片"
-                className={mediaButton}
+                className={viewerButton}
                 onClick={download}
                 size="lg"
               >
                 <ArrowDownTrayIcon />
               </IconButton>
               <Dialog.Close asChild>
-                <IconButton aria-label="关闭图片" className={mediaButton} size="lg">
+                <IconButton aria-label="关闭图片" className={viewerButton} size="lg">
                   <XMarkIcon />
                 </IconButton>
               </Dialog.Close>
@@ -143,40 +265,11 @@ export function ImageViewer({
               src={image.src}
             />
           )}
-          <p className="mt-4.5 text-ui-subhead tabular-nums text-on-media/50">
+          <p className="mt-4.5 text-ui-subhead tabular-nums text-ink-2">
             {images.length > 1 ? `${image.title} · ${index + 1} / ${images.length}` : image.title}
           </p>
           {images.length > 1 && (
-            <div className="mt-8.5 flex max-w-full shrink-0 gap-2 overflow-x-auto">
-              {images.map((item, itemIndex) => (
-                <button
-                  aria-current={itemIndex === index || undefined}
-                  aria-label={`查看第 ${itemIndex + 1} 张：${item.title}`}
-                  className={cn(
-                    'size-12 shrink-0 overflow-hidden rounded-control transition-opacity duration-fast',
-                    itemIndex === index
-                      ? 'p-1 outline-2 -outline-offset-2 outline-on-media'
-                      : 'opacity-40 hover:opacity-100',
-                  )}
-                  key={itemIndex}
-                  onClick={() => onIndexChange?.(itemIndex)}
-                  type="button"
-                >
-                  {item.preview !== undefined && (
-                    <img
-                      alt=""
-                      className={cn(
-                        'size-full object-cover',
-                        itemIndex === index ? 'rounded-chip' : 'rounded-control',
-                      )}
-                      decoding="async"
-                      loading="lazy"
-                      src={item.preview?.url ?? item.src}
-                    />
-                  )}
-                </button>
-              ))}
-            </div>
+            <ImageThumbnailRail images={images} index={index} onIndexChange={onIndexChange} />
           )}
           {footer}
         </Dialog.Content>
@@ -207,19 +300,19 @@ export function ImageQuestionForm({
 
   return (
     <form
-      className={`${mediaSurface} mt-5 flex h-control-lg w-full max-w-138 shrink-0 items-center gap-2 rounded-full pl-4 pr-2`}
+      className={`${viewerSurface} mt-5 flex h-control-lg w-full max-w-138 shrink-0 items-center gap-2 rounded-full pl-4 pr-2`}
       onSubmit={(event) => void submit(event)}
     >
       <input
         aria-label={label}
-        className="min-w-0 flex-1 bg-transparent text-ui-body text-on-media outline-none placeholder:text-on-media/40"
+        className="min-w-0 flex-1 bg-transparent text-ui-body text-ink outline-none placeholder:text-ink-2"
         onChange={(event) => setQuestion(event.target.value)}
         placeholder={label}
         value={question}
       />
       <IconButton
         aria-label="发送"
-        className="size-7 rounded-full bg-on-media text-media hover:bg-on-media hover:text-media disabled:opacity-100"
+        className="size-7 rounded-full bg-ink text-page hover:bg-ink hover:text-page disabled:opacity-100"
         disabled={!question.trim()}
         type="submit"
       >

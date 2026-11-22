@@ -8,7 +8,7 @@ function Lightbox({ src, alt, opener }: { src: string; alt?: string; opener: HTM
   return (
     <Dialog.Root open onOpenChange={(open) => !open && closeLightbox()}>
       <Dialog.Portal>
-        <Dialog.Overlay className={`fixed inset-0 z-scrim bg-media/80 ${overlayFade}`} />
+        <Dialog.Overlay className={`fixed inset-0 z-scrim bg-page/95 ${overlayFade}`} />
         <Dialog.Content
           aria-describedby={undefined}
           aria-modal="true"
@@ -28,7 +28,7 @@ function Lightbox({ src, alt, opener }: { src: string; alt?: string; opener: HTM
           <Dialog.Close asChild>
             <IconButton
               aria-label="关闭图片"
-              className="glass-clear absolute right-app top-app rounded-full text-on-media hover:text-on-media"
+              className="absolute right-app top-app rounded-full bg-surface ring-1 ring-inset ring-line hover:bg-hover-strong"
               size="lg"
             >
               <XMarkIcon />
