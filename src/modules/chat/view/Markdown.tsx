@@ -1,6 +1,6 @@
 import 'katex/dist/katex.min.css';
 
-import { createContext, use, type ComponentProps } from 'react';
+import { createContext, use, type ComponentProps, type ReactNode } from 'react';
 import { code } from '@streamdown/code';
 import { createMathPlugin } from '@streamdown/math';
 import type { MermaidConfig } from '@streamdown/mermaid';
@@ -195,32 +195,70 @@ function splitReferences(node: MarkdownNode, options: ChatReference[]): Markdown
   return parts;
 }
 
+const localFileUrl = /^(?:[a-z]:[\\/]|(?![#?]|\/\/)[^:]+$)/i;
+
 function markReferences(node: MarkdownNode, options: ChatReference[]): void {
-  if (!node.children || node.type === 'link') return;
+  if (node.type === 'link') {
+    if (node.url && localFileUrl.test(node.url))
+      node.data = { hName: 'chat-file-link', hProperties: { path: decodedImagePath(node.url) } };
+    return;
+  }
+  if (!node.children) return;
   node.children = node.children.flatMap((child) => {
     markReferences(child, options);
     return splitReferences(child, options);
   });
 }
 
-const referenceTags = { 'chat-reference': ['path'] };
+const referenceTags = { 'chat-reference': ['path'], 'chat-file-link': ['path'] };
 
 const OpenReferenceContext = createContext<(key: string) => void>(() => {});
 
-function ReferenceTag({ path }: { path: string }) {
+function FileReference({
+  path,
+  underline,
+  children,
+}: {
+  path: string;
+  underline: boolean;
+  children?: ReactNode;
+}) {
   const open = use(OpenReferenceContext);
+  const label = children ?? path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
+  const [lead, ...rest] = typeof label === 'string' ? Array.from(label) : [label];
   return (
-    <button
-      className="inline-flex cursor-pointer items-center gap-1 align-top font-semibold text-accent-ink"
+    <span
+      className={cn(
+        'cursor-pointer font-semibold text-accent-ink',
+        underline && 'border-b border-current',
+      )}
       onClick={() => open(path)}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        open(path);
+      }}
+      role="button"
+      tabIndex={0}
       title={path}
-      type="button"
     >
-      <FileIcon className="size-4 text-accent-ink" path={path} />
-      {path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1)}
-    </button>
+      <span className="whitespace-nowrap">
+        <FileIcon className="mr-1 inline size-4 align-text-bottom text-accent-ink" path={path} />
+        {lead}
+      </span>
+      {rest.join('')}
+    </span>
   );
 }
+
+const referenceComponents = {
+  'chat-reference': ({ path }: { path: string }) => <FileReference path={path} underline={false} />,
+  'chat-file-link': ({ path, children }: { path: string; children?: ReactNode }) => (
+    <FileReference path={path} underline>
+      {children}
+    </FileReference>
+  ),
+};
 
 const markdownStyles =
   '[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_li]:my-1 [&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:text-ui-title-3 [&_h1]:font-semibold [&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:text-ui-headline [&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-ui-headline [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-2 [&_th]:border [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:px-2 [&_td]:py-1 [&_code]:rounded [&_code]:bg-code [&_code]:px-1 [&_code]:py-0.5 [&_:not(pre)>code]:text-ui-callout [&_pre]:my-2 [&_pre]:rounded-control [&_pre]:bg-code [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden [&_[data-streamdown=code-block]]:gap-0 [&_[data-streamdown=code-block]]:rounded-card [&_[data-streamdown=code-block]]:border-0 [&_[data-streamdown=code-block]]:bg-code [&_[data-streamdown=code-block]]:p-0 [&_[data-streamdown=code-block-header]]:sticky [&_[data-streamdown=code-block-header]]:top-0 [&_[data-streamdown=code-block-header]]:z-10 [&_[data-streamdown=code-block-header]]:justify-start [&_[data-streamdown=code-block-header]]:rounded-t-card [&_[data-streamdown=code-block-header]]:bg-code [&_[data-streamdown=code-block-header]]:px-2 [&_[data-streamdown=code-block]>div:nth-child(2)]:-mt-8 [&_[data-streamdown=code-block]>div:nth-child(2)]:pr-3 [&_[data-streamdown=code-block]>div:nth-child(2)]:top-0 [&_[data-streamdown=code-block-body]]:rounded-none [&_[data-streamdown=code-block-body]]:border-none [&_[data-streamdown=code-block-body]]:bg-transparent [&_[data-streamdown=code-block-body]]:p-0 [&_[data-streamdown=code-block-body]_pre]:my-0 [&_[data-streamdown=code-block-body]_pre]:rounded-none [&_[data-streamdown=code-block-body]_pre]:rounded-b-card [&_[data-streamdown=code-block-actions]]:opacity-0 [&_[data-streamdown=code-block-actions]]:transition-opacity [&_[data-streamdown=code-block]:focus-within_[data-streamdown=code-block-actions]]:opacity-100 [&_[data-streamdown=code-block]:hover_[data-streamdown=code-block-actions]]:opacity-100 [&_div[data-streamdown=code-block-actions]]:border-0 [&_div[data-streamdown=code-block-actions]]:bg-transparent [&_div[data-streamdown=code-block-actions]]:p-0 [&_div[data-streamdown=code-block-actions]_button[data-streamdown=code-block-copy-button]]:rounded-control [&_div[data-streamdown=code-block-actions]_button[data-streamdown=code-block-copy-button]_svg]:size-3.5 [&_div[data-streamdown=code-block-actions]_button[data-streamdown=code-block-copy-button]:hover]:bg-hover-strong [&_[data-streamdown=unordered-list]]:list-outside [&_[data-streamdown=unordered-list]]:pl-5 [&_[data-streamdown=ordered-list]]:list-outside [&_[data-streamdown=ordered-list]]:pl-5 [&_[data-streamdown=code-block-header]_span:empty::after]:content-["txt"]';
@@ -234,7 +272,7 @@ export function ChatMarkdown({
   ...props
 }: ComponentProps<typeof Streamdown> & {
   replyImages?: boolean;
-  references?: { options: ChatReference[]; onOpen: (key: string) => void };
+  references?: { options?: ChatReference[]; onOpen: (key: string) => void };
 }) {
   const { opensLink } = useChatTabSource();
   const linkSafety: LinkSafetyConfig = { enabled: true, onLinkCheck: opensLink };
@@ -242,7 +280,9 @@ export function ChatMarkdown({
   const images = replyImages && reply !== null;
   const remarkPlugins = [
     ...(images ? [() => markReplyImages] : []),
-    ...(references ? [() => (tree: MarkdownNode) => markReferences(tree, references.options)] : []),
+    ...(references
+      ? [() => (tree: MarkdownNode) => markReferences(tree, references.options ?? [])]
+      : []),
   ];
   const allowedTags = {
     ...(images ? replyImageTags : {}),
@@ -250,7 +290,7 @@ export function ChatMarkdown({
   };
   const components = {
     ...(images ? replyComponents : chatComponents),
-    ...(references ? { 'chat-reference': ReferenceTag } : {}),
+    ...(references ? referenceComponents : {}),
   } as Components;
   return (
     <OpenReferenceContext value={references?.onOpen ?? (() => {})}>

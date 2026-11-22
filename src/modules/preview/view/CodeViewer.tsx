@@ -28,7 +28,7 @@ const viewerTheme = EditorView.theme({
   },
   '.cm-gutters': {
     borderRight: '1px solid var(--line)',
-    backgroundColor: 'var(--surface)',
+    backgroundColor: 'transparent',
     color: 'var(--ink-3)',
     paddingLeft: '1.5rem',
   },

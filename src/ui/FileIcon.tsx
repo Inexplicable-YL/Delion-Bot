@@ -49,27 +49,27 @@ const codeExtensions = new Set([
   'xml',
 ]);
 
-const iconsByExtension = new Map([
-  ['pdf', BookOpenIcon],
-  ['csv', TableCellsIcon],
-  ['tsv', TableCellsIcon],
-  ['xls', TableCellsIcon],
-  ['xlsx', TableCellsIcon],
-  ['ppt', PresentationChartBarIcon],
-  ['pptx', PresentationChartBarIcon],
-  ['zip', ArchiveBoxIcon],
-  ['7z', ArchiveBoxIcon],
-  ['rar', ArchiveBoxIcon],
-  ['tar', ArchiveBoxIcon],
-  ['gz', ArchiveBoxIcon],
-  ['mp3', MusicalNoteIcon],
-  ['wav', MusicalNoteIcon],
-  ['flac', MusicalNoteIcon],
-  ['mp4', FilmIcon],
-  ['mov', FilmIcon],
-  ['mkv', FilmIcon],
-  ['webm', FilmIcon],
-]);
+const iconsByExtension: Record<string, typeof DocumentTextIcon> = {
+  pdf: BookOpenIcon,
+  csv: TableCellsIcon,
+  tsv: TableCellsIcon,
+  xls: TableCellsIcon,
+  xlsx: TableCellsIcon,
+  ppt: PresentationChartBarIcon,
+  pptx: PresentationChartBarIcon,
+  zip: ArchiveBoxIcon,
+  '7z': ArchiveBoxIcon,
+  rar: ArchiveBoxIcon,
+  tar: ArchiveBoxIcon,
+  gz: ArchiveBoxIcon,
+  mp3: MusicalNoteIcon,
+  wav: MusicalNoteIcon,
+  flac: MusicalNoteIcon,
+  mp4: FilmIcon,
+  mov: FilmIcon,
+  mkv: FilmIcon,
+  webm: FilmIcon,
+};
 
 export function FileIcon({ path, className }: { path: string; className?: string }) {
   const base = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
@@ -79,6 +79,8 @@ export function FileIcon({ path, className }: { path: string; className?: string
     ? PhotoIcon
     : codeExtensions.has(extension)
       ? CodeBracketSquareIcon
-      : (iconsByExtension.get(extension) ?? DocumentTextIcon);
+      : Object.hasOwn(iconsByExtension, extension)
+        ? iconsByExtension[extension]!
+        : DocumentTextIcon;
   return <Icon aria-hidden className={cn('size-3.5 shrink-0 text-ink-2', className)} />;
 }

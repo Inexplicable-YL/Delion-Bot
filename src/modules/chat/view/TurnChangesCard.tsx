@@ -18,19 +18,17 @@ function TurnFileRow({
   sessionId,
   turnId,
   file,
-  reviewEnabled,
 }: {
   sessionId: string;
   turnId: string;
   file: FileChangeSummary;
-  reviewEnabled: boolean;
 }) {
   const { workbench } = useChatTabSource();
   const fail = (cause: unknown) =>
     showToast({ variant: 'error', title: '打开失败', description: errorMessage(cause) });
   return (
     <ChangedFile
-      counts={reviewEnabled ? (file.stat ?? undefined) : undefined}
+      counts={file.stat ?? undefined}
       deleted={file.status === 'deleted'}
       directory={dirnameOf(file.path)}
       name={basenameOf(file.path)}
@@ -40,13 +38,10 @@ function TurnFileRow({
           .then((absolute) => workbench.openDocument(absolute, { aside: true }))
           .catch(fail);
       }}
-      onReview={
-        reviewEnabled
-          ? () =>
-              workbench.open(reviewTabId({ kind: 'turn', sessionId, turnId, path: file.path }), {
-                aside: true,
-              })
-          : undefined
+      onReview={() =>
+        workbench.open(reviewTabId({ kind: 'turn', sessionId, turnId, path: file.path }), {
+          aside: true,
+        })
       }
       openWith={[
         {
@@ -67,19 +62,10 @@ function TurnFileRow({
   );
 }
 
-export function TurnChangesCard({
-  sessionId,
-  turnId,
-  reviewEnabled,
-}: {
-  sessionId: string;
-  turnId: string;
-  reviewEnabled: boolean;
-}) {
+export function TurnChangesCard({ sessionId, turnId }: { sessionId: string; turnId: string }) {
   const { data: record } = useQuery({
-    queryKey: ['chat', 'turn-changes', sessionId, turnId, reviewEnabled],
-    queryFn: () =>
-      agentClient['read-turn-changes']({ sessionId, turnId, includeStats: reviewEnabled }),
+    queryKey: ['chat', 'turn-changes', sessionId, turnId],
+    queryFn: () => agentClient['read-turn-changes']({ sessionId, turnId, includeStats: true }),
     staleTime: Infinity,
   });
 
@@ -94,7 +80,7 @@ export function TurnChangesCard({
   );
   return (
     <ChangesCard
-      counts={reviewEnabled ? total : undefined}
+      counts={total}
       fileCount={record.files.length}
       warning={
         record.state === 'partial' && record.warnings.length > 0
@@ -105,13 +91,7 @@ export function TurnChangesCard({
       }
     >
       {record.files.map((file) => (
-        <TurnFileRow
-          file={file}
-          key={file.path}
-          reviewEnabled={reviewEnabled}
-          sessionId={sessionId}
-          turnId={turnId}
-        />
+        <TurnFileRow file={file} key={file.path} sessionId={sessionId} turnId={turnId} />
       ))}
     </ChangesCard>
   );

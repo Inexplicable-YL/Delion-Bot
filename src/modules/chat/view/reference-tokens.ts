@@ -93,6 +93,15 @@ export function sourceReferences(sources: { key: string }[]): ChatReference[] {
   });
 }
 
+export function fileLinkKey(path: string, cwd: string | null, remoteProjectId: string | null) {
+  const absolute =
+    !cwd || /^(?:[a-z]:[\\/]|[\\/])/i.test(path)
+      ? path
+      : `${cwd.replace(/[\\/]+$/, '')}/${path.replace(/^\.[\\/]/, '')}`;
+  if (remoteProjectId) return `${remoteProjectId}:${absolute}`;
+  return /^[a-z]:[\\/]/i.test(absolute) ? absolute.replaceAll('/', '\\') : absolute;
+}
+
 const pad = (value: number) => String(value).padStart(2, '0');
 
 export function sessionReferences(

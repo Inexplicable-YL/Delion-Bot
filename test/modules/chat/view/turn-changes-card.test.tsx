@@ -3,7 +3,7 @@ import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { FileChangeDetail, TurnChanges } from '../../../../src/core/protocol/agent';
+import type { TurnChanges } from '../../../../src/core/protocol/agent';
 
 const { api, delion } = vi.hoisted(() => {
   const api = {
@@ -13,13 +13,6 @@ const { api, delion } = vi.hoisted(() => {
         turnId: string;
         includeStats: boolean;
       }) => Promise<TurnChanges | null>
-    >(async () => null),
-    'agent:read-turn-file-change': vi.fn<
-      (input: {
-        sessionId: string;
-        turnId: string;
-        path: string;
-      }) => Promise<FileChangeDetail | null>
     >(async () => null),
     'chat:locateFile': vi.fn<(input: { sessionId: string; path: string }) => Promise<string>>(
       async () => 'E:\\workspace\\Test\\src\\app.ts',
@@ -65,7 +58,7 @@ function turnFixture(overrides: Partial<TurnChanges> = {}): TurnChanges {
 let host: HTMLDivElement;
 let root: Root;
 
-async function renderCard(sessionId2: string, turnId: string, reviewEnabled = true) {
+async function renderCard(sessionId2: string, turnId: string) {
   await act(async () =>
     root.render(
       <QueryClientProvider
@@ -74,7 +67,7 @@ async function renderCard(sessionId2: string, turnId: string, reviewEnabled = tr
         <ChatTabSourceProvider
           source={{ navigate: () => false, workbench, opensLink: () => false }}
         >
-          <TurnChangesCard sessionId={sessionId2} turnId={turnId} reviewEnabled={reviewEnabled} />
+          <TurnChangesCard sessionId={sessionId2} turnId={turnId} />
         </ChatTabSourceProvider>
       </QueryClientProvider>,
     ),
@@ -130,29 +123,4 @@ it('审阅与打开按解析出的标签键落位，已删除文件的打开被�
 
   const deletedOpen = host.querySelector<HTMLButtonElement>('[title="文件已删除"]')!;
   expect(deletedOpen.disabled).toBe(true);
-});
-
-it('随聊只列文件并提供打开，不读取 diff 详情或显示审阅与行数', async () => {
-  const turn = turnFixture();
-  api['agent:read-turn-changes'].mockImplementation(async () => turn);
-  await renderCard(sessionId, turn.turnId, false);
-  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-expanded]')!.click());
-
-  expect(host.querySelectorAll('li')).toHaveLength(2);
-  expect(host.textContent).not.toContain('+2');
-  expect(api['agent:read-turn-file-change']).not.toHaveBeenCalled();
-  expect(api['agent:read-turn-changes']).toHaveBeenCalledWith({
-    sessionId,
-    turnId: turn.turnId,
-    includeStats: false,
-  });
-  expect(host.querySelectorAll('[aria-label="选择打开方式"]')).toHaveLength(2);
-
-  await act(async () =>
-    host.querySelector<HTMLButtonElement>('[title="在 Delion Bot 中打开"]')!.click(),
-  );
-  expect(api['chat:locateFile']).toHaveBeenCalledWith({ sessionId, path: 'src/app.ts' });
-  expect(workbench.openDocument).toHaveBeenCalledWith('E:\\workspace\\Test\\src\\app.ts', {
-    aside: true,
-  });
 });

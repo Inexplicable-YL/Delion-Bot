@@ -1,4 +1,5 @@
 import { useRef, useState, type RefObject } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import {
   defaultKeymap,
   history,
@@ -27,6 +28,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import { cn } from '../../../ui/cn';
+import { FileIcon } from '../../../ui/FileIcon';
 import type { ConnectorApp } from '../../connectors/view';
 import { codeHighlightStyle, markdownHighlightStyle } from '../../preview/view';
 import type { ChatReference } from './drafts';
@@ -71,10 +73,6 @@ const referenceField = StateField.define<ReferenceOptions>({
   },
 });
 
-const FILE_ICON_SVG =
-  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
-  'stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>';
-
 const SESSION_ICON_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
   'stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
@@ -94,7 +92,9 @@ class ReferenceIconWidget extends WidgetType {
     span.className = 'delion-ref-icon';
     span.setAttribute('aria-hidden', 'true');
     span.title = this.title;
-    span.innerHTML = this.session ? SESSION_ICON_SVG : FILE_ICON_SVG;
+    span.innerHTML = this.session
+      ? SESSION_ICON_SVG
+      : renderToStaticMarkup(<FileIcon className="size-4 text-accent-ink" path={this.title} />);
     return span;
   }
 }
@@ -139,6 +139,7 @@ function referenceDecorations(view: EditorView): DecorationSet {
     const split = ref.session ? -1 : ref.title.lastIndexOf('/');
     const nameStart = start + 1 + (split < 0 ? 0 : split + 1);
     ranges.push(
+      Decoration.mark({ class: 'cm-ref-lead' }).range(start, Math.min(nameStart + 1, end)),
       Decoration.replace({ widget: new ReferenceIconWidget(ref.title, ref.session) }).range(
         start,
         nameStart,
@@ -192,12 +193,13 @@ const composerTheme = EditorView.theme({
     backgroundColor: 'transparent',
     color: 'inherit',
   },
+  '.cm-ref-lead': { whiteSpace: 'nowrap' },
   '.cm-ref-name': { color: 'var(--accent-ink)', fontWeight: 600 },
   '.delion-ref-icon': {
     display: 'inline-flex',
     alignItems: 'center',
-    marginRight: '0.125rem',
-    color: 'var(--ink-2)',
+    marginRight: '0.25rem',
+    color: 'var(--accent-ink)',
     verticalAlign: '-0.125em',
   },
   '.delion-ref-icon svg': { width: '1em', height: '1em' },

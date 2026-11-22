@@ -42,7 +42,8 @@ import { ReplyImageContext, useReplyImageContext } from './ReplyImageContext';
 import { ImageQuestionForm, ImageViewer } from './ReplyImageViewer';
 import { chatMediaUrl } from './reply-images';
 import { chatClient } from './client';
-import { matchReferenceTokens, sourceReferences } from './reference-tokens';
+import { fileLinkKey, matchReferenceTokens, sourceReferences } from './reference-tokens';
+import { useWorkspaceStore } from '../../workspace/view';
 
 const textAnimation = { animation: 'fadeIn', sep: 'char' } as const;
 
@@ -247,10 +248,11 @@ function AssistantMessage({
   animate,
   activeTool,
   sessionId,
-  reviewEnabled,
+  showTurnChanges,
   onSaveNote,
   onFork,
   onRetry,
+  onOpenFile,
 }: {
   message: WorkspaceChat['messages'][number];
   live: boolean;
@@ -258,10 +260,11 @@ function AssistantMessage({
   animate: boolean;
   activeTool: string | undefined;
   sessionId: string | null;
-  reviewEnabled: boolean;
+  showTurnChanges: boolean;
   onSaveNote: ((text: string) => void) | undefined;
   onFork: ((entryId: string) => void) | undefined;
   onRetry: (() => void) | undefined;
+  onOpenFile: ((path: string) => void) | undefined;
 }) {
   const reduced = useMediaQuery('(prefers-reduced-motion: reduce)');
   const split = splitInterrupt(message.parts ?? []);
@@ -292,6 +295,7 @@ function AssistantMessage({
             mode={live ? 'streaming' : 'static'}
             isAnimating={live && !activeTool}
             animated={live && animate && !reduced ? textAnimation : false}
+            references={onOpenFile && { onOpen: onOpenFile }}
             replyImages
           >
             {text}
@@ -300,12 +304,8 @@ function AssistantMessage({
       />
       {reason && <ErrorCard onRetry={onRetry} reason={reason} />}
       {message.stopped && !live && <p className="my-2 text-ui-body text-ink-2">已停止</p>}
-      {!live && turnEnd && sessionId && message.turnId && (
-        <TurnChangesCard
-          sessionId={sessionId}
-          turnId={message.turnId}
-          reviewEnabled={reviewEnabled}
-        />
+      {showTurnChanges && !live && turnEnd && sessionId && message.turnId && (
+        <TurnChangesCard sessionId={sessionId} turnId={message.turnId} />
       )}
       {!live && (content || Boolean(message.toolResults?.length)) && (
         <MessageActions className="mt-1 has-[[data-slot=popover-trigger]]:opacity-100">
@@ -385,6 +385,13 @@ export function ChatThread({
   onFork?: (entryId: string) => void;
 }) {
   const replyDraftKey = draftKey === undefined ? chat.sessionId : draftKey;
+  const remoteProject = useWorkspaceStore((state) =>
+    state.workspace.entries.some((entry) => entry.id === chat.projectId && entry.remoteId),
+  );
+  const openFile =
+    onOpenSource &&
+    ((path: string) =>
+      onOpenSource(fileLinkKey(path, chat.cwd, remoteProject ? chat.projectId : null)));
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [scroll] = useState(() => {
@@ -524,7 +531,7 @@ export function ChatThread({
                 <AssistantMessage
                   key={`${chat.sessionId}:${index}`}
                   sessionId={chat.sessionId}
-                  reviewEnabled={chat.projectId != null}
+                  showTurnChanges={chat.projectId !== null}
                   onRetry={index === messages.length - 1 && !streaming ? retry : undefined}
                   live={streaming && index === messages.length - 1}
                   turnEnd={message.turnId !== undefined && turnEnds.get(message.turnId) === index}
@@ -533,6 +540,7 @@ export function ChatThread({
                   activeTool={chat.activeTool}
                   onSaveNote={onSaveNote}
                   onFork={streaming ? undefined : onFork}
+                  onOpenFile={openFile}
                 />
               ),
             )}

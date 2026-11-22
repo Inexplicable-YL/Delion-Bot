@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { WorkspaceEntry } from '../../../../src/modules/workspace/contract';
 import type { ChatReference } from '../../../../src/modules/chat/view/drafts';
 import {
+  fileLinkKey,
   matchReferenceTokens,
   referenceCandidates,
   referenceContext,
@@ -213,5 +214,19 @@ describe('# 会话引用', () => {
     expect(referenceContext('对比 #怎么复习？ 和 #期中 整理。', refs)).toEqual([refs[0], refs[1]]);
     expect(matchReferenceTokens('# 怎么复习？\n学 C#怎么复习？', refs)).toEqual([]);
     expect(matchReferenceTokens('#怎么复习？。', refs)).toMatchObject([{ start: 0, end: 6 }]);
+  });
+});
+
+describe('fileLinkKey', () => {
+  const win = (...parts: string[]) => parts.join(String.fromCharCode(92));
+
+  it('相对路径按会话目录解析，Windows 目录统一为反斜杠', () => {
+    expect(fileLinkKey('./src/a.ts', '/home/me/proj', null)).toBe('/home/me/proj/src/a.ts');
+    expect(fileLinkKey('src/a.ts', win('C:', 'proj'), null)).toBe(win('C:', 'proj', 'src', 'a.ts'));
+    expect(fileLinkKey(win('D:', 'x.md'), '/home/me/proj', null)).toBe(win('D:', 'x.md'));
+  });
+
+  it('远端项目返回远端节点 id', () => {
+    expect(fileLinkKey('a.ts', '/srv/proj', 'project-1')).toBe('project-1:/srv/proj/a.ts');
   });
 });

@@ -20,6 +20,8 @@ const tokenStyle = {
 
 const reviewTokenStyle = {
   ...tokenStyle,
+  '--diffs-light-bg': 'transparent',
+  '--diffs-dark-bg': 'transparent',
   '--diffs-font-size': 'var(--text-ui-body)',
   '--diffs-line-height': 'calc(var(--spacing) * 6)',
 } as CSSProperties;

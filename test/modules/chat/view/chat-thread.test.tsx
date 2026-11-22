@@ -89,13 +89,17 @@ it('整轮失败显示错误卡与重试，重试以原文重发', async () => {
   expect(onEditLast).toHaveBeenCalledWith('检查滚动', undefined);
 });
 
-it('插队把一轮切成多段回复时，本轮改动卡片只挂在最后一段', async () => {
+it.each([
+  { projectId: 'project-1', count: 1 },
+  { projectId: null, count: 0 },
+])('插队切成多段时，项目 $projectId 的回复显示 $count 张改动卡片', async ({ projectId, count }) => {
   const turnId = 'turn-1';
   await act(async () =>
     root.render(
       <ChatThread
         chat={{
           ...chat,
+          projectId,
           running: false,
           messages: [
             { role: 'user', content: '先做 A', turnId },
@@ -122,8 +126,8 @@ it('插队把一轮切成多段回复时，本轮改动卡片只挂在最后一�
     ),
   );
   const cards = [...host.querySelectorAll('[data-turn-card]')];
-  expect(cards).toHaveLength(1);
-  expect(cards[0]!.parentElement!.textContent).toContain('A 和 B 都做完了');
+  expect(cards).toHaveLength(count);
+  if (count) expect(cards[0]!.parentElement!.textContent).toContain('A 和 B 都做完了');
 });
 
 it('在回复操作栏左侧显示来源，点击可打开来源链接列表', async () => {

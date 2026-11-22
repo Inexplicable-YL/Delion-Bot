@@ -149,8 +149,25 @@ it('用户消息里的 @ 文件引用渲染为可点击的链接并打开源文�
     );
   });
 
-  const link = host.querySelector('button');
+  const link = host.querySelector<HTMLElement>('[role=button]');
   expect(link?.textContent).toBe('slope.jpg');
   await act(async () => link?.click());
   expect(onOpen).toHaveBeenCalledWith(key);
+});
+
+it('回复里指向本地文件的链接渲染为文件引用，网页链接保持原样', async () => {
+  const onOpen = vi.fn();
+  await act(async () => {
+    root.render(
+      <ChatMarkdown references={{ onOpen }}>
+        {'见 [winter.py](<scripts/winter demo/winter.py>) 与 [文档](https://example.com)'}
+      </ChatMarkdown>,
+    );
+  });
+
+  const file = host.querySelector<HTMLElement>('[role=button]');
+  expect(file?.textContent).toBe('winter.py');
+  expect(host.querySelector('[data-streamdown=link]')?.textContent).toBe('文档');
+  await act(async () => file?.click());
+  expect(onOpen).toHaveBeenCalledWith('scripts/winter demo/winter.py');
 });

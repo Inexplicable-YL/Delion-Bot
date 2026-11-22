@@ -36,7 +36,7 @@ const editorTheme = EditorView.theme({
   '.cm-scroller:has(.cm-gutters)': { paddingLeft: '0' },
   '.cm-gutters': {
     border: 'none',
-    backgroundColor: 'var(--surface)',
+    backgroundColor: 'transparent',
     color: 'var(--ink-3)',
     paddingLeft: '1.5rem',
   },
