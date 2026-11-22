@@ -10,6 +10,7 @@ import { cn } from '../../../ui/cn';
 import { useSessionRunStatus } from '../../../modules/chat/view';
 import { navSubRow, rowActions, rowStatus } from './nav-styles';
 import { SessionMenu } from './SessionMenu';
+import { useNavigationStore } from './view';
 
 export interface NavSessionSummary {
   id: string;
@@ -71,7 +72,11 @@ export function SessionRow({
           <button
             aria-current={active ? 'page' : undefined}
             className="flex min-w-0 flex-1 items-center gap-2 rounded-chip text-left"
-            onClick={() => onOpen(session.id)}
+            onClick={() => {
+              if (session.archived)
+                useNavigationStore.getState().requestChatRestore(session.id, projectId, title);
+              else onOpen(session.id);
+            }}
             type="button"
           >
             {visual && (

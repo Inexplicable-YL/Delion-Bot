@@ -1,10 +1,25 @@
-import type { WorkspaceEntry } from '../../../modules/workspace/contract';
+import {
+  workspaceArchiveId,
+  type WorkspaceEntry,
+  type WorkspaceState,
+} from '../../../modules/workspace/contract';
 
 function isInside(path: string, base: string): boolean {
   const windows = /^(?:[a-z]:[\\/]|\\\\)/i.test(base);
   const normalize = (value: string) =>
     windows ? value.replaceAll('\\', '/').toLowerCase() : value;
   return normalize(path).startsWith(normalize(base).replace(/\/+$/, '') + '/');
+}
+
+export function archivedDocumentOf(
+  { entries, archivePath }: WorkspaceState,
+  key: string,
+): { id: string; name: string } | undefined {
+  const entry = entries.find((item) => item.id === key);
+  if (entry?.parentId === workspaceArchiveId) return entry;
+  const path = entry?.path ?? key;
+  if (archivePath && isInside(path, archivePath))
+    return entry ?? { id: key, name: path.split(/[\\/]/).at(-1)! };
 }
 
 export function libraryEntriesOf(entries: WorkspaceEntry[], libraryRoot: string): WorkspaceEntry[] {

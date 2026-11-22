@@ -6,7 +6,8 @@ import {
 } from '../../../modules/workspace/contract';
 import { sourceTitle } from '../../views';
 import { useNoteDrafts } from '../../../modules/note/view';
-import { useWorkbenchLayout } from '../workbench/layout-store';
+import { closeTabEverywhere, useWorkbenchLayout } from '../workbench/layout-store';
+import { walkGroups } from '../workbench/layout-schema';
 import { useTreeState } from '../navigation/store';
 import { localPathsOf, workspaceClient, useWorkspaceStore } from '../../../modules/workspace/view';
 import { showToast } from '../../../ui/Toast';
@@ -99,7 +100,15 @@ export function importFromDialog(parentId: string | null) {
 
 export function archiveEntry(id: string, onArchived?: () => void) {
   void runEntryWork(async () => {
-    await updateEntry(id, { parentId: workspaceArchiveId });
+    const { id: archivedId, toPath } = await updateEntry(id, { parentId: workspaceArchiveId });
+    for (const group of walkGroups(useWorkbenchLayout.getState().root)) {
+      for (const tab of group.tabs) {
+        if (!tab.startsWith('note:') && !tab.startsWith('preview:')) continue;
+        const key = tab.slice(tab.indexOf(':') + 1);
+        if (key === archivedId || (toPath && relocateWorkspacePath(key, toPath, '') !== key))
+          closeTabEverywhere(tab);
+      }
+    }
     await useWorkspaceStore.getState().refresh();
     onArchived?.();
   });

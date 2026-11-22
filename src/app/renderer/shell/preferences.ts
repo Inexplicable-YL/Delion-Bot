@@ -23,13 +23,13 @@ const defaults = {
   chatList: {
     collapsed: false,
     sort: 'updated',
-    status: 'all',
+    status: 'active',
     activityDays: 0,
   } as NavListPreference<ChatListSort>,
   projectList: {
     collapsed: false,
     sort: 'updated',
-    status: 'all',
+    status: 'active',
     activityDays: 0,
   } as NavListPreference<ProjectListSort>,
   remoteLastDirectory: {} as Record<string, string>,

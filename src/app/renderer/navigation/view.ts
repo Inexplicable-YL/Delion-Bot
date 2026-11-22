@@ -1,5 +1,10 @@
 import { create } from 'zustand';
-import { agentClient, type HomeChatRequest, useSessions } from '../../../modules/chat/view';
+import {
+  agentClient,
+  type HomeChatRequest,
+  updateSession,
+  useSessions,
+} from '../../../modules/chat/view';
 import { useWorkbenchLayout } from '../workbench/layout-store';
 import { useEntryDialog } from '../workspace/entry-dialog-store';
 import { useMobileDrawer } from '../shell/mobile-drawer';
@@ -12,6 +17,8 @@ import { showToast } from '../../../ui/Toast';
 import type { NavTarget, NavTargets } from '../../module';
 import { pageOf, views } from '../../views';
 import { errorMessage } from '../../../core/protocol/contract';
+import { updateEntry } from '../workspace/entry-actions';
+import { archivedDocumentOf } from '../workspace/library-entries';
 
 export type ShellView = 'home' | 'workbench' | 'settings';
 
@@ -20,6 +27,12 @@ type ShellTarget = 'projects' | 'chat' | 'sources' | 'settings';
 export type AppView = ShellView | Exclude<keyof NavTargets, ShellTarget>;
 
 const projectStorageKey = 'delion.workspace.project';
+
+type RestoreRequest = {
+  kind: 'document' | 'chat';
+  title: string;
+  restore: () => Promise<() => void>;
+};
 
 interface NavigationState {
   view: AppView;
@@ -30,6 +43,9 @@ interface NavigationState {
   settingsSection: SettingsSectionId;
   generalChat: HomeChatRequest | null;
   homeSeq: number;
+  restoreRequest: RestoreRequest | null;
+  requestDocumentRestore(key: string, open: (id: string) => void): boolean;
+  requestChatRestore(sessionId: string, projectId: string | null, title: string): void;
   navigate(next: ShellView | NavTarget): boolean;
   goBack(): boolean;
   goForward(): boolean;
@@ -99,6 +115,37 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
     settingsSection: 'general',
     generalChat: null,
     homeSeq: 0,
+    restoreRequest: null,
+
+    requestDocumentRestore: (key, open) => {
+      const entry = archivedDocumentOf(useWorkspaceStore.getState().workspace, key);
+      if (!entry) return false;
+      set({
+        restoreRequest: {
+          kind: 'document',
+          title: entry.name,
+          restore: async () => {
+            const { id } = await updateEntry(entry.id, { parentId: null });
+            await useWorkspaceStore.getState().refresh();
+            return () => open(id);
+          },
+        },
+      });
+      return true;
+    },
+
+    requestChatRestore: (sessionId, projectId, title) => {
+      set({
+        restoreRequest: {
+          kind: 'chat',
+          title: title || '新对话',
+          restore: async () => {
+            await updateSession(sessionId, { archived: false });
+            return () => void get().openChat(sessionId, projectId);
+          },
+        },
+      });
+    },
 
     navigate: (next) => {
       if (typeof next !== 'string') {
@@ -176,6 +223,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
     },
 
     openProject: (id) => {
+      if (get().requestDocumentRestore(id, (restored) => get().openProject(restored))) return false;
       const next = id || null;
       const fromWorkbench = get().view === 'workbench';
       if (!get().navigate('workbench')) return false;
@@ -230,8 +278,10 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
 
     openChatTab: (sessionId, projectId) => revealInProject(`chat:${sessionId}`, projectId),
 
-    openDocument: (key, options) =>
-      revealInProject(documentTabId(key), get().projectId, options?.keep),
+    openDocument: (key, options) => {
+      if (get().requestDocumentRestore(key, (id) => get().openDocument(id, options))) return false;
+      return revealInProject(documentTabId(key), get().projectId, options?.keep);
+    },
     openTerminal: (projectId) => revealInProject(`terminal:${projectId}`, projectId),
 
     openSettings: (section) => {

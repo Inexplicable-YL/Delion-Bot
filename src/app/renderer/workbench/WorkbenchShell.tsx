@@ -180,15 +180,27 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
     if (element && loaded) void useWorkbenchLayout.getState().init(projectId);
   };
 
+  const openWorkbenchTarget = (tab: TabId, options?: { aside?: boolean }) => {
+    const key = tabDocumentKey(tab);
+    if (
+      key &&
+      useNavigationStore
+        .getState()
+        .requestDocumentRestore(key, (id) => openTarget(documentTabId(id), options))
+    )
+      return;
+    openTarget(tab, options);
+  };
+
   const chatSource: ChatTabSource = {
     referenceSource,
     navigate: (target) => useNavigationStore.getState().navigate(target),
     onCreateProject: () => useNavigationStore.getState().newProject(),
     workbench: {
-      open: (tab, options) => openTarget(tab, options),
+      open: openWorkbenchTarget,
       openDocument: (key, options) =>
         options?.aside
-          ? openTarget(documentTabId(key), { aside: true })
+          ? openWorkbenchTarget(documentTabId(key), { aside: true })
           : void useNavigationStore.getState().openDocument(key),
       close: closeTabEverywhere,
     },
@@ -296,7 +308,7 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
                     onAction={openDialog}
                     onCreated={onCreated}
                     onOpenDocument={(key) => void useNavigationStore.getState().openDocument(key)}
-                    onOpenToSide={(key) => openTarget(documentTabId(key), { aside: true })}
+                    onOpenToSide={(key) => openWorkbenchTarget(documentTabId(key), { aside: true })}
                     projectId={projectId}
                   />
                   <Workbench bindings={bindings} onNewChat={newChatInCurrentPool} />

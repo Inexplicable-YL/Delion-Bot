@@ -412,6 +412,22 @@ describe('归档文件夹', () => {
     getWorkspaceState();
     expect(entry(workspaceArchiveId).path).toBe(archivePath());
   });
+
+  it('恢复以文件路径标识的归档笔记时，将笔记移回资料库根目录', () => {
+    seedArchive();
+    getWorkspaceState();
+    const from = join(archivePath(), '笔记.md');
+    writeFileSync(from, '归档内容');
+
+    const to = join(workspaceRoot(), '笔记.md');
+    expect(updateWorkspaceEntry(from, { parentId: null })).toEqual({
+      id: to,
+      fromPath: from,
+      toPath: to,
+    });
+    expect(existsSync(from)).toBe(false);
+    expect(readFileSync(to, 'utf8')).toBe('归档内容');
+  });
 });
 
 describe('saveNoteImage / resolveWorkspaceAsset', () => {

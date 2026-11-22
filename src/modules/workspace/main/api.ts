@@ -595,7 +595,7 @@ export function updateWorkspaceEntry(id: string, input: unknown): WorkspaceEntry
   const parentId = parsed.parentId === undefined ? current.parentId : parsed.parentId;
   let to = from;
   if (name !== current.name || parsed.parentId !== undefined) {
-    const parent = parentId === current.parentId ? dirname(from) : containerPath(parentId);
+    const parent = parsed.parentId === undefined ? dirname(from) : containerPath(parentId);
     to = availablePath(parent, name, statSync(from).isDirectory());
     if (parent === dirname(from) && name === current.name) to = from;
     const move: PendingMove = {

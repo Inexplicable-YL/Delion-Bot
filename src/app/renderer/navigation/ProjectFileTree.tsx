@@ -303,7 +303,8 @@ export function ProjectFileTree({
     <DropdownMenuItem
       onSelect={() => {
         rememberResult(id);
-        onOpenToSide?.(id);
+        if (archived) afterMenuClose.defer(() => onOpenToSide?.(id));
+        else onOpenToSide?.(id);
       }}
     >
       <PanelRightOpen />
@@ -448,14 +449,23 @@ export function ProjectFileTree({
                       <FolderOpen />
                       在文件夹中显示
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        runFileCommand('打开失败', () => workspaceClient.openFile(item.id))
-                      }
-                    >
-                      <ExternalLink />
-                      用系统默认程序打开
-                    </DropdownMenuItem>
+                    {archived ? (
+                      <DropdownMenuItem
+                        onSelect={() => afterMenuClose.defer(() => selectNode(item.id))}
+                      >
+                        <Archive />
+                        恢复并打开
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          runFileCommand('打开失败', () => workspaceClient.openFile(item.id))
+                        }
+                      >
+                        <ExternalLink />
+                        用系统默认程序打开
+                      </DropdownMenuItem>
+                    )}
                   </>
                 )}
                 {onOpenToSide && openToSideItem(item.id)}

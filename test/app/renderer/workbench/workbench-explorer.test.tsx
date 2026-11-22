@@ -3,7 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import type { WorkspaceEntry, WorkspaceState } from '../../../../src/modules/workspace/contract';
+import {
+  workspaceArchiveId,
+  type WorkspaceEntry,
+  type WorkspaceState,
+} from '../../../../src/modules/workspace/contract';
 
 const { api, desktop } = vi.hoisted(() => {
   const handlers: Record<string, (input: never) => unknown> = {};
@@ -19,7 +23,11 @@ const { api, desktop } = vi.hoisted(() => {
   return { api: handlers, desktop };
 });
 import { useTreeState } from '../../../../src/app/renderer/navigation/store';
+import { useNavigationStore } from '../../../../src/app/renderer/navigation/view';
+import { RestoreDialog } from '../../../../src/app/renderer/navigation/RestoreDialog';
 import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
+import { createDefaultLayout } from '../../../../src/app/renderer/workbench/layout-schema';
+import { useWorkbenchLayout } from '../../../../src/app/renderer/workbench/layout-store';
 
 const mediaStub = () => ({
   matches: false,
@@ -93,7 +101,15 @@ beforeEach(() => {
   root = createRoot(container);
   delete window.delionBot;
   for (const name of Object.keys(api)) delete api[name];
-  useWorkspaceStore.setState({ workspace, loaded: true, error: null });
+  useWorkspaceStore.setState({
+    workspace,
+    overview: null,
+    directories: {},
+    loaded: true,
+    error: null,
+  });
+  useNavigationStore.setState({ view: 'home', projectId: null, restoreRequest: null });
+  useWorkbenchLayout.setState({ ...createDefaultLayout(), projectId: null, ready: false });
   useTreeState.setState({ expanded: [], query: '', selected: null, pendingCreate: null });
 });
 
@@ -119,10 +135,11 @@ async function render(projectId: string | null, activeDocKey: string | null = nu
           activeTab={null}
           onAction={onAction}
           onCreated={onCreated}
-          onOpenDocument={() => {}}
+          onOpenDocument={(key) => void useNavigationStore.getState().openDocument(key)}
           onOpenToSide={() => {}}
           projectId={projectId}
         />
+        <RestoreDialog />
       </QueryClientProvider>,
     ),
   );
@@ -187,6 +204,55 @@ const treeRow = (label: string) =>
   [...document.querySelectorAll('[role="treeitem"]')].find(
     (el) => el.getAttribute('aria-label') === label,
   );
+
+it('asks before opening an archived file and opens its restored path after confirmation', async () => {
+  const archivePath = 'D:/delion/workspace/归档';
+  const archived: WorkspaceEntry = {
+    id: `${archivePath}/归档笔记.md`,
+    path: `${archivePath}/归档笔记.md`,
+    name: '归档笔记.md',
+    kind: 'file',
+    parentId: workspaceArchiveId,
+    sourceId: null,
+    updatedAt: localProject.updatedAt,
+  };
+  const restoredPath = 'D:/delion/workspace/归档笔记.md';
+  const restored: WorkspaceEntry = {
+    ...archived,
+    id: restoredPath,
+    path: restoredPath,
+    parentId: null,
+  };
+  const before: WorkspaceState = { ...workspace, archivePath };
+  const update = vi.fn(() => ({ id: restored.id, fromPath: archived.path, toPath: restored.path }));
+  api.listLocalDirectory = (id) =>
+    id === workspaceArchiveId && !update.mock.calls.length ? [archived] : [];
+  api.update = update;
+  api.state = () => ({ ...before, entries: [...before.entries, restored] });
+  window.delionBot = desktop;
+  useWorkspaceStore.setState({ workspace: before, overview: before, directories: {} });
+  useNavigationStore.setState({ view: 'workbench', projectId: null, restoreRequest: null });
+  useWorkbenchLayout.setState({ ...createDefaultLayout(), projectId: null, ready: true });
+  await render(null);
+
+  const button = (text: string) =>
+    [...document.querySelectorAll('button')].find(
+      (element) => element.textContent?.trim() === text,
+    )!;
+  await act(async () => button('归档').click());
+  await act(async () => (treeRow(archived.name) as HTMLElement).click());
+  expect(document.querySelector('[role="alertdialog"]')).toBeTruthy();
+  expect(useWorkbenchLayout.getState().root).toMatchObject({ tabs: [] });
+
+  await act(async () => button('取消').click());
+  expect(update).not.toHaveBeenCalled();
+  await act(async () => (treeRow(archived.name) as HTMLElement).click());
+  await act(async () => button('恢复并打开').click());
+
+  expect(update).toHaveBeenCalledExactlyOnceWith({ id: archived.id, patch: { parentId: null } });
+  expect(useWorkbenchLayout.getState().root).toMatchObject({ tabs: [`note:${restored.id}`] });
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+});
 
 it('hides remote and external projects from the library tree', async () => {
   const externalProject: WorkspaceEntry = {

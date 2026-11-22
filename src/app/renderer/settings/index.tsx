@@ -19,7 +19,7 @@ export function SettingsPage(props: {
   zoom: ZoomPreference;
 }) {
   const section = useNavigationStore((state) => state.settingsSection);
-  const navigate = useNavigationStore((state) => state.navigate);
+  const requestChatRestore = useNavigationStore((state) => state.requestChatRestore);
   const openProject = useNavigationStore((state) => state.openProject);
   const openSettings = useNavigationStore((state) => state.openSettings);
 
@@ -32,7 +32,7 @@ export function SettingsPage(props: {
       shellSections={{
         shortcuts: <ShortcutsSection />,
         workspace: <WorkspaceSection />,
-        archived: <ArchivedSection navigate={navigate} />,
+        archived: <ArchivedSection onOpenArchived={requestChatRestore} />,
         remotes: (
           <RemoteSection
             NewProjectDialog={NewRemoteProjectDialog}

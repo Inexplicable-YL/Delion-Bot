@@ -4,6 +4,7 @@ import {
   workbenchLayoutSchema,
   type GroupNode,
   type LayoutNode,
+  type TabId,
   type WorkbenchLayout,
 } from '../../../modules/workspace/contract';
 
@@ -23,8 +24,10 @@ export {
   ratioMin,
 } from '../../../modules/workspace/contract';
 
-function normalizeGroup(group: GroupNode): GroupNode {
-  const tabs = group.tabs.filter((tab) => !/^review:[0-9a-f-]{36}:uncommitted$/.test(tab));
+function normalizeGroup(group: GroupNode, keepTab?: (tab: TabId) => boolean): GroupNode {
+  const tabs = group.tabs.filter(
+    (tab) => !/^review:[0-9a-f-]{36}:uncommitted$/.test(tab) && (keepTab?.(tab) ?? true),
+  );
   const pinned = [...new Set(group.pinned ?? [])].filter((tab) => tabs.includes(tab));
   const preview =
     group.preview && tabs.includes(group.preview) && !pinned.includes(group.preview)
@@ -39,11 +42,15 @@ function normalizeGroup(group: GroupNode): GroupNode {
   };
 }
 
-export function parseWorkbenchLayout(value: unknown): WorkbenchLayout | null {
+export function parseWorkbenchLayout(
+  value: unknown,
+  keepTab?: (tab: TabId) => boolean,
+): WorkbenchLayout | null {
   const parsed = workbenchLayoutSchema.safeParse(value);
   if (!parsed.success) return null;
   let root = parsed.data.root;
-  for (const group of walkGroups(root)) root = updateGroup(root, group.id, normalizeGroup);
+  for (const group of walkGroups(root))
+    root = updateGroup(root, group.id, (current) => normalizeGroup(current, keepTab));
   return { ...parsed.data, root };
 }
 
