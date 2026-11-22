@@ -44,6 +44,7 @@ import {
   storeSessionFile,
   storeTitle,
 } from './store';
+import { generateSessionTitles } from './title';
 
 export async function ensureLive(id: string): Promise<Live> {
   const existing = live.get(id);
@@ -359,9 +360,10 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
   }
   if (entry.run) throw new Error('请等待当前回答完成');
   if (entry.session.isCompacting) throw new Error('正在压缩上下文，请稍候');
+  const meta = row(id);
   const { prompt, userText, images, attachments, comments, turnId } = composePrompt(
     input,
-    row(id).project_id,
+    meta.project_id,
   );
   if (input.replaceLastUser) {
     const branch = entry.session.sessionManager.getBranch();
@@ -374,11 +376,18 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
     entry.session.agent.state.messages =
       entry.session.sessionManager.buildSessionContext().messages;
   }
-  if (row(id).title === '新对话')
+  if (
+    !input.replaceLastUser &&
+    meta.title_temporary &&
+    !entry.session.messages.some((message) => message.role === 'user')
+  ) {
     storeTitle(
       id,
       userText || comments[0]?.comment || comments[0]?.quote || attachments[0]?.name || '图片请求',
+      Boolean(userText),
     );
+    if (userText) generateSessionTitles(id, userText);
+  }
   await runTurn(id, entry, turnId, input.attachments, () =>
     entry.session.prompt(prompt, images.length ? { images } : undefined),
   );

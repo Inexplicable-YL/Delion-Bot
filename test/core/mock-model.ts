@@ -1,13 +1,16 @@
 import Database from 'better-sqlite3';
 import { rmSync } from 'node:fs';
+import { vi } from 'vitest';
 import type { StoredLlmProvider } from '../../src/core/agent/llm-config';
+import * as pi from '../../src/core/agent/pi';
 import { MockOpenAiServer, mockFrames, type RecordedRequest } from './agent/mock-openai-server';
 
 const SESSION_TABLES = `
   CREATE TABLE workspace_entries (id TEXT PRIMARY KEY, parent_id TEXT, name TEXT NOT NULL,
     kind TEXT NOT NULL, source_id TEXT, local_path TEXT, remote_id TEXT, updated_at TEXT NOT NULL);
   CREATE TABLE sessions (id TEXT PRIMARY KEY, project_id TEXT, cwd TEXT, file TEXT NOT NULL,
-    title TEXT NOT NULL DEFAULT '新对话', message_count INTEGER NOT NULL DEFAULT 0,
+    title TEXT NOT NULL DEFAULT '新对话', title_temporary INTEGER NOT NULL DEFAULT 0,
+    message_count INTEGER NOT NULL DEFAULT 0,
     archived INTEGER NOT NULL DEFAULT 0, pinned INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
     provider_id TEXT, model TEXT, effort TEXT, parent_id TEXT);
@@ -15,6 +18,7 @@ const SESSION_TABLES = `
 `;
 
 export async function startMockModel() {
+  vi.spyOn(pi, 'summarizeSessionTitle').mockResolvedValue('');
   const server = await MockOpenAiServer.start();
   const provider: StoredLlmProvider = {
     id: 'p1',
@@ -34,6 +38,7 @@ export async function stopMockModel(
   { server, db }: { server: MockOpenAiServer; db: Database.Database | null },
   root: string,
 ) {
+  vi.mocked(pi.summarizeSessionTitle).mockRestore();
   await server.close();
   db?.close();
   rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
