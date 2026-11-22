@@ -192,19 +192,11 @@ async function mcpTools(): Promise<ToolDefinition[]> {
       const result = await executeMcpTool(definition.name, params);
       if (!result.ok)
         return {
-          content: [{ type: 'text', text: result.error?.message ?? 'MCP 调用失败' }],
+          content: [{ type: 'text', text: result.error.message }],
           details: undefined,
           isError: true,
         };
-      const {
-        text,
-        images = [],
-        structured,
-      } = result.result as {
-        text: string;
-        images?: { dataUrl: string }[];
-        structured?: unknown;
-      };
+      const { text, images = [], structured } = result.result;
       return {
         content: [
           { type: 'text', text: structured ? `${text}\n${JSON.stringify(structured)}` : text },
@@ -213,7 +205,7 @@ async function mcpTools(): Promise<ToolDefinition[]> {
             return match ? [{ type: 'image' as const, mimeType: match[1]!, data: match[2]! }] : [];
           }),
         ],
-        details: undefined,
+        details: { source: result.source, links: result.links },
       };
     },
   }));

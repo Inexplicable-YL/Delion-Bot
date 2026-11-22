@@ -21,7 +21,7 @@ function strings(values: unknown[]): string[] {
   return values.filter((value): value is string => typeof value === 'string' && value !== '');
 }
 
-function appOf(slug: string, catalog: readonly ConnectorApp[]) {
+export function connectorAppOf(slug: string, catalog: readonly ConnectorApp[]) {
   const lower = slug.toLowerCase();
   return catalog
     .filter((app) => lower === app.slug || lower.startsWith(`${app.slug}_`))
@@ -29,7 +29,11 @@ function appOf(slug: string, catalog: readonly ConnectorApp[]) {
 }
 
 function appsOf(slugs: string[], catalog: readonly ConnectorApp[]) {
-  return [...new Set(slugs.map((slug) => appOf(slug, catalog)).filter((app) => app !== undefined))];
+  return [
+    ...new Set(
+      slugs.map((slug) => connectorAppOf(slug, catalog)).filter((app) => app !== undefined),
+    ),
+  ];
 }
 
 function readable(slug: string) {
@@ -37,7 +41,7 @@ function readable(slug: string) {
 }
 
 function actionOf(slug: string, catalog: readonly ConnectorApp[]) {
-  const app = appOf(slug, catalog);
+  const app = connectorAppOf(slug, catalog);
   return readable(app ? slug.slice(app.slug.length + 1) : slug);
 }
 

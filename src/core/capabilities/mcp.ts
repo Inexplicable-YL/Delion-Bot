@@ -342,7 +342,15 @@ function toolResultPayload(sdk: McpSdk, result: CallToolResult) {
 export async function executeMcpTool(
   name: string,
   input: unknown,
-): Promise<{ ok: boolean; result?: unknown; error?: { code: string; message: string } }> {
+): Promise<
+  | {
+      ok: true;
+      result: ReturnType<typeof toolResultPayload>;
+      source: { name: string; domain?: string };
+      links: { title: string; url: string }[];
+    }
+  | { ok: false; error: { code: string; message: string } }
+> {
   try {
     syncFromConfigs();
   } catch (error) {
@@ -396,7 +404,20 @@ export async function executeMcpTool(
         },
       };
     }
-    return { ok: true, result: toolResultPayload(sdk, result) };
+    const { config } = entry;
+    return {
+      ok: true,
+      result: toolResultPayload(sdk, result),
+      source: {
+        name: config.name,
+        ...(config.transport === 'http' && { domain: new URL(config.url).hostname }),
+      },
+      links: result.content.flatMap((block) =>
+        block.type === 'resource_link'
+          ? [{ title: block.title ?? block.name, url: block.uri }]
+          : [],
+      ),
+    };
   } catch (error) {
     return {
       ok: false,

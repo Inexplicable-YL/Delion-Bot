@@ -38,6 +38,7 @@ import { ChatMarkdown } from './Markdown';
 import { ReplyCommentLayer } from './ReplyComment';
 import { fetchChatMediaPreview, getChatMediaPreview } from './media';
 import { TurnChangesCard } from './TurnChangesCard';
+import { ReplySources } from './ReplySources';
 
 const textAnimation = { animation: 'fadeIn', sep: 'char' } as const;
 
@@ -261,10 +262,11 @@ function AssistantMessage({
           reviewEnabled={reviewEnabled}
         />
       )}
-      {!live && content && (
-        <MessageActions className="mt-1">
-          <CopyAction label="复制回答" text={content} />
-          {onSaveNote && (
+      {!live && (content || Boolean(message.toolResults?.length)) && (
+        <MessageActions className="mt-1 has-[[data-slot=popover-trigger]]:opacity-100">
+          {message.toolResults?.length ? <ReplySources steps={message.toolResults} /> : null}
+          {content && <CopyAction label="复制回答" text={content} />}
+          {content && onSaveNote && (
             <IconButton
               aria-label="保存为笔记"
               onClick={() => onSaveNote(content)}
@@ -273,7 +275,7 @@ function AssistantMessage({
               <NotebookPen />
             </IconButton>
           )}
-          {onFork && message.entryId && (
+          {content && onFork && message.entryId && (
             <IconButton
               aria-label="从这里分支"
               onClick={() => onFork(message.entryId!)}

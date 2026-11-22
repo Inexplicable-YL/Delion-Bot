@@ -364,6 +364,8 @@
   --animate-view-in: view-in 160ms ease-out backwards;
   --animate-step-in-next: step-in-next 220ms ease-out backwards;
   --animate-step-in-prev: step-in-prev 220ms ease-out backwards;
+  --animate-thinking-spin: spin 14s linear infinite;
+  --animate-thinking-ray: thinking-ray 1.6s var(--ease-in-out) infinite;
 }
 
 @keyframes shimmer-text {
@@ -398,6 +400,18 @@
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes thinking-ray {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scaleY(0.4);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
   }
 }
 

@@ -14,14 +14,11 @@ export function Reasoning({
 }) {
   return (
     <div className="my-1">
-      <TraceDisclosure
-        forceOpen={streaming}
-        head={streaming ? <Shimmer>Thinking</Shimmer> : <span>{label}</span>}
-      >
+      <TraceDisclosure head={streaming ? <Shimmer>Thinking</Shimmer> : <span>{label}</span>}>
         <div
           data-reasoning-body
           className={cn(
-            'overflow-y-auto border-l border-line pl-3 text-ui-body whitespace-pre-wrap text-ink-2',
+            'overflow-y-auto text-ui-body whitespace-pre-wrap text-ink-2',
             streaming ? 'flex max-h-40 flex-col-reverse' : 'max-h-72',
           )}
         >
