@@ -19,6 +19,7 @@ import {
 } from '../../core/agent/session/files';
 import {
   archivedSessions,
+  listSessions,
   localCommandReplies,
   preloadPi,
   row,
@@ -91,6 +92,7 @@ export const chatModule = defineModule({
     registerPreviewHost('chat-media', chatMediaResponse);
   },
   ipc: implement(chatContract, {
+    listSessions: ({ projectId, query }) => listSessions(projectId, query, true),
     localCommandReplies: (id) => {
       row(id);
       return localCommandReplies(id);

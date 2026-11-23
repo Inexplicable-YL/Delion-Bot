@@ -137,7 +137,7 @@ beforeEach(() => {
   for (const channel of Object.keys(api)) delete api[channel];
   Object.assign(api, {
     'agent:create-session': async () => emptyChat('first'),
-    'agent:list-sessions': async () => [],
+    'chat:listSessions': async () => [],
     'chat:projectContext': async () => ({ instruction: '', files: [] }),
     'chat:localCommandReplies': async () => [],
     'agent:open-session': async ({ sessionId }: { sessionId: string }) =>
@@ -388,7 +388,7 @@ describe('会话命令', () => {
     api['chat:runLocalCommand'] = runCommand;
     const ask = vi.spyOn(api, 'agent:ask');
     await act(async () => root.render(<Home />));
-    const list = vi.spyOn(api, 'agent:list-sessions');
+    const list = vi.spyOn(api, 'chat:listSessions');
     await sendText('  /name  课程周报  ');
     expect(runCommand).toHaveBeenCalledWith({
       sessionId: 'first',

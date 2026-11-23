@@ -1,3 +1,5 @@
+import { statSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 
@@ -47,6 +49,7 @@ vi.mock('../../../../src/core/capabilities/tools', () => ({
 }));
 
 import { agentEnvironment } from '../../../../src/core/agent/environment';
+import { hostPorts } from '../../../../src/core/ports';
 import { provideTestHostPorts } from '../../../core/host-mock';
 
 provideTestHostPorts({
@@ -79,6 +82,7 @@ describe('远程会话环境', () => {
   it('给七个远程工具加本机工具，且不带 delion 命令桥', async () => {
     const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj', {
       askCards: true,
+      sessionId: 'remote-chat',
     });
     expect(names(options.customTools)).toEqual(
       [
@@ -96,13 +100,17 @@ describe('远程会话环境', () => {
       ].sort(),
     );
     expect(options.commandPrefix).toBeUndefined();
-    expect(options.appendSystemPrompt.join('\n')).toContain('Remote project directory: /root/proj');
-    expect(options.appendSystemPrompt.join('\n')).not.toContain('delion help');
+    const prompt = options.appendSystemPrompt.join('\n');
+    expect(prompt).toContain('Remote project directory: /root/proj');
+    expect(prompt).toContain('$HOME/.delion-bot/chat-sessions/remote-chat');
+    expect(prompt).not.toContain(hostPorts().paths.storage());
+    expect(prompt).not.toContain('delion help');
   });
 
   it('用户关掉的能力名单不会波及七个工具名', async () => {
     const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj', {
       askCards: true,
+      sessionId: 'remote-chat',
     });
     expect([...options.disabledTools]).toEqual(['web_fetch']);
   });
@@ -110,6 +118,7 @@ describe('远程会话环境', () => {
   it('远端 AGENTS.md 的内容与远端路径一起注入，本地全局上下文不丢', async () => {
     const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj', {
       askCards: true,
+      sessionId: 'remote-chat',
     });
     const base = [{ path: 'C:\\data\\AGENTS.md', content: '全局' }];
     expect(options.agentsFilesOverride!({ agentsFiles: base })).toEqual({
@@ -123,6 +132,7 @@ describe('本地会话环境', () => {
     state.remote = false;
     const options = await agentEnvironment().sessionOptions('p-local', 'E:\\proj', {
       askCards: true,
+      sessionId: 'local-chat',
     });
     expect(names(options.customTools)).toEqual([
       'session_read',
@@ -131,5 +141,11 @@ describe('本地会话环境', () => {
       'web_search',
     ]);
     expect(options.commandPrefix).toContain('DELION_COMMAND_URL');
+    const storage = hostPorts().paths.storage();
+    const sessionDirectory = join(storage, 'chat-sessions', 'local-chat');
+    const prompt = options.appendSystemPrompt.join('\n');
+    expect(prompt).toContain(sessionDirectory);
+    expect(prompt).toContain(join(storage, 'workspace'));
+    expect(statSync(sessionDirectory).isDirectory()).toBe(true);
   });
 });

@@ -9,7 +9,7 @@ const creates = vi.hoisted(() => {
       creates.push(input);
       return emptyChat('new');
     },
-    'agent:list-sessions': () => [],
+    'chat:listSessions': () => [],
     'agent:open-session': ({ sessionId }: { sessionId: string }) =>
       useSessions.getState().chats[sessionId]!,
   };

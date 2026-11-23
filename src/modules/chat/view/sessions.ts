@@ -55,7 +55,7 @@ export const useSessions = create<SessionsState>((set, get) => {
     refreshTimers: {},
     refresh: async (projectId) => {
       if (typeof window === 'undefined' || !window.delionBot) return;
-      const sessions = await agentClient['list-sessions']({ projectId });
+      const sessions = await chatClient.listSessions({ projectId });
       set((state) => ({ lists: { ...state.lists, [poolKey(projectId)]: sessions } }));
     },
     putChat: (sessionId, chat) => {
@@ -83,7 +83,7 @@ export function querySessions(
   query: string,
 ): Promise<ChatSessionSummary[]> {
   return typeof window !== 'undefined' && window.delionBot
-    ? agentClient['list-sessions']({ projectId, query })
+    ? chatClient.listSessions({ projectId, query })
     : Promise.resolve([]);
 }
 

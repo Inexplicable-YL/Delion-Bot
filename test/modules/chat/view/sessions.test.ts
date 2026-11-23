@@ -58,7 +58,7 @@ describe('sessions mirror store', () => {
     invoke.mockResolvedValue([summary('s1'), summary('s2')]);
     useSessions.setState({ lists: {}, chats: {} });
     await useSessions.getState().refresh('p1');
-    expect(invoke).toHaveBeenCalledWith('agent:list-sessions', { projectId: 'p1' });
+    expect(invoke).toHaveBeenCalledWith('chat:listSessions', { projectId: 'p1' });
     expect(useSessions.getState().lists[poolKey('p1')]?.map((item) => item.id)).toEqual([
       's1',
       's2',
@@ -145,7 +145,7 @@ describe('sessions mirror store', () => {
 
     pushUpdate('s1', chat('s1', 1));
     await vi.advanceTimersByTimeAsync(1000);
-    expect(invoke).toHaveBeenCalledWith('agent:list-sessions', { projectId: null });
+    expect(invoke).toHaveBeenCalledWith('chat:listSessions', { projectId: null });
     expect(useSessions.getState().lists.general?.map((item) => item.id)).toEqual(['s1']);
 
     invoke.mockClear();

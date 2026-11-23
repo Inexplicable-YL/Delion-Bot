@@ -33,13 +33,13 @@ export function row(id: string): SessionRow {
   return found;
 }
 
-function workspaceRoot() {
+export function workspaceRoot() {
   const root = join(hostPorts().paths.storage(), 'workspace');
   mkdirSync(root, { recursive: true });
   return root;
 }
 
-function chatSessionDirectory(id: string) {
+export function chatSessionDirectory(id: string) {
   const dir = join(hostPorts().paths.storage(), 'chat-sessions', id);
   mkdirSync(dir, { recursive: true });
   return dir;
@@ -267,13 +267,17 @@ const summaryColumns =
 type SummaryRow = Omit<ChatSessionSummary, 'pinned'> & { pinned: number };
 const toSummary = (row: SummaryRow): ChatSessionSummary => ({ ...row, pinned: row.pinned === 1 });
 
-export function listSessions(projectId: string | null, query: string): ChatSessionSummary[] {
+export function listSessions(
+  projectId: string | null,
+  query: string,
+  includeLocal = false,
+): ChatSessionSummary[] {
   const pattern = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
   return hostPorts()
     .database()
     .prepare(
       `SELECT ${summaryColumns} FROM sessions WHERE project_id IS ? AND archived = 0 AND parent_id IS NULL
-       AND (message_count > 0 OR EXISTS (SELECT 1 FROM workspace_settings WHERE key='session-commands:' || sessions.id))
+       AND (message_count > 0 ${includeLocal ? "OR EXISTS (SELECT 1 FROM workspace_settings WHERE key='session-commands:' || sessions.id)" : ''})
        ${query ? "AND title LIKE ? ESCAPE '\\'" : ''} ORDER BY pinned DESC, updated_at DESC LIMIT 100`,
     )
     .all(...(query ? [projectId, pattern] : [projectId]))

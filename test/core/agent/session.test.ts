@@ -128,6 +128,7 @@ import {
   encodeMeta,
 } from '../../../src/core/agent/session/projection';
 import { askSession, invalidateSessions, cancelRun } from '../../../src/core/agent/session/run';
+import { listSessions } from '../../../src/core/agent/session/store';
 import { readChatAttachment, stageChatMedia } from '../../../src/core/agent/media';
 import { loadPi, summarizeSessionTitle } from '../../../src/core/agent/pi';
 import * as changes from '../../../src/core/agent/changes';
@@ -794,6 +795,8 @@ describe('会话命令', () => {
     });
     expect((await reply(first, 'bad')).reply).toContain('至少 100k tokens');
     expect(state.messages).toEqual([]);
+    expect(listSessions(null, '')).toEqual([]);
+    expect(listSessions(null, '', true)).toMatchObject([{ id: first }]);
     const second = (await newSession(null)).sessionId!;
     expect(second).not.toBe(first);
     expect((await reply(second, '')).reply).toContain('200k tokens（来自设置）');

@@ -5,7 +5,7 @@ import type {
   ChatSessionSummary,
   FileChangeDetail,
 } from '../../core/protocol/agent';
-import { chatMessageSchema } from '../../core/protocol/agent';
+import { agentContract, chatMessageSchema } from '../../core/protocol/agent';
 import type { UncommittedChanges } from '../../core/protocol/changes';
 import { defineContract } from '../../core/protocol/contract';
 
@@ -54,6 +54,7 @@ const localCommandReply = z.object({
 export type LocalCommandReply = z.infer<typeof localCommandReply>;
 
 const procedures = {
+  listSessions: agentContract.procedures['list-sessions'],
   localCommandReplies: { input: sessionId, output: z.array(localCommandReply) },
   runLocalCommand: {
     input: z.object({
