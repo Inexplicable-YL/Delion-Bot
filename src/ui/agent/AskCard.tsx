@@ -1,0 +1,260 @@
+'use client';
+
+import { useId, useRef, useState } from 'react';
+import { Button } from '../Button';
+import { Card } from '../Card';
+import { cn } from '../cn';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
+
+export type AskCardOption = { label: string; description?: string };
+export type AskCardGroup = { question: string; options: AskCardOption[] };
+
+type Choice = number | 'other' | undefined;
+
+const letter = (index: number) => String.fromCharCode(65 + index);
+
+const rowClass = cn(
+  'flex w-full min-w-0 items-center gap-2.5 rounded-control px-2.5 py-1 text-left transition-colors duration-base',
+  'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink',
+  'aria-checked:bg-selected',
+);
+
+function OptionLetter({ index, checked }: { index: number; checked: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'grid size-6 shrink-0 place-items-center rounded-chip text-ui-subhead tabular-nums transition-colors duration-base',
+        checked ? 'bg-accent-fill text-on-accent' : 'bg-inset text-ink-2 shadow-hairline',
+      )}
+    >
+      {letter(index)}
+    </span>
+  );
+}
+
+function OptionRow({
+  index,
+  option,
+  checked,
+  disabled,
+  onSelect,
+}: {
+  index: number;
+  option: AskCardOption;
+  checked: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  const row = (
+    <button
+      aria-checked={checked}
+      className={cn(rowClass, 'enabled:hover:bg-hover disabled:cursor-default')}
+      disabled={disabled}
+      onClick={onSelect}
+      role="radio"
+      type="button"
+    >
+      <OptionLetter checked={checked} index={index} />
+      <span className="min-w-0 flex-1 truncate text-ui-body text-ink">{option.label}</span>
+    </button>
+  );
+  if (!option.description) return row;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex min-w-0">{row}</span>
+      </TooltipTrigger>
+      <TooltipContent align="start" side="top">
+        {option.description}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function OtherRow({
+  index,
+  checked,
+  disabled,
+  value,
+  onSelect,
+  onChange,
+}: {
+  index: number;
+  checked: boolean;
+  disabled: boolean;
+  value: string;
+  onSelect: () => void;
+  onChange: (value: string) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div
+      aria-checked={checked}
+      className={cn(rowClass, !disabled && 'cursor-text hover:bg-hover')}
+      onClick={() => input.current?.focus()}
+    >
+      <OptionLetter checked={checked} index={index} />
+      {disabled ? (
+        <span
+          className={cn('min-w-0 flex-1 truncate text-ui-body', value ? 'text-ink' : 'text-ink-2')}
+        >
+          {value || '其他'}
+        </span>
+      ) : (
+        <input
+          aria-label="其他回答"
+          className="min-w-0 flex-1 bg-transparent text-ui-body text-ink outline-none placeholder:text-ink-2"
+          onChange={(event) => onChange(event.target.value)}
+          onFocus={onSelect}
+          placeholder="其他"
+          ref={input}
+          value={value}
+        />
+      )}
+    </div>
+  );
+}
+
+function StepDots({ count, current }: { count: number; current: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="sr-only">
+        第 {current + 1} 题，共 {count} 题
+      </span>
+      {Array.from({ length: count }, (_, index) => (
+        <span
+          aria-hidden
+          className={cn(
+            'size-2 rounded-pill transition-colors duration-base',
+            index === current ? 'bg-ink-2' : 'bg-fill',
+          )}
+          key={index}
+        />
+      ))}
+    </div>
+  );
+}
+
+function answeredChoice(group: AskCardGroup, answer: string | undefined): [Choice, string] {
+  if (answer === undefined) return [undefined, ''];
+  const index = group.options.findIndex(({ label }) => label === answer);
+  return index < 0 ? ['other', answer] : [index, ''];
+}
+
+function replaced<T>(list: T[], length: number, index: number, value: T): T[] {
+  return Array.from({ length }, (_, at) => (at === index ? value : (list[at] as T)));
+}
+
+export function AskCard({
+  groups,
+  answers,
+  onSubmit,
+}: {
+  groups: AskCardGroup[];
+  answers: (string | undefined)[] | undefined;
+  onSubmit: ((answers: (string | undefined)[]) => Promise<void>) | undefined;
+}) {
+  const id = useId();
+  const [page, setPage] = useState(0);
+  const [choices, setChoices] = useState<Choice[]>([]);
+  const [customs, setCustoms] = useState<string[]>([]);
+  const [skipped, setSkipped] = useState<boolean[]>([]);
+  const [sending, setSending] = useState(false);
+  const readOnly = answers !== undefined || onSubmit === undefined;
+  const locked = readOnly || sending;
+  const current = Math.min(page, groups.length - 1);
+  const group = groups[current]!;
+  const last = current === groups.length - 1;
+  const [choice, custom] = answers
+    ? answeredChoice(group, answers[current])
+    : [choices[current], customs[current] ?? ''];
+  const pickedAt = (index: number) => {
+    const picked = choices[index];
+    if (skipped[index] || picked === undefined) return undefined;
+    return picked === 'other'
+      ? customs[index]?.trim() || undefined
+      : groups[index]!.options[picked]!.label;
+  };
+  const choose = (next: Choice) => {
+    setChoices(replaced(choices, groups.length, current, next));
+    setSkipped(replaced(skipped, groups.length, current, false));
+  };
+  const submit = (finalSkipped: boolean[]) => {
+    if (!onSubmit) return;
+    setSending(true);
+    const result = groups.map((_, index) => (finalSkipped[index] ? undefined : pickedAt(index)));
+    void onSubmit(result).finally(() => setSending(false));
+  };
+  const advance = (skip: boolean) => {
+    const nextSkipped = replaced(skipped, groups.length, current, skip);
+    setSkipped(nextSkipped);
+    if (last) submit(nextSkipped);
+    else setPage(current + 1);
+  };
+  const questionId = `${id}-question`;
+  const showFooter = !readOnly || groups.length > 1;
+
+  return (
+    <Card asChild variant="surface">
+      <section aria-label="询问" className="my-3 grid gap-3">
+        <div className="whitespace-pre-wrap text-ui-headline text-ink" id={questionId}>
+          {group.question}
+        </div>
+        <div
+          aria-labelledby={questionId}
+          className="-mx-2.5 grid gap-0.5"
+          key={current}
+          role="radiogroup"
+        >
+          {group.options.map((option, index) => (
+            <OptionRow
+              checked={choice === index}
+              disabled={locked}
+              index={index}
+              key={option.label}
+              onSelect={() => choose(index)}
+              option={option}
+            />
+          ))}
+          <OtherRow
+            checked={choice === 'other'}
+            disabled={locked}
+            index={group.options.length}
+            onChange={(value) => setCustoms(replaced(customs, groups.length, current, value))}
+            onSelect={() => choose('other')}
+            value={custom}
+          />
+        </div>
+        {showFooter && (
+          <div className="flex items-center gap-2 pt-1">
+            {groups.length > 1 && <StepDots count={groups.length} current={current} />}
+            <div className="ml-auto flex items-center gap-2">
+              {current > 0 && (
+                <Button disabled={sending} onClick={() => setPage(current - 1)} variant="secondary">
+                  返回
+                </Button>
+              )}
+              {readOnly ? (
+                !last && (
+                  <Button onClick={() => setPage(current + 1)} variant="secondary">
+                    下一步
+                  </Button>
+                )
+              ) : (
+                <>
+                  <Button disabled={sending} onClick={() => advance(true)} variant="secondary">
+                    跳过
+                  </Button>
+                  <Button disabled={sending || !pickedAt(current)} onClick={() => advance(false)}>
+                    {last ? '发送' : '下一步'}
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+    </Card>
+  );
+}

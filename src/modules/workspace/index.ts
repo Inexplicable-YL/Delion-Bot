@@ -175,7 +175,11 @@ export const workspaceModule = defineModule({
     registerCommandDomain(resourceDomain);
     registerCommandDomain(workspaceDomain);
     registerResourceResolver('workspace', workspaceResourceResolver);
-    registerContextDirectory({ id: 'workspace', label: '资料', directory: workspaceRootDirectory });
+    registerContextDirectory({
+      id: 'workspace',
+      label: 'Workspace files',
+      directory: workspaceRootDirectory,
+    });
     registerSearchProvider(projectSearch);
     registerSearchProvider(chatSearch);
     onRemoteChange((path) => emit(workspaceContract, 'remoteChange', path));

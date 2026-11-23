@@ -77,7 +77,9 @@ beforeEach(() => {
 
 describe('远程会话环境', () => {
   it('给七个远程工具加本机工具，且不带 delion 命令桥', async () => {
-    const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj');
+    const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj', {
+      askCards: true,
+    });
     expect(names(options.customTools)).toEqual(
       [
         'bash',
@@ -94,17 +96,21 @@ describe('远程会话环境', () => {
       ].sort(),
     );
     expect(options.commandPrefix).toBeUndefined();
-    expect(options.appendSystemPrompt.join('\n')).toContain('远端项目目录：/root/proj');
+    expect(options.appendSystemPrompt.join('\n')).toContain('Remote project directory: /root/proj');
     expect(options.appendSystemPrompt.join('\n')).not.toContain('delion help');
   });
 
   it('用户关掉的能力名单不会波及七个工具名', async () => {
-    const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj');
+    const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj', {
+      askCards: true,
+    });
     expect([...options.disabledTools]).toEqual(['web_fetch']);
   });
 
   it('远端 AGENTS.md 的内容与远端路径一起注入，本地全局上下文不丢', async () => {
-    const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj');
+    const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj', {
+      askCards: true,
+    });
     const base = [{ path: 'C:\\data\\AGENTS.md', content: '全局' }];
     expect(options.agentsFilesOverride!({ agentsFiles: base })).toEqual({
       agentsFiles: [...base, { path: '/root/proj/AGENTS.md', content: '暗号：菠萝' }],
@@ -115,7 +121,9 @@ describe('远程会话环境', () => {
 describe('本地会话环境', () => {
   it('保留 delion 命令桥与内置工具，不给远程工具', async () => {
     state.remote = false;
-    const options = await agentEnvironment().sessionOptions('p-local', 'E:\\proj');
+    const options = await agentEnvironment().sessionOptions('p-local', 'E:\\proj', {
+      askCards: true,
+    });
     expect(names(options.customTools)).toEqual([
       'session_read',
       'session_search',

@@ -151,7 +151,7 @@ async function createSide(parentId: string): Promise<Side> {
     cwd,
     inMemory,
     selection,
-    ...(await agentEnvironment().sessionOptions(meta.project_id, cwd)),
+    ...(await agentEnvironment().sessionOptions(meta.project_id, cwd, { askCards: false })),
   });
   const side: Side = {
     session,

@@ -213,12 +213,7 @@ function Connectors() {
             });
           }}
         />
-        <details>
-          <summary className="cursor-pointer text-ui-headline">自定义 MCP 服务器</summary>
-          <div className="pt-4">
-            <McpTab />
-          </div>
-        </details>
+        <McpTab />
       </div>
     </div>
   );

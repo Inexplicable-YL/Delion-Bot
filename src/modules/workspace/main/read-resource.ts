@@ -21,7 +21,7 @@ export function documentHint(ref: ResourceRef, title: string, format: string) {
     readable: false,
     totalCharacters: null,
     nextOffset: null,
-    hint: '使用 document-reading skill：先调用 delion prepare_document 获取临时文件和工具路径，再提取正文或查看页面图片；未安装时在设置 › Skills 安装文档读取组件。',
+    hint: 'Use the document-reading skill. Run delion prepare_document to obtain temporary files and tool paths, then extract text or inspect page images. If the document components are missing, install them in Settings › Skills.',
   };
 }
 
@@ -46,7 +46,7 @@ export function readDocument(
           dataUrl: `data:${content.mime};base64,${Buffer.from(content.bytes).toString('base64')}`,
         },
       ],
-      note: '图片已作为图片消息附后。',
+      note: 'The image is attached as an image message.',
     };
   }
   if (content.text === undefined) return documentHint(ref, content.title, content.format);
@@ -66,7 +66,7 @@ export function readDocument(
 }
 
 const readResourceTool = tool(
-  '读取项目文本和笔记，支持字符分页。图片直接附图，二进制文档和附件返回 document-reading skill 的读取指引。',
+  'Read project text and notes with character-based pagination. Images are returned as images. Binary documents and attachments return instructions for the document-reading skill.',
   z
     .object({
       ref: resourceRefSchema,
@@ -93,6 +93,6 @@ export const workspaceResourceResolver: ResourceResolver<
 
 export const resourceDomain = {
   name: 'resource',
-  description: '读取项目文件和笔记',
+  description: 'Read project files and notes.',
   commands: { read_resource: readResourceTool },
 } satisfies CommandDomain;

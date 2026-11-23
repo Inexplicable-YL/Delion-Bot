@@ -2,14 +2,23 @@ import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowDownIcon as ArrowDown,
+  ArrowPathIcon as ArrowPath,
   ChatBubbleLeftIcon as MessageSquare,
   CommandLineIcon as SquareTerminal,
   CpuChipIcon as Bot,
   DocumentTextIcon as FileText,
+  EllipsisHorizontalIcon as Ellipsis,
   PencilIcon as Pencil,
   PencilSquareIcon as NotebookPen,
-  ShareIcon as GitBranch,
 } from '@heroicons/react/24/outline';
+import { BranchIcon } from '../../../ui/BranchIcon';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from '../../../ui/DropdownMenu';
 import {
   AssistantMessage as AssistantMessageFrame,
   CompactionDivider,
@@ -30,6 +39,7 @@ import type { ChatComment, TaskNoticeDetails, WorkspaceChat } from '../../../cor
 import { chatImageToken } from '../../../core/protocol/chat-input';
 import { IconButton } from '../../../ui/IconButton';
 import { useMediaQuery } from '../../../ui/use-media-query';
+import { useNow } from '../../../ui/use-now';
 import { useChatTabSource } from './ChatSource';
 import { formatDuration, ReplyTrace } from './ToolTimeline';
 import { openSubagent } from './ToolViews';
@@ -233,6 +243,30 @@ function UserMessage({
   );
 }
 
+const clockFormat = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' });
+const dateFormat = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric' });
+const fullDateFormat = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+
+function ReplyTime({ at }: { at: number }) {
+  const now = new Date(useNow(60_000));
+  const date = new Date(at);
+  const clock = clockFormat.format(date);
+  const today = new Date(now).setHours(0, 0, 0, 0);
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+  const day = date.getFullYear() === now.getFullYear() ? dateFormat : fullDateFormat;
+  const label =
+    at >= today
+      ? `今天 ${clock}`
+      : at >= yesterday
+        ? `昨天 ${clock}`
+        : `${day.format(date)} ${clock}`;
+  return <DropdownMenuLabel className="tabular-nums">{label}</DropdownMenuLabel>;
+}
+
 const INTERRUPT_PREFIX = '本次执行中断：';
 type ReplyParts = NonNullable<WorkspaceChat['messages'][number]['parts']>;
 type ReplyTraceData = { parts: ReplyParts; durationMs: number };
@@ -307,6 +341,7 @@ function AssistantMessage({
   onRetry,
   onOpenFile,
   fileMenu,
+  asks,
 }: {
   message: WorkspaceChat['messages'][number];
   foldedTrace: ReplyTraceData | null | undefined;
@@ -321,6 +356,7 @@ function AssistantMessage({
   onRetry: (() => void) | undefined;
   onOpenFile: ((path: string) => void) | undefined;
   fileMenu: { sessionId: string; remote: boolean } | undefined;
+  asks: { answer?: string; onAnswer?: (text: string) => Promise<void> } | undefined;
 }) {
   const reduced = useMediaQuery('(prefers-reduced-motion: reduce)');
   const split = splitInterrupt(message.parts ?? []);
@@ -341,6 +377,8 @@ function AssistantMessage({
       ? parts.flatMap((part) => (part.type === 'tools' ? part.results : []))
       : message.toolResults;
   const showChanges = showTurnChanges && !live && turnEnd && sessionId && message.turnId;
+  const forkEntryId = content && onFork ? message.entryId : undefined;
+  const repliedAt = message.finishedAt ?? message.startedAt;
   if (moved && !reason && !message.stopped && !showChanges) return null;
 
   return (
@@ -363,6 +401,7 @@ function AssistantMessage({
               isAnimating={live && !activeTool}
               animated={live && animate && !reduced ? textAnimation : false}
               references={onOpenFile && { onOpen: onOpenFile, fileMenu }}
+              asks={asks}
               replyImages
             >
               {text}
@@ -374,7 +413,7 @@ function AssistantMessage({
       {message.stopped && !live && <p className="my-2 text-ui-body text-ink-2">已停止</p>}
       {showChanges && <TurnChangesCard sessionId={sessionId} turnId={showChanges} />}
       {!live && (content || Boolean(toolResults?.length)) && (
-        <MessageActions className="mt-1 has-[[data-slot=popover-trigger]]:opacity-100">
+        <MessageActions className="mt-1 opacity-100">
           {toolResults?.length ? <ReplySources steps={toolResults} /> : null}
           {content && <CopyAction label="复制回答" text={content} />}
           {content && onSaveNote && (
@@ -386,14 +425,29 @@ function AssistantMessage({
               <NotebookPen />
             </IconButton>
           )}
-          {content && onFork && message.entryId && (
-            <IconButton
-              aria-label="从这里分支"
-              onClick={() => onFork(message.entryId!)}
-              title="从这里分支为新对话"
-            >
-              <GitBranch />
-            </IconButton>
+          {(onRetry || forkEntryId) && (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <IconButton aria-label="更多操作" title="更多操作">
+                  <Ellipsis />
+                </IconButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {repliedAt !== undefined && <ReplyTime at={repliedAt} />}
+                {onRetry && (
+                  <DropdownMenuItem onSelect={onRetry}>
+                    <ArrowPath />
+                    重试
+                  </DropdownMenuItem>
+                )}
+                {forkEntryId && (
+                  <DropdownMenuItem onSelect={() => onFork!(forkEntryId)}>
+                    <BranchIcon />
+                    创建对话分支
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
         </MessageActions>
       )}
@@ -438,11 +492,13 @@ export function ChatThread({
   onFork,
   onSidechat,
   onAskImage,
+  onAnswer,
   draftKey,
   fileSessionId = chat.sessionId,
 }: {
   chat: WorkspaceChat;
   onAskImage?: (text: string, context: string[]) => Promise<void>;
+  onAnswer?: (text: string) => Promise<void>;
   onSidechat?: (quote: string) => void;
   draftKey?: string | null;
   fileSessionId?: string | null;
@@ -617,6 +673,16 @@ export function ChatThread({
                   onOpenFile={openFile}
                   fileMenu={
                     fileSessionId ? { sessionId: fileSessionId, remote: remoteProject } : undefined
+                  }
+                  asks={
+                    onAnswer &&
+                    (index > lastUserIndex
+                      ? { onAnswer: streaming ? undefined : onAnswer }
+                      : {
+                          answer: messages.find(
+                            (next, nextIndex) => nextIndex > index && next.role === 'user',
+                          )?.content,
+                        })
                   }
                 />
               ),

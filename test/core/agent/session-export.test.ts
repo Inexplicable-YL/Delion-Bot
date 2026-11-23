@@ -62,7 +62,20 @@ function unzipSmallFixture(zip: Buffer) {
   return files;
 }
 
-it('导出当前分支及附件，保留压缩前的对话和工具轨迹', async () => {
+const promptFormats = [
+  {
+    language: 'legacy Chinese',
+    sources: '用户引用了这些文件（需要时用 read 读取）：',
+    document: '用户上传了文档附件：',
+  },
+  {
+    language: 'English',
+    sources: 'User-referenced files (use read as needed):',
+    document: 'User-uploaded document: ',
+  },
+];
+
+it.each(promptFormats)('exports $language messages and attachments', async (headers) => {
   const documentId = '00000000-0000-4000-8000-000000000001';
   const missingId = '00000000-0000-4000-8000-000000000002';
   const textId = '00000000-0000-4000-8000-000000000003';
@@ -122,11 +135,15 @@ it('导出当前分支及附件，保留压缩前的对话和工具轨迹', asyn
             '<delion-meta>' +
             JSON.stringify(meta) +
             '</delion-meta>\n' +
-            '用户引用了这些文件（需要时用 read 读取）：\n- src/example.m\n' +
+            headers.sources +
+            '\n- src/example.m\n' +
             '<attachment name="说明.txt">\n' +
             notes +
             '\n</attachment>\n' +
-            '用户上传了文档附件：内部绝对路径\n用户上传了文档附件：已删除路径\n' +
+            headers.document +
+            '内部绝对路径\n' +
+            headers.document +
+            '已删除路径\n' +
             meta.body,
         },
         image,

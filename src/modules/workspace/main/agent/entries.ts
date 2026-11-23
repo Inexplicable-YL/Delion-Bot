@@ -9,7 +9,7 @@ import { workspaceEntryIdSchema } from '../../contract';
 import { name, tool, toolError } from '../../../../core/capabilities/domain-tools';
 
 export const createEntryTool = tool(
-  '创建项目、文件夹或文件（本地写）。parentId 为 null 时创建在根目录；文件名原样使用（不补扩展名，笔记请写 .md），可带初始正文 text。文件与文件夹的 name 可含 / 表示子路径（如 notes/week1.md，中间文件夹自动建）；同名已存在时报错，不会覆盖或改名。',
+  'Create a local project, folder, or file. Use null for parentId to create it at the workspace root. File names are used as given, so include .md for notes. Use text to supply initial content. For files and folders, name may include a subpath such as notes/week1.md. Missing parent folders are created. A name conflict returns an error without overwriting or renaming anything.',
   z
     .object({
       parentId: workspaceEntryIdSchema.nullable(),
@@ -25,7 +25,7 @@ export const createEntryTool = tool(
 );
 
 export const updateEntryTool = tool(
-  '重命名、移动工作区条目，或在文件夹与项目之间原地转换（本地写；转换只改类型，目录与子条目不动）。返回更新后的条目与路径映射。',
+  'Rename or move a local workspace entry, or change its type between folder and project in place. Type conversion preserves the directory and its children. Returns the updated entry and path mappings.',
   z
     .object({
       id: workspaceEntryIdSchema,
@@ -45,7 +45,7 @@ export const updateEntryTool = tool(
 );
 
 export const removeEntryTool = tool(
-  '移除工作区条目（本地写）。普通文件与文件夹移入系统回收站；移除项目会删除名下全部会话（含归档），目录与文件保留；资料引用只解除关联。归档文件夹不能移除。',
+  'Remove a local workspace entry. Ordinary files and folders go to the system trash. Removing a project deletes all its sessions, including archived ones, and preserves its directory and files. Removing a source reference only unlinks it. Archived folders cannot be removed.',
   z.object({ id: workspaceEntryIdSchema }).strict(),
   async ({ id }) => {
     try {

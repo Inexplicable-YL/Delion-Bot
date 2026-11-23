@@ -5,7 +5,8 @@ import { listWorkspaceEntriesTool } from './list-entries';
 
 export const workspaceDomain = {
   name: 'workspace',
-  description: '管理项目与导入附件；普通文件用 read/write/edit/shell',
+  description:
+    'Manage projects and import attachments. Use read, write, edit, or bash for ordinary files.',
   commands: {
     list_workspace_entries: listWorkspaceEntriesTool,
     create_entry: createEntryTool,

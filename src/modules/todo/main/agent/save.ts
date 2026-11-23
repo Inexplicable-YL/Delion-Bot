@@ -3,7 +3,7 @@ import { todoSaveSchema } from '../../contract';
 import { tool, toolError } from '../../../../core/capabilities/domain-tools';
 
 export const saveTodoTool = tool(
-  '新建或修改个人待办（本地写）。提供 id 时更新已有条目；completed 控制完成状态；dueAt 为 UTC ISO 8601，color 设置日历颜色。',
+  'Create or update a local personal to-do. Pass id to update an existing item, completed to set its completion status, dueAt as a UTC ISO 8601 timestamp, and color to set its calendar color.',
   todoSaveSchema,
   (input) => {
     try {

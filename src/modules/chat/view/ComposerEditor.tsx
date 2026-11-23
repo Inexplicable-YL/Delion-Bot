@@ -34,6 +34,9 @@ import { codeHighlightStyle, markdownHighlightStyle } from '../../preview/view';
 import type { ChatReference } from './drafts';
 import { matchReferenceTokens } from './reference-tokens';
 import { matchConnectorPrompts } from './connector-tokens';
+import { composerLinks, type ComposerLink } from './composer-links';
+import { ComposerLinkMenu } from './ComposerLinkMenu';
+import { WebLinkIcon } from './WebLinkIcon';
 
 type ComposerMenuApi = {
   onKey: (key: 'down' | 'up' | 'select' | 'close') => boolean;
@@ -46,7 +49,11 @@ type ComposerCallbacks = {
   onFiles: (files: File[]) => void;
   onDropHandled?: () => void;
   onMenuKey: ComposerMenuApi['onKey'];
+  onLink: (target: LinkTarget) => void;
+  onSelection: (head: number, docChanged: boolean) => void;
 };
+
+type LinkTarget = { link: ComposerLink; anchor: DOMRect };
 
 const composerCallbacks = Facet.define<ComposerCallbacks, ComposerCallbacks>({
   combine: (values) => values[0]!,
@@ -99,6 +106,24 @@ class ReferenceIconWidget extends WidgetType {
   }
 }
 
+class WebIconWidget extends WidgetType {
+  constructor(readonly url: string) {
+    super();
+  }
+  eq(other: WebIconWidget) {
+    return other.url === this.url;
+  }
+  toDOM() {
+    const span = document.createElement('span');
+    span.className = 'delion-ref-icon cm-web-link';
+    span.setAttribute('aria-hidden', 'true');
+    span.innerHTML = renderToStaticMarkup(
+      <WebLinkIcon className="text-accent-ink" url={this.url} />,
+    );
+    return span;
+  }
+}
+
 class ConnectorWidget extends WidgetType {
   constructor(readonly app: ConnectorApp) {
     super();
@@ -130,11 +155,21 @@ class ConnectorWidget extends WidgetType {
   }
 }
 
-function referenceDecorations(view: EditorView): DecorationSet {
+const atomicReference = Decoration.mark({});
+const linkText = Decoration.mark({ class: 'cm-ref-name cm-web-link' });
+const urlText = Decoration.mark({ class: 'cm-ref-name cm-web-link cm-web-url' });
+const hiddenSyntax = Decoration.replace({});
+
+function referenceDecorations(view: EditorView): {
+  decorations: DecorationSet;
+  atomic: DecorationSet;
+  links: ComposerLink[];
+} {
   const options = view.state.field(referenceField);
   const source = view.state.doc.toString();
   const ranges: Range<Decoration>[] = [];
-  for (const token of matchReferenceTokens(source, options.files)) {
+  const references = matchReferenceTokens(source, options.files);
+  for (const token of references) {
     const { start, end, ref } = token;
     const split = ref.session ? -1 : ref.title.lastIndexOf('/');
     const nameStart = start + 1 + (split < 0 ? 0 : split + 1);
@@ -150,17 +185,55 @@ function referenceDecorations(view: EditorView): DecorationSet {
       ),
     );
   }
-  for (const { from, to, app } of matchConnectorPrompts(source, options.connectors)) {
+  const connectors = matchConnectorPrompts(source, options.connectors);
+  for (const { from, to, app } of connectors) {
     ranges.push(Decoration.replace({ widget: new ConnectorWidget(app) }).range(from, to));
   }
-  return Decoration.set(ranges, true);
+  const taken: [number, number][] = [
+    ...references.map(({ start, end }): [number, number] => [start, end]),
+    ...connectors.map(({ from, to }): [number, number] => [from, to]),
+  ];
+  const links = composerLinks(view.state, taken);
+  const hidden: [number, number][] = [];
+  for (const link of links) {
+    const lead = Math.min(link.textFrom + 1, link.textTo);
+    if (link.textFrom === link.from)
+      ranges.push(
+        Decoration.widget({ widget: new WebIconWidget(link.url), side: 1 }).range(link.from),
+      );
+    else {
+      ranges.push(
+        Decoration.replace({ widget: new WebIconWidget(link.url) }).range(link.from, link.textFrom),
+        hiddenSyntax.range(link.textTo, link.to),
+      );
+      hidden.push([link.from, link.textFrom], [link.textTo, link.to]);
+    }
+    ranges.push(
+      Decoration.mark({ class: 'cm-ref-lead' }).range(link.from, lead),
+      (link.text === link.url ? urlText : linkText).range(link.textFrom, link.textTo),
+    );
+  }
+  return {
+    decorations: Decoration.set(ranges, true),
+    atomic: Decoration.set(
+      [...taken, ...hidden].map(([from, to]) => atomicReference.range(from, to)),
+      true,
+    ),
+    links,
+  };
 }
 
 const referencePlugin = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
+    atomic: DecorationSet;
+    links: ComposerLink[];
     constructor(view: EditorView) {
-      this.decorations = referenceDecorations(view);
+      ({
+        decorations: this.decorations,
+        atomic: this.atomic,
+        links: this.links,
+      } = referenceDecorations(view));
     }
     update(update: ViewUpdate) {
       if (
@@ -170,10 +243,18 @@ const referencePlugin = ViewPlugin.fromClass(
           tr.effects.some((effect) => effect.is(setReferenceOptions)),
         )
       )
-        this.decorations = referenceDecorations(update.view);
+        ({
+          decorations: this.decorations,
+          atomic: this.atomic,
+          links: this.links,
+        } = referenceDecorations(update.view));
     }
   },
-  { decorations: (value) => value.decorations },
+  {
+    decorations: (value) => value.decorations,
+    provide: (plugin) =>
+      EditorView.atomicRanges.of((view) => view.plugin(plugin)?.atomic ?? Decoration.none),
+  },
 );
 
 const composerTheme = EditorView.theme({
@@ -195,10 +276,14 @@ const composerTheme = EditorView.theme({
   },
   '.cm-ref-lead': { whiteSpace: 'nowrap' },
   '.cm-ref-name': { color: 'var(--accent-ink)', fontWeight: 600 },
+  '.cm-web-link': { cursor: 'pointer' },
+  '.cm-web-link *': { color: 'inherit', textDecoration: 'none' },
+  '.cm-web-url': { wordBreak: 'break-all' },
   '.delion-ref-icon': {
     display: 'inline-flex',
     alignItems: 'center',
-    marginRight: '0.25rem',
+    marginLeft: '0.125rem',
+    marginRight: '0.125rem',
     color: 'var(--accent-ink)',
     verticalAlign: '-0.125em',
   },
@@ -246,6 +331,7 @@ export function ComposerEditor({
   connectorApps?: readonly ConnectorApp[];
 }) {
   const view = useRef<EditorView | null>(null);
+  const [linkTarget, setLinkTarget] = useState<LinkTarget | null>(null);
   const callbacks: ComposerCallbacks = {
     onChange,
     onSend,
@@ -253,6 +339,13 @@ export function ComposerEditor({
     onFiles,
     onDropHandled,
     onMenuKey: menu.onKey,
+    onLink: setLinkTarget,
+    onSelection: (head, docChanged) =>
+      setLinkTarget((current) =>
+        current && !docChanged && head >= current.link.from && head <= current.link.to
+          ? current
+          : null,
+      ),
   };
   const [attachEditor] = useState(() => (element: HTMLDivElement | null) => {
     if (!element) return;
@@ -263,13 +356,14 @@ export function ComposerEditor({
         extensions: [
           history(),
           callbacksConf.of(composerCallbacks.of(callbacks)),
-          markdown({ base: markdownLanguage, codeLanguages: languages }),
+          markdown({
+            base: markdownLanguage,
+            codeLanguages: languages,
+            extensions: { remove: ['Autolink'] },
+          }),
           EditorView.lineWrapping,
           referenceField,
           referencePlugin,
-          EditorView.atomicRanges.of(
-            (target) => target.plugin(referencePlugin)?.decorations ?? Decoration.none,
-          ),
           Prec.highest(
             keymap.of([
               { key: 'ArrowDown', run: (target) => handlers(target).onMenuKey('down') },
@@ -296,13 +390,32 @@ export function ComposerEditor({
           EditorView.contentAttributes.of({ 'aria-label': '发送给助手', spellcheck: 'false' }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) handlers(update.view).onChange(update.state.doc.toString());
-            if (update.docChanged || update.selectionSet)
+            if (update.docChanged || update.selectionSet) {
               handlers(update.view).onCaret(
                 update.state.doc.toString(),
                 update.state.selection.main.head,
               );
+              handlers(update.view).onSelection(
+                update.state.selection.main.head,
+                update.docChanged,
+              );
+            }
           }),
           EditorView.domEventHandlers({
+            click: (event, target) => {
+              const element =
+                event.target instanceof Element && event.target.closest('.cm-web-link');
+              const { head, empty } = target.state.selection.main;
+              const link = target
+                .plugin(referencePlugin)
+                ?.links.find(({ from, to }) => head >= from && head <= to);
+              if (!element || !empty || !link) return false;
+              handlers(target).onLink({
+                link,
+                anchor: element.getClientRects()[0] ?? element.getBoundingClientRect(),
+              });
+              return false;
+            },
             paste: (event, target) => {
               const files = filesFromTransfer(event.clipboardData);
               if (!files.length) return false;
@@ -382,6 +495,24 @@ export function ComposerEditor({
           </div>
         )}
       </div>
+      {linkTarget && (
+        <ComposerLinkMenu
+          anchor={linkTarget.anchor}
+          key={`${linkTarget.link.from}:${linkTarget.link.to}`}
+          link={linkTarget.link}
+          onClose={() => setLinkTarget(null)}
+          onReplace={(insert) => {
+            const current = view.current;
+            const { from, to } = linkTarget.link;
+            setLinkTarget(null);
+            current?.dispatch({
+              changes: { from, to, insert },
+              selection: { anchor: from + insert.length },
+            });
+            current?.focus();
+          }}
+        />
+      )}
     </div>
   );
 }

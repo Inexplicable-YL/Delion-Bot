@@ -1,7 +1,11 @@
 import { useId, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  ArrowPathIcon,
+  ArrowsPointingInIcon,
   CalendarDaysIcon,
+  ChatBubbleLeftEllipsisIcon,
+  CommandLineIcon,
   ChatBubbleLeftIcon as MessageSquare,
   DocumentTextIcon as FileText,
   EnvelopeIcon,
@@ -9,7 +13,10 @@ import {
   GlobeAltIcon as Globe,
   LinkIcon,
   ListBulletIcon,
+  PencilSquareIcon,
   PhotoIcon,
+  PlusIcon,
+  TagIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { PlayIcon } from '@heroicons/react/24/solid';
@@ -49,7 +56,7 @@ import type {
   ContextUsageView,
 } from '../../../core/protocol/agent';
 import type { LlmProviderView } from '../../../core/protocol/llm';
-import { SESSION_COMMANDS } from '../../../core/protocol/agent';
+import { SESSION_COMMANDS, type SessionCommandName } from '../../../core/protocol/agent';
 import {
   CHAT_ATTACHMENT_MAX,
   chatFileKindOfFile,
@@ -76,11 +83,29 @@ import { errorMessage } from '../../../core/protocol/contract';
 const todoPrompt = '帮我查看还未完成的个人待办';
 
 const builtinCommands = [
-  { name: '待办', prompt: todoPrompt, hint: '查询个人待办' },
-  { name: '邮件', prompt: '帮我查找最近的未读邮件', hint: '通过邮箱连接器' },
-  { name: '资料', prompt: '帮我在项目中查找相关文件', hint: '搜索并读取资料' },
-  { name: '整理', prompt: '帮我把引用资料里的要点整理成一份笔记', hint: '生成并保存笔记' },
+  { name: '待办', prompt: todoPrompt, hint: '查询个人待办', icon: ListBulletIcon },
+  { name: '邮件', prompt: '帮我查找最近的未读邮件', hint: '通过邮箱连接器', icon: EnvelopeIcon },
+  {
+    name: '资料',
+    prompt: '帮我在项目中查找相关文件',
+    hint: '搜索并读取资料',
+    icon: FolderOpenIcon,
+  },
+  {
+    name: '整理',
+    prompt: '帮我把引用资料里的要点整理成一份笔记',
+    hint: '生成并保存笔记',
+    icon: PencilSquareIcon,
+  },
 ];
+
+const sessionCommandIcons: Record<SessionCommandName, typeof CommandLineIcon> = {
+  compact: ArrowsPointingInIcon,
+  reload: ArrowPathIcon,
+  name: TagIcon,
+  new: PlusIcon,
+  btw: ChatBubbleLeftEllipsisIcon,
+};
 
 const connectorActions = [
   {
@@ -413,10 +438,15 @@ export function ChatComposer({
     menu?.kind === 'slash'
       ? [
           ...builtinCommands,
-          ...(customCommands ?? []).map((command) => ({ ...command, hint: '自定义' })),
+          ...(customCommands ?? []).map((command) => ({
+            ...command,
+            hint: '自定义',
+            icon: CommandLineIcon,
+          })),
           ...(sidechat ? [] : SESSION_COMMANDS).map((command) => ({
             name: command.name,
             prompt: `/${command.name} `,
+            icon: sessionCommandIcons[command.name],
             hint: ['argumentHint' in command ? command.argumentHint : '', command.description]
               .filter(Boolean)
               .join(' · '),
@@ -778,9 +808,9 @@ export function ChatComposer({
                     <FileText className="size-4 shrink-0 text-ink-2" />
                   ) : menu?.kind === 'session' ? (
                     <MessageSquare className="size-4 shrink-0 text-ink-2" />
-                  ) : (
-                    <span className="shrink-0 font-mono text-ui-body text-ink-2">/</span>
-                  )
+                  ) : 'icon' in item ? (
+                    <item.icon className="size-4 shrink-0 text-ink-2" />
+                  ) : null
                 }
                 id={menuOptionId(position)}
                 key={'name' in item ? item.name : item.key}
@@ -789,12 +819,10 @@ export function ChatComposer({
                 selected={position === index}
               >
                 {'name' in item ? (
-                  <>
-                    <span className="shrink-0 text-ui-headline text-ink">/{item.name}</span>
-                    <span className="min-w-0 flex-1 truncate text-ui-subhead text-ink-2">
-                      {item.hint}
-                    </span>
-                  </>
+                  <span className="flex min-w-0 flex-1 items-baseline gap-1.5 text-ui-body">
+                    <span className="shrink-0 text-ink">/{item.name}</span>
+                    <span className="min-w-0 truncate text-ui-subhead text-ink-2">{item.hint}</span>
+                  </span>
                 ) : item.session ? (
                   <span className="min-w-0 flex-1 truncate text-ui-body text-ink">
                     {item.title}

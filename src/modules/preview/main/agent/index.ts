@@ -9,7 +9,7 @@ import { tool } from '../../../../core/capabilities/domain-tools';
 
 export const documentDomain = {
   name: 'document',
-  description: '为文档读取 skill 准备与清理 PDF、Office 等文档的临时文件',
+  description: 'Prepare and clean up temporary files for the document-reading skill.',
   skill: {
     name: DOCUMENT_SKILL,
     files: [
@@ -19,12 +19,12 @@ export const documentDomain = {
   },
   commands: {
     prepare_document: tool(
-      '为文档读取 skill 准备临时文件和工具路径，不解析正文、不复制进项目；需要已安装文档组件。',
+      'Prepare temporary files and tool paths for the document-reading skill. Requires the installed document components. This command neither parses the document nor copies it into the project.',
       z.object({ ref: resourceRefSchema }).strict(),
       ({ ref }) => prepareDocumentResource(ref),
     ),
     release_document: tool(
-      '清理 prepare_document 生成的临时输入与输出；完成正文和图片读取后调用。',
+      'Remove temporary input and output from prepare_document after you finish reading the text and images.',
       z.object({ jobId: z.string() }).strict(),
       async ({ jobId }) => {
         await releaseDocumentResource(jobId);

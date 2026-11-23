@@ -294,6 +294,7 @@ function ChatSessionView({
         <ChatThread
           chat={chat}
           onAskImage={subagent ? undefined : askAbout}
+          onAnswer={subagent ? undefined : (text) => askAbout(text, [])}
           onEditLast={subagent ? undefined : editLast}
           onFork={subagent ? undefined : fork}
           onSidechat={subagent ? undefined : sidechatFromQuote}

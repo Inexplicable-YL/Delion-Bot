@@ -156,7 +156,7 @@ it('用户消息里的 @ 文件引用渲染为可点击的链接并打开源文�
   expect(onOpen).toHaveBeenCalledWith(key);
 });
 
-it('回复里指向本地文件的链接渲染为文件引用，网页链接保持原样', async () => {
+it('回复里指向本地文件的链接渲染为文件引用，网页链接仍经过外链确认', async () => {
   const onOpen = vi.fn();
   await act(async () => {
     root.render(
@@ -168,9 +168,15 @@ it('回复里指向本地文件的链接渲染为文件引用，网页链接保�
 
   const file = host.querySelector<HTMLElement>('[role=button]');
   expect(file?.textContent).toBe('winter.py');
-  expect(host.querySelector('[data-streamdown=link]')?.textContent).toBe('文档');
+  const web = host.querySelector<HTMLButtonElement>('[data-streamdown=link]');
+  expect(web?.textContent).toBe('文档');
+  expect(web?.querySelector('svg')).not.toBeNull();
   await act(async () => file?.click());
   expect(onOpen).toHaveBeenCalledWith('scripts/winter demo/winter.py');
+
+  await act(async () => web?.click());
+  expect(document.body.textContent).toContain('打开外部链接？');
+  expect(document.body.textContent).toContain('https://example.com');
 });
 
 it('单击目录引用会等待路径类型确认，然后打开系统文件管理器', async () => {
@@ -263,4 +269,85 @@ it.each([true, false])('文件引用菜单根据 VS Code 可用性 %s 显示并�
     await select('在 VS Code 中打开');
     expect(openInVsCode).toHaveBeenCalledWith(file);
   }
+});
+
+const askReply =
+  '请选择：\n\n```ask\n用哪种数据库？\n- PostgreSQL | 适合复杂查询\n- SQLite\n\n需要登录吗？\n- 需要\n- 不需要\n```';
+
+const radios = () => [...host.querySelectorAll<HTMLButtonElement>('[role=radio]')];
+const button = (label: string) =>
+  [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (item) => item.textContent === label,
+  );
+
+it('多个问题组在一张卡片里分页作答，跳过的问题也会随最后的发送发回', async () => {
+  const onAnswer = vi.fn(async () => {});
+  await act(async () => {
+    root.render(<ChatMarkdown asks={{ onAnswer }}>{askReply}</ChatMarkdown>);
+  });
+
+  expect(host.querySelector('pre')).toBeNull();
+  expect(host.textContent).toContain('用哪种数据库？');
+  expect(host.textContent).not.toContain('需要登录吗？');
+  expect(radios().map((radio) => radio.textContent)).toEqual(['APostgreSQL', 'BSQLite']);
+  expect(button('返回')).toBeUndefined();
+  expect(button('下一步')?.disabled).toBe(true);
+
+  await act(async () => radios()[1]!.click());
+  await act(async () => button('下一步')!.click());
+  expect(host.textContent).toContain('需要登录吗？');
+  expect(button('返回')).toBeDefined();
+  expect(button('发送')?.disabled).toBe(true);
+
+  await act(async () => button('返回')!.click());
+  expect(radios()[1]!.getAttribute('aria-checked')).toBe('true');
+  await act(async () => button('下一步')!.click());
+  expect(onAnswer).not.toHaveBeenCalled();
+  await act(async () => button('跳过')!.click());
+  expect(onAnswer).toHaveBeenCalledWith('用哪种数据库？：SQLite\n需要登录吗？：（跳过）');
+});
+
+it('“其他”行填写内容后即可确认发送', async () => {
+  const onAnswer = vi.fn(async () => {});
+  await act(async () => {
+    root.render(
+      <ChatMarkdown asks={{ onAnswer }}>{'```ask\n用哪种？\n- 甲\n- 乙\n```'}</ChatMarkdown>,
+    );
+  });
+
+  const other = host.querySelector<HTMLInputElement>('input[aria-label="其他回答"]')!;
+  await act(async () => {
+    other.focus();
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(other, ' 丙 ');
+    other.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  expect(onAnswer).not.toHaveBeenCalled();
+  await act(async () => button('发送')!.click());
+  expect(onAnswer).toHaveBeenCalledWith('丙');
+});
+
+it('已回答的询问卡片只读，可以翻页查看每组的回答', async () => {
+  await act(async () => {
+    root.render(
+      <ChatMarkdown asks={{ answer: '用哪种数据库？：（跳过）\n需要登录吗？：看情况' }}>
+        {askReply}
+      </ChatMarkdown>,
+    );
+  });
+
+  expect(host.querySelector('input')).toBeNull();
+  expect(button('跳过')).toBeUndefined();
+  expect(radios().every((radio) => radio.disabled)).toBe(true);
+  expect(host.querySelector('[aria-checked=true]')).toBeNull();
+  await act(async () => button('下一步')!.click());
+  expect(host.querySelector('[aria-checked=true]')?.textContent).toBe('C看情况');
+  expect(button('下一步')).toBeUndefined();
+});
+
+it('未开启询问时 ask 代码块按普通代码显示', async () => {
+  await act(async () => {
+    root.render(<ChatMarkdown>{askReply}</ChatMarkdown>);
+  });
+
+  expect(host.querySelector('[role=radio]')).toBeNull();
 });

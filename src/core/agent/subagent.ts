@@ -51,11 +51,11 @@ function targetOf(args: unknown): string {
   return value?.split('\n')[0] ?? '';
 }
 
-const DESCRIPTION = `派一个子 Agent 独立完成一项任务，等它做完后返回它的最终回复。
-子 Agent 看不到当前对话的历史，工具与你相同（不能再派子 Agent），工作目录相同。prompt 里写清背景、目标、要交回什么，以及允许修改的文件范围；并行的子 Agent 改同一个文件会互相覆盖，派活时划好边界。
-同一条回复里调用多次 task，这些子 Agent 会并行运行。返回结果里的 taskId 可用来续接这个子 Agent 追问（它保留之前的对话）。
-background 为 true 时立即返回 taskId，子 Agent 在后台运行，结束时你会自动收到它的最终回复；期间可用 task_output 查看、task_stop 停止。
-需要总结或梳理另一个会话时，派一个子 Agent 用 session_read 读完目标会话再汇报，不要自己把整段会话读进上下文。`;
+const DESCRIPTION = `Delegate an independent task to a subagent and return its final reply.
+The subagent shares your working directory and tools, except that it cannot delegate. It cannot see your conversation history. Give it the background, goal, expected result, and files it may edit. Assign distinct files to parallel subagents to avoid overwriting their changes.
+Multiple task calls in one reply run in parallel. Reuse the returned taskId to follow up with the same subagent and retain its conversation history.
+Set background to true to return taskId immediately. Completion delivers the final reply automatically. Use task_output to inspect progress or task_stop to stop the task.
+To summarize or analyze another session, ask a subagent to read it with session_read and report back. This keeps the full transcript out of your context.`;
 
 export function taskTool(
   parent: TaskParent,
@@ -69,10 +69,13 @@ export function taskTool(
     parameters: {
       type: 'object',
       properties: {
-        description: { type: 'string', description: '几个字的任务名，显示给用户' },
-        prompt: { type: 'string', description: '交给子 Agent 的完整任务说明' },
-        taskId: { type: 'string', description: '续接之前派出的子 Agent；省略时新派一个' },
-        background: { type: 'boolean', description: 'true 时在后台运行，不等它结束' },
+        description: { type: 'string', description: 'Short task name shown to the user.' },
+        prompt: { type: 'string', description: 'Complete instructions for the subagent.' },
+        taskId: { type: 'string', description: 'Resume this subagent. Omit to create a new one.' },
+        background: {
+          type: 'boolean',
+          description: 'Set to true to return immediately and run in the background.',
+        },
       },
       required: ['description', 'prompt'],
     } as unknown as ToolDefinition['parameters'],

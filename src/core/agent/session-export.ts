@@ -26,6 +26,9 @@ const imageExtensions: Record<string, string> = {
   'image/gif': 'gif',
 };
 
+const documentPrefixes = [DOCUMENT_ATTACHMENT, '用户上传了文档附件：'];
+const commentPrefixes = [COMMENTS_HEADER, '用户选中了你之前回复中的片段并留下评论'];
+
 function inlineTextEnd(embedded: string, start: number, nextName?: string) {
   for (
     let end = embedded.indexOf(TEXT_ATTACHMENT_END, start);
@@ -34,10 +37,14 @@ function inlineTextEnd(embedded: string, start: number, nextName?: string) {
   ) {
     const next = end + TEXT_ATTACHMENT_END.length;
     if (nextName === undefined) {
-      if (next === embedded.length || embedded.startsWith(COMMENTS_HEADER, next)) return end;
+      if (
+        next === embedded.length ||
+        commentPrefixes.some((prefix) => embedded.startsWith(prefix, next))
+      )
+        return end;
     } else if (
       embedded.startsWith(textAttachmentStart(nextName), next) ||
-      embedded.startsWith(DOCUMENT_ATTACHMENT, next)
+      documentPrefixes.some((prefix) => embedded.startsWith(prefix, next))
     ) {
       return end;
     }
@@ -110,10 +117,14 @@ async function writeSessionArchive(
       const images = (typeof message.content === 'string' ? [] : message.content)
         .filter((block) => block.type === 'image')
         .map((image, index) => addImage(image, meta.images?.[index]?.name));
-      const sourcePrefix = meta.sources?.length
-        ? sourcesBlock(meta.sources.map(({ key }) => key))
-        : '';
-      let embedded = rest.slice(sourcePrefix.length, rest.length - text.length);
+      const keys = meta.sources?.map(({ key }) => key) ?? [];
+      const sourcePrefix = keys.length
+        ? [
+            sourcesBlock(keys),
+            `用户引用了这些文件（需要时用 read 读取）：\n${keys.map((key) => `- ${key}`).join('\n')}\n`,
+          ].find((prefix) => rest.startsWith(prefix))
+        : undefined;
+      let embedded = rest.slice(sourcePrefix?.length ?? 0, rest.length - text.length);
       const attachments = meta.attachments ?? [];
       const files = attachments.map(({ id, name }, index) => {
         const path = 'files/' + ++fileNumber + '-' + safeArchiveName(name);
@@ -127,7 +138,7 @@ async function writeSessionArchive(
             return { name, path };
           }
         }
-        if (embedded.startsWith(DOCUMENT_ATTACHMENT))
+        if (documentPrefixes.some((prefix) => embedded.startsWith(prefix)))
           embedded = embedded.slice(embedded.indexOf('\n') + 1);
         if (source) {
           zip.addFile(source, path);

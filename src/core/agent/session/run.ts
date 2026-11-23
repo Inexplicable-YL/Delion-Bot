@@ -54,7 +54,9 @@ export async function ensureLive(id: string): Promise<Live> {
   const { selection } = choice;
   if (!choice.stored) storeModel(id, selection.provider.id, selection.model, selection.effort);
   const cwd = sessionCwd(meta.project_id, meta.cwd);
-  const options = await agentEnvironment().sessionOptions(meta.project_id, cwd);
+  const options = await agentEnvironment().sessionOptions(meta.project_id, cwd, {
+    askCards: !meta.parent_id,
+  });
   const delegates = !meta.parent_id;
   const remote = meta.project_id ? hostPorts().projects.remoteOf(meta.project_id) : null;
   const parent: TaskParent = {

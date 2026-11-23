@@ -1,11 +1,11 @@
 ---
 name: todo
-description: 查询、新建、更新和删除个人待办。
+description: Find, create, update, and delete personal to-dos.
 ---
 
-# 个人待办
+# Personal to-dos
 
-- 查询：`delion query_todos '{"query":"报销","completed":false}'`。匹配标题和备注，可用 `offset` 和 `limit` 分页。
-- 新建：`delion save_todo '{"title":"提交报销","dueAt":"2026-12-01T09:00:00Z"}'`。截止时间使用 UTC；不需要截止时间时省略 `dueAt`。
-- 更新：用查询返回的 ID 调用 `save_todo`。保留标题，传 `"completed":true` 标为完成，传 `"dueAt":null` 清除截止时间。
-- 删除：确认要删除的条目后，用其 ID 调用 `delion remove_todo '{"id":"待办 ID"}'`。
+- Find items with `delion query_todos '{"query":"expenses","completed":false}'`. The query matches titles and notes. Use `offset` and `limit` for pagination.
+- Create an item with `delion save_todo '{"title":"Submit expenses","dueAt":"2026-12-01T09:00:00Z"}'`. Use UTC for due dates. Omit `dueAt` when no due date is needed.
+- Update an item with `save_todo` and the ID returned by the query. Preserve its title unless the user asks to change it. Pass `"completed":true` to mark it complete or `"dueAt":null` to clear the due date.
+- Confirm which item to delete, then run `delion remove_todo '{"id":"<todo-id>"}'` with its ID.

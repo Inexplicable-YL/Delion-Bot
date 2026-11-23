@@ -318,7 +318,7 @@ export async function backgroundTools(
           background: {
             type: 'boolean',
             description:
-              'true 时在后台运行并立即返回 taskId，适合开发服务器、长时间构建等不必等它结束的命令。结束时你会自动收到通知；期间可用 task_output 查看输出、task_stop 停止。',
+              'Set to true to run in the background and return taskId immediately. Use this for commands you do not need to wait for, such as development servers or long builds. Completion sends a notification. Use task_output to inspect output or task_stop to stop the task.',
           },
         },
       } as unknown as ToolDefinition['parameters'],
@@ -341,12 +341,12 @@ export async function backgroundTools(
       name: 'task_output',
       label: 'task_output',
       description:
-        '查看后台任务（后台 bash 或后台子 Agent）的状态与输出。bash 返回状态、退出码和一段输出：不给 offset 时从头读（输出太长时只读末尾），给 offset 时从这个字节位置读，用上次返回的 nextOffset 只看新增的输出。子 Agent 返回状态和最终回复。任务结束时你会自动收到通知，不需要轮询。',
+        'Inspect the status and output of a background bash command or subagent. Bash returns status, exit code, and a chunk of output. Omit offset to read from the start, or the tail if the output is too long. Pass the previous nextOffset as offset to read new output. A subagent returns its status and final reply. Completion sends a notification, so polling is unnecessary.',
       parameters: {
         type: 'object',
         properties: {
           taskId: { type: 'string' },
-          offset: { type: 'number', description: '从日志的这个字节位置读起' },
+          offset: { type: 'number', description: 'Byte offset to start reading from in the log.' },
         },
         required: ['taskId'],
       } as unknown as ToolDefinition['parameters'],
@@ -374,7 +374,8 @@ export async function backgroundTools(
     {
       name: 'task_stop',
       label: 'task_stop',
-      description: '停止一个后台任务：bash 连同它启动的子进程一起结束，子 Agent 中止当前这一轮。',
+      description:
+        "Stop a background task. This stops bash and its child processes, or aborts the subagent's current turn.",
       parameters: {
         type: 'object',
         properties: { taskId: { type: 'string' } },

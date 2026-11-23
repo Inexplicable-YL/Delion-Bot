@@ -425,7 +425,7 @@ it('# 引用的会话只把 id 交给模型，由它按需 session_read；历史
     comments: [],
   });
   expect(state.prompts[0]).toContain(
-    '用户引用了同项目的这些会话（需要时用 session_read 读取）：\n- 复习计划（sessionId: s-1）\n',
+    'User-referenced sessions in this project (use session_read as needed):\n- 复习计划 (sessionId: s-1)\n',
   );
   expect(response.messages[0]).toMatchObject({
     role: 'user',

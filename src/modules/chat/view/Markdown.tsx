@@ -26,9 +26,18 @@ import { ReplyImages } from './ReplyImage';
 import { useReplyImageContext } from './ReplyImageContext';
 import type { ReplyImageItem } from './reply-images';
 import { ReplyFileMenu } from './ReplyFileMenu';
+import { WebLinkIcon } from './WebLinkIcon';
 import { chatClient } from './client';
 import { showToast } from '../../../ui/Toast';
 import { errorMessage } from '../../../core/protocol/contract';
+import { AskCard } from '../../../ui/agent/AskCard';
+import {
+  ASK_CARD_LANGUAGE,
+  formatAskAnswer,
+  parseAskAnswer,
+  parseAskCard,
+  type AskGroup,
+} from './ask-card';
 
 const lazyMermaidPlugin: DiagramPlugin = {
   name: 'mermaid',
@@ -69,6 +78,11 @@ const chatTranslations = {
   zoomIn: '放大',
   zoomOut: '缩小',
   resetView: '重置视图',
+  close: '关闭',
+  openExternalLink: '打开外部链接？',
+  externalLinkWarning: '即将访问外部网站。',
+  copyLink: '复制链接',
+  openLink: '打开链接',
 };
 
 function ChatTable({
@@ -91,6 +105,7 @@ const chatComponents = { table: ChatTable };
 type MarkdownNode = {
   type: string;
   value?: string;
+  lang?: string | null;
   url?: string;
   alt?: string | null;
   children?: MarkdownNode[];
@@ -204,10 +219,63 @@ function splitReferences(node: MarkdownNode, options: ChatReference[]): Markdown
 
 const localFileUrl = /^(?:[a-z]:[\\/]|(?![#?]|\/\/)[^:]+$)/i;
 
+const webUrl = /^https?:\/\//i;
+
+function markWebLink(node: MarkdownNode): void {
+  const [first, ...rest] = node.children ?? [];
+  const [lead = '', ...tail] = first?.type === 'text' ? Array.from(first.value ?? '') : [];
+  node.children = [
+    {
+      type: 'emphasis',
+      data: {
+        hName: 'chat-web-link',
+        hProperties: { bare: String(rest.length === 0 && first?.value === node.url) },
+      },
+      children: [
+        {
+          type: 'emphasis',
+          children: lead ? [{ type: 'text', value: lead }] : [],
+          data: { hName: 'chat-web-lead', hProperties: { url: node.url } },
+        },
+        ...(first?.type === 'text'
+          ? [{ type: 'text', value: tail.join('') }]
+          : first
+            ? [first]
+            : []),
+        ...rest,
+      ],
+    },
+  ];
+}
+
+function WebLink({ bare, children }: { bare?: string; children?: ReactNode }) {
+  return (
+    <span
+      className={cn(
+        'font-semibold text-accent-ink underline underline-offset-3',
+        bare === 'true' && 'break-all',
+      )}
+      data-web-link
+    >
+      {children}
+    </span>
+  );
+}
+
+function WebLinkLead({ url, children }: { url: string; children?: ReactNode }) {
+  return (
+    <span className="whitespace-nowrap">
+      <WebLinkIcon className="mr-0.5 ml-0.5 inline align-text-bottom text-accent-ink" url={url} />
+      {children}
+    </span>
+  );
+}
+
 function markReferences(node: MarkdownNode, options: ChatReference[]): void {
   if (node.type === 'link') {
     if (node.url && localFileUrl.test(node.url))
       node.data = { hName: 'chat-file-link', hProperties: { path: decodedImagePath(node.url) } };
+    else if (node.url && webUrl.test(node.url)) markWebLink(node);
     return;
   }
   if (!node.children) return;
@@ -217,7 +285,12 @@ function markReferences(node: MarkdownNode, options: ChatReference[]): void {
   });
 }
 
-const referenceTags = { 'chat-reference': ['path'], 'chat-file-link': ['path'] };
+const referenceTags = {
+  'chat-reference': ['path'],
+  'chat-file-link': ['path'],
+  'chat-web-lead': ['url'],
+  'chat-web-link': ['bare'],
+};
 
 type MarkdownReferences = {
   options?: ChatReference[];
@@ -245,7 +318,7 @@ function FileReference({
     <span
       className={cn(
         'cursor-pointer font-semibold text-accent-ink',
-        underline && 'border-b border-current',
+        underline && 'underline underline-offset-3',
       )}
       onClick={() => activate()}
       onKeyDown={(event) => {
@@ -259,9 +332,12 @@ function FileReference({
     >
       <span className="whitespace-nowrap">
         {directory ? (
-          <FolderIcon className="mr-1 inline size-4 align-text-bottom" />
+          <FolderIcon className="mr-0.5 ml-0.5 inline size-4 align-text-bottom" />
         ) : (
-          <FileIcon className="mr-1 inline size-4 align-text-bottom text-accent-ink" path={path} />
+          <FileIcon
+            className="mr-0.5 ml-0.5 inline size-4 align-text-bottom text-accent-ink"
+            path={path}
+          />
         )}
         {lead}
       </span>
@@ -326,10 +402,56 @@ const referenceComponents = {
       {children}
     </FileReference>
   ),
+  'chat-web-lead': WebLinkLead,
+  'chat-web-link': WebLink,
 };
 
+type MarkdownAsks = {
+  answer?: string;
+  onAnswer?: (text: string) => Promise<void>;
+};
+
+const AskContext = createContext<MarkdownAsks | undefined>(undefined);
+
+function markAskCards(node: MarkdownNode): void {
+  if (!node.children) return;
+  node.children = node.children.map((child) => {
+    const card =
+      child.type === 'code' && child.lang?.toLowerCase() === ASK_CARD_LANGUAGE
+        ? parseAskCard(child.value ?? '')
+        : null;
+    if (!card) {
+      markAskCards(child);
+      return child;
+    }
+    return {
+      type: 'paragraph',
+      children: [],
+      data: { hName: 'ask-card', hProperties: { card: JSON.stringify(card) } },
+    };
+  });
+}
+
+const askTags = { 'ask-card': ['card'] };
+
+function AskCardTag({ card }: { card?: string }) {
+  const asks = use(AskContext);
+  if (!card) return null;
+  const groups = JSON.parse(card) as AskGroup[];
+  const onAnswer = asks?.onAnswer;
+  return (
+    <AskCard
+      answers={asks?.answer === undefined ? undefined : parseAskAnswer(groups, asks.answer)}
+      groups={groups}
+      onSubmit={onAnswer && ((answers) => onAnswer(formatAskAnswer(groups, answers)))}
+    />
+  );
+}
+
+const askComponents = { 'ask-card': AskCardTag };
+
 const markdownStyles =
-  '[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_li]:my-1 [&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:text-ui-title-3 [&_h1]:font-semibold [&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:text-ui-headline [&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-ui-headline [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-2 [&_th]:border [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:px-2 [&_td]:py-1 [&_code]:rounded [&_code]:bg-code [&_code]:px-1 [&_code]:py-0.5 [&_:not(pre)>code]:text-ui-callout [&_pre]:my-2 [&_pre]:rounded-control [&_pre]:bg-code [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden [&_[data-streamdown=code-block]]:gap-0 [&_[data-streamdown=code-block]]:rounded-card [&_[data-streamdown=code-block]]:border-0 [&_[data-streamdown=code-block]]:bg-code [&_[data-streamdown=code-block]]:p-0 [&_[data-streamdown=code-block-header]]:sticky [&_[data-streamdown=code-block-header]]:top-0 [&_[data-streamdown=code-block-header]]:z-10 [&_[data-streamdown=code-block-header]]:justify-start [&_[data-streamdown=code-block-header]]:rounded-t-card [&_[data-streamdown=code-block-header]]:bg-code [&_[data-streamdown=code-block-header]]:px-2 [&_[data-streamdown=code-block]>div:nth-child(2)]:-mt-8 [&_[data-streamdown=code-block]>div:nth-child(2)]:pr-3 [&_[data-streamdown=code-block]>div:nth-child(2)]:top-0 [&_[data-streamdown=code-block-body]]:rounded-none [&_[data-streamdown=code-block-body]]:border-none [&_[data-streamdown=code-block-body]]:bg-transparent [&_[data-streamdown=code-block-body]]:p-0 [&_[data-streamdown=code-block-body]_pre]:my-0 [&_[data-streamdown=code-block-body]_pre]:rounded-none [&_[data-streamdown=code-block-body]_pre]:rounded-b-card [&_[data-streamdown=code-block-actions]]:opacity-0 [&_[data-streamdown=code-block-actions]]:transition-opacity [&_[data-streamdown=code-block]:focus-within_[data-streamdown=code-block-actions]]:opacity-100 [&_[data-streamdown=code-block]:hover_[data-streamdown=code-block-actions]]:opacity-100 [&_div[data-streamdown=code-block-actions]]:border-0 [&_div[data-streamdown=code-block-actions]]:bg-transparent [&_div[data-streamdown=code-block-actions]]:p-0 [&_div[data-streamdown=code-block-actions]_button[data-streamdown=code-block-copy-button]]:rounded-control [&_div[data-streamdown=code-block-actions]_button[data-streamdown=code-block-copy-button]_svg]:size-3.5 [&_div[data-streamdown=code-block-actions]_button[data-streamdown=code-block-copy-button]:hover]:bg-hover-strong [&_[data-streamdown=unordered-list]]:list-outside [&_[data-streamdown=unordered-list]]:pl-5 [&_[data-streamdown=ordered-list]]:list-outside [&_[data-streamdown=ordered-list]]:pl-5 [&_[data-streamdown=code-block-header]_span:empty::after]:content-["txt"]';
+  '[&_[data-streamdown=link]:has(>[data-web-link])]:no-underline [&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_li]:my-1 [&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:text-ui-title-3 [&_h1]:font-semibold [&_h2]:mt-4 [&_h2]:mb-2 [&_h2]:text-ui-headline [&_h3]:mt-3 [&_h3]:mb-1 [&_h3]:text-ui-headline [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-3 [&_blockquote]:text-ink-2 [&_th]:border [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:px-2 [&_td]:py-1 [&_code]:rounded [&_code]:bg-code [&_code]:px-1 [&_code]:py-0.5 [&_:not(pre)>code]:text-ui-callout [&_pre]:my-2 [&_pre]:rounded-control [&_pre]:bg-code [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_.katex-display]:overflow-x-auto [&_.katex-display]:overflow-y-hidden [&_[data-streamdown=code-block]]:gap-0 [&_[data-streamdown=code-block]]:rounded-card [&_[data-streamdown=code-block]]:border-0 [&_[data-streamdown=code-block]]:bg-code [&_[data-streamdown=code-block]]:p-0 [&_[data-streamdown=code-block-header]]:sticky [&_[data-streamdown=code-block-header]]:top-0 [&_[data-streamdown=code-block-header]]:z-10 [&_[data-streamdown=code-block-header]]:justify-start [&_[data-streamdown=code-block-header]]:rounded-t-card [&_[data-streamdown=code-block-header]]:bg-code [&_[data-streamdown=code-block-header]]:px-2 [&_[data-streamdown=code-block]>div:nth-child(2)]:-mt-8 [&_[data-streamdown=code-block]>div:nth-child(2)]:pr-3 [&_[data-streamdown=code-block]>div:nth-child(2)]:top-0 [&_[data-streamdown=code-block-body]]:rounded-none [&_[data-streamdown=code-block-body]]:border-none [&_[data-streamdown=code-block-body]]:bg-transparent [&_[data-streamdown=code-block-body]]:p-0 [&_[data-streamdown=code-block-body]_pre]:my-0 [&_[data-streamdown=code-block-body]_pre]:rounded-none [&_[data-streamdown=code-block-body]_pre]:rounded-b-card [&_[data-streamdown=code-block-actions]]:opacity-0 [&_[data-streamdown=code-block-actions]]:transition-opacity [&_[data-streamdown=code-block]:focus-within_[data-streamdown=code-block-actions]]:opacity-100 [&_[data-streamdown=code-block]:hover_[data-streamdown=code-block-actions]]:opacity-100 [&_div[data-streamdown=code-block-actions]]:border-0 [&_div[data-streamdown=code-block-actions]]:bg-transparent [&_div[data-streamdown=code-block-actions]]:p-0 [&_div[data-streamdown=code-block-actions]_button[data-streamdown=code-block-copy-button]]:rounded-control [&_div[data-streamdown=code-block-actions]_button[data-streamdown=code-block-copy-button]_svg]:size-3.5 [&_div[data-streamdown=code-block-actions]_button[data-streamdown=code-block-copy-button]:hover]:bg-hover-strong [&_[data-streamdown=unordered-list]]:list-outside [&_[data-streamdown=unordered-list]]:pl-5 [&_[data-streamdown=ordered-list]]:list-outside [&_[data-streamdown=ordered-list]]:pl-5 [&_[data-streamdown=code-block-header]_span:empty::after]:content-["txt"]';
 
 export function ChatMarkdown({
   children,
@@ -337,10 +459,12 @@ export function ChatMarkdown({
   mode = 'static',
   replyImages = false,
   references,
+  asks,
   ...props
 }: ComponentProps<typeof Streamdown> & {
   replyImages?: boolean;
   references?: MarkdownReferences;
+  asks?: MarkdownAsks;
 }) {
   const { opensLink } = useChatTabSource();
   const linkSafety: LinkSafetyConfig = { enabled: true, onLinkCheck: opensLink };
@@ -351,38 +475,43 @@ export function ChatMarkdown({
     ...(references
       ? [() => (tree: MarkdownNode) => markReferences(tree, references.options ?? [])]
       : []),
+    ...(asks ? [() => markAskCards] : []),
   ];
   const allowedTags = {
     ...(images ? replyImageTags : {}),
     ...(references ? referenceTags : {}),
+    ...(asks ? askTags : {}),
   };
   const components = {
     ...(images ? replyComponents : chatComponents),
     ...(references ? referenceComponents : {}),
+    ...(asks ? askComponents : {}),
   } as Components;
   return (
-    <ReferenceContext value={references}>
-      <Streamdown
-        allowedTags={Object.keys(allowedTags).length ? allowedTags : undefined}
-        className={cn(markdownStyles, className)}
-        codeBlockMaxHeight={0}
-        components={components}
-        controls={chatControls}
-        linkSafety={linkSafety}
-        mermaid={mermaidOptions()}
-        mode={mode}
-        plugins={chatStreamdownPlugins}
-        remarkPlugins={
-          remarkPlugins.length
-            ? [...Object.values(defaultRemarkPlugins), ...remarkPlugins]
-            : undefined
-        }
-        skipHtml
-        translations={chatTranslations}
-        {...props}
-      >
-        {children}
-      </Streamdown>
-    </ReferenceContext>
+    <AskContext value={asks}>
+      <ReferenceContext value={references}>
+        <Streamdown
+          allowedTags={Object.keys(allowedTags).length ? allowedTags : undefined}
+          className={cn(markdownStyles, className)}
+          codeBlockMaxHeight={0}
+          components={components}
+          controls={chatControls}
+          linkSafety={linkSafety}
+          mermaid={mermaidOptions()}
+          mode={mode}
+          plugins={chatStreamdownPlugins}
+          remarkPlugins={
+            remarkPlugins.length
+              ? [...Object.values(defaultRemarkPlugins), ...remarkPlugins]
+              : undefined
+          }
+          skipHtml
+          translations={chatTranslations}
+          {...props}
+        >
+          {children}
+        </Streamdown>
+      </ReferenceContext>
+    </AskContext>
   );
 }

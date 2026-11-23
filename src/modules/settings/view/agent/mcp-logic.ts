@@ -12,26 +12,18 @@ function parseArgsText(text: string): string[] {
     .filter((line) => line.length > 0);
 }
 
-const pairFormats = {
-  '=': { label: '环境变量', format: 'KEY=VALUE' },
-  ':': { label: '请求头', format: 'Name: value' },
-};
-
-export function parsePairs(
-  text: string,
-  separator: keyof typeof pairFormats,
-): { pairs: Record<string, string>; error: string | null } {
+export function parseEnvText(text: string): {
+  pairs: Record<string, string>;
+  error: string | null;
+} {
   const pairs: Record<string, string> = {};
   const lines = text.split('\n');
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index]!.trim();
     if (!line) continue;
-    const at = line.indexOf(separator);
+    const at = line.indexOf('=');
     const key = at < 0 ? '' : line.slice(0, at).trim();
-    if (!key) {
-      const { label, format } = pairFormats[separator];
-      return { pairs, error: `${label}第 ${index + 1} 行应为 ${format} 格式` };
-    }
+    if (!key) return { pairs, error: `环境变量第 ${index + 1} 行应为 KEY=VALUE 格式` };
     pairs[key] = line.slice(at + 1).trim();
   }
   return { pairs, error: null };
@@ -44,7 +36,7 @@ export interface McpFormInput {
   argsText: string;
   envText: string;
   url: string;
-  headersText: string;
+  headers: readonly { name: string; value: string }[];
 }
 
 export type McpFormParsed = { ok: true; value: McpServerInput } | { ok: false; error: string };
@@ -58,13 +50,20 @@ export function parseMcpForm(input: McpFormInput, options: { isEdit: boolean }):
     if (!url && !options.isEdit) return { ok: false, error: '地址不能为空' };
     if (url && !/^https?:$/.test(URL.parse(url)?.protocol ?? ''))
       return { ok: false, error: '地址需以 http:// 或 https:// 开头' };
-    const { pairs, error } = parsePairs(input.headersText, ':');
-    if (error) return { ok: false, error };
-    return { ok: true, value: { transport: 'http', name, url, headers: pairs } };
+    const headers = input.headers
+      .map(({ name, value }) => [name.trim(), value.trim()] as const)
+      .filter(([name, value]) => name || value);
+    if (headers.some(([name]) => !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name))) {
+      return { ok: false, error: '请为每个 HTTP 标头填写有效的名称' };
+    }
+    return {
+      ok: true,
+      value: { transport: 'http', name, url, headers: Object.fromEntries(headers) },
+    };
   }
   const command = input.command.trim();
-  if (!command && !options.isEdit) return { ok: false, error: 'command 不能为空' };
-  const { pairs, error } = parsePairs(input.envText, '=');
+  if (!command && !options.isEdit) return { ok: false, error: '命令不能为空' };
+  const { pairs, error } = parseEnvText(input.envText);
   if (error) return { ok: false, error };
   return {
     ok: true,

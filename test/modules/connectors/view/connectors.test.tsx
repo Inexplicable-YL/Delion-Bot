@@ -27,6 +27,8 @@ it('已连接应用单列一类，推荐区保持 6 个，授权失败后可在�
   let failAccountsRefresh = false;
   invoke.mockImplementation(async (channel: string) => {
     switch (channel) {
+      case 'capabilities:listMcpServers':
+        return [];
       case 'connectors:configured':
         return true;
       case 'connectors:catalog':
@@ -75,6 +77,16 @@ it('已连接应用单列一类，推荐区保持 6 个，授权失败后可在�
         item.getAttribute('aria-label'),
       );
     await vi.waitFor(() => expect(section('Connected')).toEqual(['gmail']));
+    const custom = host.querySelector('details')!;
+    const summary = custom.querySelector('summary')!;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(custom, 'scrollIntoView', { value: scrollIntoView });
+    await vi.waitFor(() => expect(custom.open).toBe(true));
+    await act(async () => summary.click());
+    expect(custom.open).toBe(false);
+    await act(async () => summary.click());
+    expect(custom.open).toBe(true);
+    await vi.waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' }));
     expect(section('Recommended')).toEqual([
       'googlecalendar',
       'googledrive',

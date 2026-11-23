@@ -1,34 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import {
   mcpUpdatePatch,
+  parseEnvText,
   parseMcpForm,
-  parsePairs,
 } from '../../../../src/modules/settings/view/agent/mcp-logic';
 
-describe('parsePairs', () => {
+describe('parseEnvText', () => {
   it('env 每行 KEY=VALUE：允许空值与空行，以第一个 = 切开，重复键取后者', () => {
-    expect(parsePairs('A=1\nB=\n\n C = 2 \nCONN=a=b\nA=3', '=')).toEqual({
+    expect(parseEnvText('A=1\nB=\n\n C = 2 \nCONN=a=b\nA=3')).toEqual({
       pairs: { A: '3', B: '', C: '2', CONN: 'a=b' },
       error: null,
     });
   });
 
-  it('请求头每行 Name: value，值里的冒号保留', () => {
-    expect(parsePairs('Authorization: Bearer t\nX-Url: https://a', ':')).toEqual({
-      pairs: { Authorization: 'Bearer t', 'X-Url': 'https://a' },
-      error: null,
-    });
-  });
-
   it('缺分隔符或空键时报错并指明行号', () => {
-    expect(parsePairs('A=1\nBAD', '=').error).toBe('环境变量第 2 行应为 KEY=VALUE 格式');
-    expect(parsePairs(' =1', '=').error).toBe('环境变量第 1 行应为 KEY=VALUE 格式');
-    expect(parsePairs('Bearer t', ':').error).toBe('请求头第 1 行应为 Name: value 格式');
+    expect(parseEnvText('A=1\nBAD').error).toBe('环境变量第 2 行应为 KEY=VALUE 格式');
+    expect(parseEnvText(' =1').error).toBe('环境变量第 1 行应为 KEY=VALUE 格式');
   });
 });
 
 describe('parseMcpForm', () => {
-  const blank = { name: 's', command: '', argsText: '', envText: '', url: '', headersText: '' };
+  const blank = { name: 's', command: '', argsText: '', envText: '', url: '', headers: [] };
   const stdio = { ...blank, transport: 'stdio' as const };
   const http = { ...blank, transport: 'http' as const };
 
@@ -53,7 +45,15 @@ describe('parseMcpForm', () => {
   it('http：地址与请求头，只接受 http/https', () => {
     expect(
       parseMcpForm(
-        { ...http, url: ' https://a.com/mcp ', headersText: 'Authorization: Bearer t' },
+        {
+          ...http,
+          url: ' https://a.com/mcp ',
+          headers: [
+            { name: ' Authorization ', value: ' Bearer a:b ' },
+            { name: 'X-Flag', value: '' },
+            { name: '', value: '' },
+          ],
+        },
         { isEdit: false },
       ),
     ).toEqual({
@@ -62,13 +62,22 @@ describe('parseMcpForm', () => {
         transport: 'http',
         name: 's',
         url: 'https://a.com/mcp',
-        headers: { Authorization: 'Bearer t' },
+        headers: { Authorization: 'Bearer a:b', 'X-Flag': '' },
       },
     });
     expect(parseMcpForm({ ...http, url: 'ftp://a' }, { isEdit: false })).toEqual({
       ok: false,
       error: '地址需以 http:// 或 https:// 开头',
     });
+  });
+
+  it('HTTP 标头有值时必须填写有效名称', () => {
+    expect(
+      parseMcpForm(
+        { ...http, url: 'https://a.com/mcp', headers: [{ name: '', value: 'Bearer t' }] },
+        { isEdit: false },
+      ).ok,
+    ).toBe(false);
   });
 
   it('名称必填且不含空白', () => {
@@ -84,7 +93,7 @@ describe('parseMcpForm', () => {
   it('command 与地址：新建必填，编辑可留空（保持原值）', () => {
     expect(parseMcpForm(stdio, { isEdit: false })).toEqual({
       ok: false,
-      error: 'command 不能为空',
+      error: '命令不能为空',
     });
     expect(parseMcpForm(http, { isEdit: false })).toEqual({ ok: false, error: '地址不能为空' });
     expect(parseMcpForm(stdio, { isEdit: true }).ok).toBe(true);

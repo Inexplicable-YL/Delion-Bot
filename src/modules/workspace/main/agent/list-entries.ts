@@ -11,7 +11,7 @@ import {
 } from '../../../../core/capabilities/domain-tools';
 
 export const listWorkspaceEntriesTool = tool(
-  '浏览或按名称弱过滤工作区条目（项目、文件夹、笔记、来源引用、本地文件）。只读。query 为空即浏览；parentId 限定直接子条目，缺省列全部。返回条目与可经 delion read_resource 命令读取的引用。',
+  'Browse or loosely filter workspace entries by name. This read-only command covers projects, folders, notes, source references, and local files. Leave query empty to browse. Pass parentId to list only its direct children or omit it to list all entries. Returns entries and references readable with delion read_resource.',
   z
     .object({ query, parentId: workspaceEntryIdSchema.nullable().optional(), offset, limit })
     .strict(),

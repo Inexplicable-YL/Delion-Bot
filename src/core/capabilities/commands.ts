@@ -32,8 +32,9 @@ export function commandPrompt(disabledSkills: ReadonlySet<string>): string | nul
   const enabled = enabledCommandDomains(disabledSkills);
   if (enabled.length === 0) return null;
   return [
-    "下列能力在 bash 里用 `delion <命令> '<JSON>'` 调用，先 `delion help` 查看命令与参数；对应领域的 skill 有更完整的说明：",
-    ...enabled.map((domain) => `- ${domain.name}：${domain.description}`),
+    '## Local Delion commands',
+    "Run `delion help` in bash to check available commands and arguments before using `delion <command> '<JSON>'`. Consult the relevant skill for detailed instructions.",
+    ...enabled.map((domain) => `- ${domain.name}: ${domain.description}`),
   ].join('\n');
 }
 
