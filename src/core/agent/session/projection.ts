@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import type { AgentSession, SessionManager } from '@earendil-works/pi-coding-agent';
+import type { AgentSession, SessionEntry, SessionManager } from '@earendil-works/pi-coding-agent';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { ImageContent, TextContent } from '@earendil-works/pi-ai';
 import { z } from 'zod';
@@ -20,6 +20,18 @@ type ChatMessage = WorkspaceChat['messages'][number];
 export const TASK_NOTICE = 'delion-task';
 
 export const THINKING_TIME = 'delion-thinking-time';
+
+export const COMPACTION_DETAILS = 'delion-compaction-details';
+
+const storedCompaction = z.object({
+  id: z.string(),
+  mode: z.enum(['manual', 'auto']),
+  releasedTokens: z.number().optional(),
+});
+
+type CompactionHistoryMessage = ChatMessage & {
+  compaction?: Omit<z.infer<typeof storedCompaction>, 'id'>;
+};
 
 export const thinkingKey = (timestamp: number, contentIndex: number) =>
   `${timestamp}:${contentIndex}`;
@@ -104,7 +116,7 @@ export function projectMessages(
       lastUserAt = message.timestamp;
       const { meta, text } = splitMeta(textOf(message.content));
       lastTurnId = meta.turnId;
-      out.push({ role: 'user', content: text, ...meta });
+      out.push({ role: 'user', content: text, ...meta, startedAt: message.timestamp });
       reply = null;
     } else if (message.role === 'assistant') {
       if (!reply) {
@@ -165,13 +177,20 @@ export function projectMessages(
         lastUserAt = message.timestamp;
         lastTurnId = details.turnId;
       }
-      out.push({ role: 'assistant', content: textOf(message.content), parts: [], task: details });
+      out.push({
+        role: 'assistant',
+        content: textOf(message.content),
+        parts: [],
+        task: details,
+        startedAt: message.timestamp,
+      });
       reply = null;
     } else if (message.role === 'custom') {
       if (message.display) {
         out.push({
           role: 'assistant',
           content: textOf(message.content),
+          startedAt: message.timestamp,
           parts: [],
           extension: { customType: message.customType },
         });
@@ -221,6 +240,82 @@ function storedMessages(
     ),
     thinkingTimes(manager),
   );
+}
+
+export function projectCompactionHistory(branch: SessionEntry[]): CompactionHistoryMessage[] {
+  const cutoff = branch.findLastIndex(({ type }) => type === 'compaction');
+  if (cutoff < 0) return [];
+  const entries = branch.slice(0, cutoff + 1);
+  const details = new Map<string, z.infer<typeof storedCompaction>>();
+  for (const entry of branch) {
+    if (entry.type !== 'custom' || entry.customType !== COMPACTION_DETAILS) continue;
+    const parsed = storedCompaction.safeParse(entry.data);
+    if (parsed.success) details.set(parsed.data.id, parsed.data);
+  }
+  const { sessionEntryToContextMessages } = requirePiSync();
+  const projected = entries.flatMap((entry) =>
+    sessionEntryToContextMessages(entry).map((message) => ({ message, id: entry.id })),
+  );
+  const inserted = entries.filter((entry) => entry.type === 'compaction').values();
+  return projectMessages(
+    projected.map(({ message }) => message),
+    undefined,
+    false,
+    projected.map(({ id }) => id),
+    thinkingTimes({ getBranch: () => branch }),
+  ).map((message) => {
+    if (!message.compacted) return message;
+    const entry = inserted.next().value!;
+    const detail = details.get(entry.id);
+    return {
+      ...message,
+      entryId: entry.id,
+      content: entry.summary,
+      startedAt: Date.parse(entry.timestamp),
+      ...(detail && { compaction: { mode: detail.mode, releasedTokens: detail.releasedTokens } }),
+    };
+  });
+}
+
+export function projectAfterCompaction(id: string, branch: SessionEntry[], streaming = false) {
+  const boundary = branch.findLastIndex(({ type }) => type === 'compaction');
+  if (boundary < 0) return null;
+  const entry = live.get(id);
+  const running = Boolean(entry?.run);
+  const projection =
+    entry?.session.sessionManager.buildSessionProjection() ??
+    requirePiSync().buildSessionProjection(branch);
+  const start = projection.entries.findIndex(
+    ({ sourceEntry }) => sourceEntry.parentId === branch[boundary]!.id,
+  );
+  const finalized =
+    start < 0
+      ? []
+      : projection.entries.slice(start).flatMap(({ sourceEntry, messages }) =>
+          messages.map((message) => ({
+            message,
+            id: sourceEntry.type === 'message' ? sourceEntry.id : undefined,
+          })),
+        );
+  const pending = running ? entry!.session.messages.slice(projection.messages.length) : [];
+  const partial = streaming ? entry?.session.state.streamingMessage : null;
+  const messages = [...finalized.map(({ message }) => message), ...pending];
+  if (partial) messages.push(partial);
+  const source =
+    messages.length > 0 && messages[0]?.role !== 'user'
+      ? branch
+          .slice(0, boundary)
+          .findLast((item) => item.type === 'message' && item.message.role === 'user')
+      : undefined;
+  const seed = source?.type === 'message' ? [source.message] : [];
+  const suffix = projectMessages(
+    [...seed, ...messages],
+    running ? liveSteps.get(id) : undefined,
+    running,
+    [...seed.map(() => undefined), ...finalized.map((item) => item.id)],
+    thinkingTimes({ getBranch: () => branch }, liveThinking.get(id)),
+  ).slice(seed.length);
+  return { entryId: branch[boundary]!.id, messages: suffix };
 }
 
 function readMessages(id: string): ChatMessage[] {

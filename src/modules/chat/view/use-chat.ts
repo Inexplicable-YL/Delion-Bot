@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ChatComment,
   ChatMediaView,
@@ -18,7 +18,7 @@ import {
   hasChatImages,
   stripChatImageTokens,
 } from '../../../core/protocol/chat-input';
-import { agentClient } from './client';
+import { agentClient, chatClient, commandRepliesKey } from './client';
 import { showToast } from '../../../ui/Toast';
 import { useChatTabSource } from './ChatSource';
 import { useSessions } from './sessions';
@@ -63,6 +63,7 @@ export function useChat(
   referenceSource?: ReferenceSource,
   onNewChat?: () => void,
 ) {
+  const queryClient = useQueryClient();
   const { navigate } = useChatTabSource();
   const chat = useSessions((state) => state.chats[sessionId] ?? null);
   const { attachments, update: setAttachments, hasAttachments, release } = useChatAttachments();
@@ -143,7 +144,7 @@ export function useChat(
       if (busy) setError('运行中不能执行命令，请等待当前回答完成');
       else if (hasImages) setError('命令不能附带图片，请先移除图片');
       else if (comments.length) setError('命令不能附带评论，请先移除评论');
-      else await runCommand(command.name, command.args, text);
+      else await runCommand(command.name, command.args, text, references);
       return;
     }
     const sentReferences = references.filter((ref) => !ref.session);
@@ -191,7 +192,12 @@ export function useChat(
     }
   };
 
-  const runCommand = async (name: SessionCommandName, args: string, text: string) => {
+  const runCommand = async (
+    name: SessionCommandName,
+    args: string,
+    text: string,
+    references: ChatReference[],
+  ) => {
     if (!window.delionBot) return;
     const requested = sessionId;
     if (attachments.length) {
@@ -205,26 +211,40 @@ export function useChat(
       return;
     }
     if (name === 'btw') {
-      void openSidechat(requested, { prompt: args });
+      if (!args) {
+        void openSidechat(requested);
+        return;
+      }
+      try {
+        const files = references.filter((ref) => !ref.session);
+        for (const ref of files) {
+          if (!ref.key.startsWith('source:')) await flushReference?.(ref.key);
+        }
+        await openSidechat(requested, {
+          question: {
+            text: args,
+            attachments: [],
+            context: files.map((ref) => ref.key),
+            sessions: references
+              .filter((ref) => ref.session)
+              .map((ref) => ({ id: ref.key, title: ref.title })),
+            comments: [],
+          },
+        });
+      } catch (error) {
+        setError(errorMessage(error));
+        if (isSessionViewed(requested) && !useChatDrafts.getState().drafts[requested]?.prompt)
+          updateDraft(requested, { prompt: text });
+      }
       return;
     }
     setPending((count) => count + 1);
     try {
-      const result = await agentClient['run-command']({ sessionId: requested, name, args });
-      useSessions.getState().putChat(requested, result);
-      if (name === 'name') {
-        void useSessions
-          .getState()
-          .refresh(result.projectId)
-          .catch(() => {});
-        showToast({ variant: 'success', title: '已重命名' });
-      } else if (name === 'reload') {
-        showToast({
-          variant: 'success',
-          title: '已重新加载',
-          description: 'Skills、扩展与 AGENTS.md 已按最新内容加载。',
-        });
-      }
+      const replies = await chatClient.runLocalCommand({ sessionId: requested, name, args });
+      await queryClient.cancelQueries({ queryKey: commandRepliesKey(requested) });
+      queryClient.setQueryData(commandRepliesKey(requested), replies);
+      const sessions = useSessions.getState();
+      void sessions.refresh(sessions.chats[requested]?.projectId ?? null).catch(() => {});
     } catch (e) {
       setError(errorMessage(e));
       if (isSessionViewed(requested)) updateDraft(requested, { prompt: text });

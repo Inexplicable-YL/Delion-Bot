@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SidechatView } from '../../../core/protocol/agent';
+import type { ChatAskInput, SidechatView } from '../../../core/protocol/agent';
 import { agentClient, onAgentEvent } from './client';
 import { keepToolImages } from './sessions';
 import { showToast } from '../../../ui/Toast';
@@ -40,7 +40,7 @@ export const sidechatDraftKey = (parentId: string) => `sidechat:${parentId}`;
 
 export async function openSidechat(
   parentId: string,
-  options: { quote?: string; prompt?: string } = {},
+  options: { quote?: string; question?: ChatAskInput } = {},
 ) {
   if (!window.delionBot) return;
   const key = sidechatDraftKey(parentId);
@@ -50,12 +50,17 @@ export async function openSidechat(
     drafts.update(key, {
       comments: [...(draft.comments ?? []), { quote: options.quote, comment: '' }],
     });
-  if (options.prompt) drafts.update(key, { prompt: options.prompt });
   useSidechats.getState().setCollapsed(parentId, false);
   try {
     useSidechats.getState().put(await agentClient['open-sidechat']({ parentId }));
   } catch (error) {
+    if (options.question) throw error;
     showToast({ variant: 'error', title: '打开旁问失败', description: errorMessage(error) });
+    return;
+  }
+  if (options.question) {
+    const view = await agentClient['ask-sidechat']({ parentId, ...options.question });
+    if (useSidechats.getState().views[parentId]) useSidechats.getState().put(view);
   }
 }
 

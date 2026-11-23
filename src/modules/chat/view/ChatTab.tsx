@@ -1,6 +1,6 @@
 import { cn } from '../../../ui/cn';
 import { useState, type ReactNode } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   ArrowDownTrayIcon as Download,
   ClockIcon as History,
@@ -9,7 +9,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { TabId } from '../../../app/module';
 import type { ChatComment, ChatSessionSummary, WorkspaceChat } from '../../../core/protocol/agent';
-import { agentClient, chatClient } from './client';
+import { agentClient, chatClient, commandRepliesKey } from './client';
 import { Button } from '../../../ui/Button';
 import { IconButton } from '../../../ui/IconButton';
 import { ChatComposer } from './ChatComposer';
@@ -197,6 +197,11 @@ function ChatSessionView({
   const openSession = (id: string) => navigate({ page: 'chat', projectId, sessionId: id });
   const [attachSession, chatState] = useChat(active, referenceSource, startNewChat);
   const { chat, busy, editLast, fork, askAbout } = chatState;
+  const { data: commandReplies } = useQuery({
+    queryKey: commandRepliesKey(active),
+    queryFn: () => chatClient.localCommandReplies(active),
+    enabled: chat !== null,
+  });
   const project = useWorkspaceStore((state) =>
     state.workspace.entries.find((entry) => entry.id === projectId),
   );
@@ -208,7 +213,20 @@ function ChatSessionView({
   const sidechatOpen = useSidechats((state) => Boolean(state.views[active]));
   const sidechatFromQuote = (quote: string) => void openSidechat(active, { quote });
   const subagent = chat?.subagent;
-  const conversation = chat && (busy || chat.messages.length > 0 || chat.running || subagent);
+  const compacted = chat?.messages[0]?.compacted === true;
+  const liveTranscript = useSessions((state) => state.compacted[active]);
+  const { data: transcript } = useQuery({
+    queryKey: ['chat', 'compaction-history', active, liveTranscript?.entryId],
+    queryFn: () => chatClient.compactionHistory(active),
+    enabled: compacted,
+    placeholderData: (previous) => previous,
+  });
+  const messagesAfterCompaction =
+    transcript &&
+    (liveTranscript?.entryId === transcript.entryId ? liveTranscript : transcript).messages;
+  const conversation =
+    chat &&
+    (busy || chat.messages.length > 0 || commandReplies?.length || chat.running || subagent);
   const showProjectSetup = chat && project?.kind === 'project' && !conversation;
 
   const saveConversation = async () => {
@@ -293,6 +311,9 @@ function ChatSessionView({
       {conversation ? (
         <ChatThread
           chat={chat}
+          commandReplies={commandReplies}
+          compactionHistory={compacted ? transcript?.history : undefined}
+          messagesAfterCompaction={compacted ? (messagesAfterCompaction ?? undefined) : undefined}
           onAskImage={subagent ? undefined : askAbout}
           onAnswer={subagent ? undefined : (text) => askAbout(text, [])}
           onEditLast={subagent ? undefined : editLast}

@@ -6,7 +6,7 @@ import { saveTodoTool } from './save';
 
 export const todoDomain = {
   name: 'todo',
-  description: 'Find and manage personal to-dos.',
+  description: 'Find and manage personal tasks.',
   skill: { name: 'todo', files: [{ path: 'SKILL.md', content: skill }] },
   commands: {
     query_todos: queryTodosTool,

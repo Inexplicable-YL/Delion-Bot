@@ -8,8 +8,21 @@ const bridge = typeof window === 'undefined' ? undefined : window.delionBot?.bri
 
 export const agentClient = createClient(agentContract, bridge);
 export const chatClient = createClient(chatContract, bridge);
+export const commandRepliesKey = (id: string) => ['chat', 'local-command-replies', id] as const;
 export const llmClient = createClient(llmContract, bridge);
 export const capabilitiesClient = createClient(capabilitiesContract, bridge);
+
+export function onCompactionChanged(
+  listener: (payload: EventPayload<typeof chatContract, 'compactionChanged'>) => void,
+) {
+  return subscribe(chatContract, bridge, 'compactionChanged', listener);
+}
+
+export function onCompactionStream(
+  listener: (payload: EventPayload<typeof chatContract, 'compactionStream'>) => void,
+) {
+  return subscribe(chatContract, bridge, 'compactionStream', listener);
+}
 
 export function onAgentEvent<K extends keyof (typeof agentContract)['events'] & string>(
   name: K,

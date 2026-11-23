@@ -6,8 +6,8 @@ import { forkSessionFile, loadPi, resolveModel } from '../pi';
 import { usableLlmProviders } from '../providers';
 import { closeSidechat } from '../sidechat';
 import { stopSessionTasks } from '../tasks';
-import { live, type Live } from './live';
-import { publish, snapshot } from './projection';
+import { live, sessionBranch, type Live } from './live';
+import { COMPACTION_DETAILS, publish, snapshot } from './projection';
 import { disposeLive, ensureLive } from './run';
 import {
   adoptSessionFile,
@@ -15,13 +15,17 @@ import {
   childSessionIds,
   emptySessionId,
   insertSession,
+  modelAutoCompaction,
   modelChoice,
   preloadPi,
+  readySelection,
   removeSession,
   row,
   sessionCwd,
   storeModel,
   storeProject,
+  storeModelAutoCompaction,
+  storeLocalCommandReply,
   storeTitle,
   storeVisibility,
 } from './store';
@@ -116,6 +120,93 @@ function compactionError(error: unknown): string {
   return `压缩失败：${message}`;
 }
 
+const tokenUnits = { k: 3, m: 6, b: 9 };
+
+function formatTokenCount(tokens: number): string {
+  for (const [unit, exponent] of Object.entries(tokenUnits).reverse()) {
+    const scale = 10 ** exponent;
+    if (tokens >= scale) return `${tokens / scale}${unit}`;
+  }
+  return String(tokens);
+}
+
+async function modelAutoCompactionReply(id: string, value: string): Promise<string> {
+  const reset = value.toLowerCase() === 'auto';
+  let tokens: number | undefined;
+  if (value && !reset) {
+    const match = /^(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?([kmb])?$/i.exec(value);
+    if (match) {
+      const [, whole, fraction, unit] = match;
+      const amount = whole!.replaceAll(',', '') + (fraction ?? '');
+      const exponent = unit
+        ? tokenUnits[unit.toLowerCase() as keyof typeof tokenUnits]
+        : Number(amount) < 1_000
+          ? 3
+          : 0;
+      if (!fraction || unit) tokens = Number(`${amount}e${exponent}`);
+    }
+    if (tokens === undefined || !Number.isSafeInteger(tokens) || tokens < 100_000)
+      return `无法解析“${value}”。应为“auto”，或至少 100k tokens（例如 500k、200000，或简写为 200）。`;
+  }
+  const { selection } = readySelection(row(id));
+  const { model } = await resolveModel(selection);
+  const providerId = selection.provider.id;
+  const modelId = selection.model;
+  const defaultWindow = Math.max(
+    0,
+    model.contextWindow - (await loadPi()).DEFAULT_COMPACTION_SETTINGS.reserveTokens,
+  );
+  const capped = (window: number) =>
+    window > model.contextWindow
+      ? `（受模型 ${formatTokenCount(model.contextWindow)} 上限限制）`
+      : '';
+  if (reset) {
+    storeModelAutoCompaction(providerId, modelId, null);
+    return `${model.name} 的自动压缩窗口已恢复默认：${formatTokenCount(defaultWindow)} tokens。`;
+  }
+  if (tokens !== undefined) {
+    storeModelAutoCompaction(providerId, modelId, tokens);
+    return `${model.name} 的自动压缩窗口已设置为 ${formatTokenCount(tokens)} tokens${capped(tokens)}。`;
+  }
+  const setting = modelAutoCompaction(providerId, modelId);
+  const window = setting ?? defaultWindow;
+  return `${model.name} 的自动压缩窗口：${formatTokenCount(window)} tokens（${setting === undefined ? '默认' : '来自设置'}）${capped(window)}\n\n当上下文接近该窗口大小（若模型的最大上下文窗口更小，则以更小者为准）时，自动压缩会对对话进行总结。`;
+}
+
+export async function runLocalSessionCommand(
+  id: string,
+  name: MainSessionCommand | 'autocompact',
+  args: string,
+) {
+  if (row(id).parent_id) throw new Error('子 Agent 的会话只读');
+  const entry = live.get(id);
+  if (entry?.run || entry?.session.isCompacting) throw new Error('请等待当前运行结束');
+  const sentAt = Date.now();
+  const input = args ? `/${name} ${args}` : `/${name}`;
+  let reply: string;
+  try {
+    if (name === 'autocompact') reply = await modelAutoCompactionReply(id, args);
+    else {
+      const previous =
+        name === 'compact'
+          ? sessionBranch(id).branch.findLast(({ type }) => type === 'compaction')?.id
+          : undefined;
+      await runSessionCommand(id, name, args);
+      if (name === 'compact') {
+        const current = sessionBranch(id).branch.findLast(({ type }) => type === 'compaction')?.id;
+        reply = current !== previous ? '上下文已压缩。' : '已取消压缩。';
+      } else
+        reply =
+          name === 'name'
+            ? `已将对话重命名为「${row(id).title}」。`
+            : '已重新加载 Skills、扩展与 AGENTS.md。';
+    }
+  } catch (error) {
+    reply = error instanceof Error ? error.message : String(error);
+  }
+  return storeLocalCommandReply(id, { input, reply, sentAt, repliedAt: Date.now() });
+}
+
 export async function runSessionCommand(
   id: string,
   name: MainSessionCommand,
@@ -138,6 +229,9 @@ export async function runSessionCommand(
   } else {
     const entry = await ensureLive(id);
     busy(entry);
+    const last = entry.session.sessionManager.getBranch().at(-1);
+    if (last?.type === 'custom' && last.customType === COMPACTION_DETAILS)
+      throw new Error('刚压缩过，还没有新的内容可压缩');
     try {
       await entry.session.compact(args || undefined);
     } catch (error) {

@@ -28,6 +28,10 @@ import {
   type SecretNamespace,
 } from '../../core/ports';
 import { getDatabase } from './database';
+import { agentContract } from '../../core/protocol/agent';
+import type { EventPayload } from '../../core/protocol/contract';
+import { chatContract, liveCompactionTranscript } from '../../modules/chat';
+import { withoutToolImages } from '../../core/agent/session/projection';
 import { workspaceWindow } from './window';
 import { notifyRunFinished } from '../../modules/settings';
 import { storageDirectory } from './storage';
@@ -157,6 +161,33 @@ export const electronPorts: HostPorts = {
       target.once('destroyed', () => clients.delete(target));
     },
     send(channel, ...args) {
+      if (clients.size && channel === `${agentContract.namespace}:session-update`) {
+        const { sessionId, chat } = args[0] as EventPayload<typeof agentContract, 'session-update'>;
+        const transcript = chat.messages[0]?.compacted ? liveCompactionTranscript(sessionId) : null;
+        if (transcript) {
+          const payload: EventPayload<typeof chatContract, 'compactionChanged'> = {
+            sessionId,
+            ...transcript,
+          };
+          for (const client of clients)
+            if (!client.isDestroyed())
+              client.send(`${chatContract.namespace}:compactionChanged`, payload);
+        }
+      } else if (clients.size && channel === `${agentContract.namespace}:session-stream`) {
+        const { sessionId } = args[0] as EventPayload<typeof agentContract, 'session-stream'>;
+        const transcript = liveCompactionTranscript(sessionId, true);
+        const message = transcript?.messages.at(-1);
+        if (transcript && message?.role === 'assistant') {
+          const payload: EventPayload<typeof chatContract, 'compactionStream'> = {
+            sessionId,
+            entryId: transcript.entryId,
+            message: withoutToolImages(message),
+          };
+          for (const client of clients)
+            if (!client.isDestroyed())
+              client.send(`${chatContract.namespace}:compactionStream`, payload);
+        }
+      }
       for (const client of clients) if (!client.isDestroyed()) client.send(channel, ...args);
     },
   },

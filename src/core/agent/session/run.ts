@@ -30,6 +30,7 @@ import {
   toolOutput,
   usageOf,
   withoutToolImages,
+  COMPACTION_DETAILS,
   TASK_NOTICE,
   THINKING_TIME,
 } from './projection';
@@ -38,6 +39,7 @@ import {
   isRemoteSession,
   readySelection,
   row,
+  modelAutoCompaction,
   sessionCwd,
   storeActivity,
   storeModel,
@@ -175,12 +177,26 @@ function onEvent(id: string, entry: Live, event: AgentSessionEvent) {
       stream(id, entry);
       break;
     }
-    case 'compaction_end':
-      if (event.result?.estimatedTokensAfter !== undefined)
-        entry.compactedTokens = event.result.estimatedTokensAfter;
+    case 'compaction_end': {
+      if (event.result) {
+        const { tokensBefore, estimatedTokensAfter } = event.result;
+        if (estimatedTokensAfter !== undefined) entry.compactedTokens = estimatedTokensAfter;
+        const manager = entry.session.sessionManager;
+        const compaction = manager.getBranch().findLast(({ type }) => type === 'compaction');
+        if (compaction) {
+          manager.appendCustomEntry(COMPACTION_DETAILS, {
+            id: compaction.id,
+            mode: event.reason === 'manual' && !entry.extraCompacting ? 'manual' : 'auto',
+            ...(estimatedTokensAfter !== undefined && {
+              releasedTokens: Math.max(0, tokensBefore - estimatedTokensAfter),
+            }),
+          });
+        }
+      }
       touch(id, entry);
       publish(id);
       break;
+    }
     case 'message_end':
     case 'compaction_start':
       touch(id, entry);
@@ -354,6 +370,7 @@ function queuedDraft(inputs: ChatAskInput[]): ChatQueuedDraft | null {
 export async function askSession(id: string, input: ChatAskInput): Promise<WorkspaceChat> {
   if (row(id).parent_id) throw new Error('子 Agent 的会话只读');
   const entry = await ensureLive(id);
+  if (entry.extraCompacting) throw new Error('正在压缩上下文，请稍候');
   const current = entry.run;
   if (current && !input.replaceLastUser) {
     if (!current.finishing && !current.cancelled) return steerRun(id, entry, current, input);
@@ -398,6 +415,21 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
 
 type TurnStatus = 'completed' | 'failed' | 'stopped';
 
+async function compactAboveSessionThreshold(entry: Live, threshold: number) {
+  const { session } = entry;
+  const usage = session.getContextUsage();
+  if (usage?.tokens == null || usage.tokens < Math.min(threshold, usage.contextWindow)) return;
+  entry.extraCompacting = true;
+  try {
+    await session.compact();
+  } catch (error) {
+    if (!/Nothing to compact|Already compacted|Compaction cancelled/i.test(String(error)))
+      console.error('会话自动压缩失败', error);
+  } finally {
+    entry.extraCompacting = false;
+  }
+}
+
 async function runTurn(
   id: string,
   entry: Live,
@@ -407,6 +439,8 @@ async function runTurn(
 ): Promise<TurnStatus> {
   const meta = row(id);
   const child = meta.parent_id !== null;
+  const modelId = entry.session.model?.id;
+  const autoCompaction = modelId ? modelAutoCompaction(entry.providerId, modelId) : undefined;
   let finishRun!: () => void;
   const run: Run = {
     id: turnId,
@@ -436,6 +470,8 @@ async function runTurn(
           captureError = error instanceof Error ? error.message : String(error);
         },
       );
+    if (autoCompaction !== undefined && !run.cancelled)
+      await compactAboveSessionThreshold(entry, autoCompaction);
     const priorCount = entry.session.messages.length;
     if (run.cancelled) status = 'stopped';
     else await start();
@@ -479,6 +515,8 @@ async function runTurn(
           THINKING_TIME,
           Object.fromEntries(finishedThinking),
         );
+      if (autoCompaction !== undefined && status === 'completed' && !run.cancelled)
+        await compactAboveSessionThreshold(entry, autoCompaction);
       entry.run = undefined;
       liveSteps.delete(id);
       liveThinking.delete(id);

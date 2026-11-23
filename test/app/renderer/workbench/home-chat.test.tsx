@@ -4,6 +4,8 @@ import { notifyManager, QueryClient, QueryClientProvider } from '@tanstack/react
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceChat } from '../../../../src/core/protocol/agent';
+import type { LocalCommandReply } from '../../../../src/modules/chat/contract';
+import { useSidechats } from '../../../../src/modules/chat/view/sidechat-store';
 
 const { api, delion } = vi.hoisted(() => {
   const api: Record<string, (input: never) => unknown> = {};
@@ -19,7 +21,6 @@ const { api, delion } = vi.hoisted(() => {
 import { useNavigationStore } from '../../../../src/app/renderer/navigation/view';
 import { useWorkbenchLayout } from '../../../../src/app/renderer/workbench/layout-store';
 import { walkGroups } from '../../../../src/app/renderer/workbench/layout-schema';
-import { toasts } from '../../../../src/ui/Toast';
 import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
 import {
   ChatHome,
@@ -60,8 +61,19 @@ vi.mock('../../../../src/modules/chat/view/ChatComposer', () => ({
   ),
 }));
 vi.mock('../../../../src/modules/chat/view/ChatThread', () => ({
-  ChatThread: ({ chat }: { chat: WorkspaceChat }) => (
-    <div aria-label="对话消息">{chat.messages.map((message) => message.content).join('\n')}</div>
+  ChatThread: ({
+    chat,
+    commandReplies = [],
+  }: {
+    chat: WorkspaceChat;
+    commandReplies?: LocalCommandReply[];
+  }) => (
+    <div aria-label="对话消息">
+      {[
+        ...chat.messages.map((message) => message.content),
+        ...commandReplies.flatMap(({ input, reply }) => [input, reply]),
+      ].join('\n')}
+    </div>
   ),
 }));
 
@@ -121,11 +133,13 @@ beforeEach(() => {
   useSessions.setState({ chats: {}, lists: {}, homeSessionId: null });
   useWorkspaceStore.setState({ workspace: { directory: '', entries: [] } });
   useChatDrafts.setState({ drafts: {} });
+  useSidechats.setState({ views: {}, collapsed: {}, entered: {} });
   for (const channel of Object.keys(api)) delete api[channel];
   Object.assign(api, {
     'agent:create-session': async () => emptyChat('first'),
     'agent:list-sessions': async () => [],
     'chat:projectContext': async () => ({ instruction: '', files: [] }),
+    'chat:localCommandReplies': async () => [],
     'agent:open-session': async ({ sessionId }: { sessionId: string }) =>
       useSessions.getState().chats[sessionId]!,
     'agent:ask': async ({ sessionId, text }: { sessionId: string; text: string }) => ({
@@ -141,6 +155,28 @@ beforeEach(() => {
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
+});
+
+it('/btw 打开旁问后直接发送问题正文', async () => {
+  const side = { parentId: 'first', running: false, messages: [] };
+  api['agent:open-sidechat'] = vi.fn(async () => side);
+  api['agent:ask-sidechat'] = vi.fn(async () => side);
+  const ask = vi.spyOn(api, 'agent:ask');
+  await act(async () => root.render(<Home />));
+  await act(async () => useChatDrafts.getState().update('first', { prompt: '/btw 隔壁的问题' }));
+  await act(async () => {
+    [...host.querySelectorAll('button')].find((button) => button.textContent === '发送')!.click();
+  });
+  expect(api['agent:open-sidechat']).toHaveBeenCalledWith({ parentId: 'first' });
+  expect(api['agent:ask-sidechat']).toHaveBeenCalledWith({
+    parentId: 'first',
+    text: '隔壁的问题',
+    attachments: [],
+    context: [],
+    sessions: [],
+    comments: [],
+  });
+  expect(ask).not.toHaveBeenCalled();
 });
 
 afterEach(async () => {
@@ -346,8 +382,10 @@ describe('会话命令', () => {
   };
 
   it('/name 走命令通道、不发给模型，改完重读会话列表让标题生效', async () => {
-    const runCommand = vi.fn(async ({ sessionId }: { sessionId: string }) => emptyChat(sessionId));
-    api['agent:run-command'] = runCommand;
+    const runCommand = vi.fn(async () => [
+      { input: '/name 课程周报', reply: '已将对话重命名为「课程周报」。', sentAt: 1, repliedAt: 2 },
+    ]);
+    api['chat:runLocalCommand'] = runCommand;
     const ask = vi.spyOn(api, 'agent:ask');
     await act(async () => root.render(<Home />));
     const list = vi.spyOn(api, 'agent:list-sessions');
@@ -360,22 +398,30 @@ describe('会话命令', () => {
     expect(ask).not.toHaveBeenCalled();
     expect(list).toHaveBeenCalledWith({ projectId: null });
     expect(useChatDrafts.getState().drafts.first?.prompt ?? '').toBe('');
-    expect(toasts().at(-1)?.title).toBe('已重命名');
+    expect(host.querySelector('[aria-label="对话消息"]')?.textContent).toContain(
+      '已将对话重命名为「课程周报」。',
+    );
   });
 
-  it('命令失败时提示原因并把输入放回去', async () => {
-    api['agent:run-command'] = vi.fn(async () => {
-      throw new Error('对话还太短，没有可压缩的内容');
-    });
+  it('命令失败时将原因作为回复显示', async () => {
+    api['chat:runLocalCommand'] = vi.fn(async () => [
+      {
+        input: '/compact 保留结论',
+        reply: '对话还太短，没有可压缩的内容',
+        sentAt: 1,
+        repliedAt: 2,
+      },
+    ]);
     await act(async () => root.render(<Home />));
     await sendText('/compact 保留结论');
-    expect(host.querySelector('[role="alert"]')?.textContent).toBe('对话还太短，没有可压缩的内容');
-    expect(useChatDrafts.getState().drafts.first?.prompt).toBe('/compact 保留结论');
+    expect(host.querySelector('[aria-label="对话消息"]')?.textContent).toContain(
+      '对话还太短，没有可压缩的内容',
+    );
   });
 
   it('只是以 / 开头、不是命令的文字照常发给模型', async () => {
     const runCommand = vi.fn();
-    api['agent:run-command'] = runCommand;
+    api['chat:runLocalCommand'] = runCommand;
     const ask = vi.spyOn(api, 'agent:ask');
     await act(async () => root.render(<Home />));
     await sendText('/compactor 是什么');

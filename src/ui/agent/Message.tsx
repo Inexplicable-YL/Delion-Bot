@@ -225,13 +225,51 @@ export function ExtensionMessage({
   );
 }
 
-export function CompactionDivider({ pending = false }: { pending?: boolean }) {
-  return (
-    <div className="my-6 flex items-center gap-3 text-ui-subhead text-ink-2" role="status">
+export function CompactionDivider({
+  pending = false,
+  mode,
+  releasedTokens,
+  children,
+}: {
+  pending?: boolean;
+  mode?: 'manual' | 'auto';
+  releasedTokens?: number;
+  children?: ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const label = [
+    '上下文已压缩',
+    mode && (mode === 'manual' ? '手动' : '自动'),
+    releasedTokens !== undefined &&
+      `${releasedTokens >= 1000 ? `${Number((releasedTokens / 1000).toFixed(1))}k` : releasedTokens} tokens 已释放`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const divider = (
+    <>
       <span className="h-px flex-1 bg-line" />
       <Archive aria-hidden className="size-4 shrink-0" />
-      {pending ? <Shimmer>正在压缩上下文</Shimmer> : <span>上下文已自动压缩</span>}
+      {pending ? <Shimmer>正在压缩上下文</Shimmer> : <span className="text-center">{label}</span>}
       <span className="h-px flex-1 bg-line" />
+    </>
+  );
+  const dividerClass = 'flex items-center gap-3 text-ui-subhead text-ink-2';
+  return children && !pending ? (
+    <details className="my-6" onToggle={(event) => setExpanded(event.currentTarget.open)}>
+      <summary
+        className={cn(
+          dividerClass,
+          'cursor-pointer list-none rounded-control hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink',
+        )}
+        data-trace-toggle=""
+      >
+        {divider}
+      </summary>
+      {expanded && <div className="mt-3 rounded-card bg-inset p-4">{children}</div>}
+    </details>
+  ) : (
+    <div className={cn('my-6', dividerClass)} role="status">
+      {divider}
     </div>
   );
 }

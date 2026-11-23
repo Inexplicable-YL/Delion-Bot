@@ -36,6 +36,7 @@ import {
 import { TaskNotice } from '../../../ui/agent/Task';
 import { Shimmer } from '../../../ui/Shimmer';
 import type { ChatComment, TaskNoticeDetails, WorkspaceChat } from '../../../core/protocol/agent';
+import type { CompactionHistoryMessage, LocalCommandReply } from '../contract';
 import { chatImageToken } from '../../../core/protocol/chat-input';
 import { IconButton } from '../../../ui/IconButton';
 import { useMediaQuery } from '../../../ui/use-media-query';
@@ -123,7 +124,7 @@ function UserMessage({
   onEdit,
   editable,
 }: {
-  message: WorkspaceChat['messages'][number];
+  message: ThreadMessage;
   onOpenSource: ((key: string) => void) | undefined;
   onOpenSession: ((id: string) => void) | undefined;
   onEdit: (text: string) => void;
@@ -131,6 +132,15 @@ function UserMessage({
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(message.content);
+  if (message.localCommand) {
+    return (
+      <UserMessageFrame>
+        <UserBubble>
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        </UserBubble>
+      </UserMessageFrame>
+    );
+  }
   const confirmEdit = () => {
     const tokens = (message.images ?? [])
       .map((image) => chatImageToken(image.id, image.name))
@@ -284,20 +294,23 @@ function splitInterrupt(parts: ReplyParts) {
   return { parts, reason: null };
 }
 
+type ThreadMessage = CompactionHistoryMessage & { localCommand?: true };
+
 function foldContinuedReplies(
-  messages: WorkspaceChat['messages'],
+  messages: ThreadMessage[],
   turnEnds: ReadonlyMap<string, number>,
   streaming: boolean,
 ) {
   const folded = new Map<number, ReplyTraceData | null>();
   const pending: (ReplyTraceData & { index: number })[] = [];
   messages.forEach((message, index) => {
-    if (message.task?.turnId || message.compacted) pending.length = 0;
+    if (message.task?.turnId || message.compacted || message.localCommand) pending.length = 0;
     if (
       message.role !== 'assistant' ||
       message.extension ||
       message.task ||
       message.compacted ||
+      message.localCommand ||
       (streaming && index === messages.length - 1)
     )
       return;
@@ -343,7 +356,7 @@ function AssistantMessage({
   fileMenu,
   asks,
 }: {
-  message: WorkspaceChat['messages'][number];
+  message: ThreadMessage;
   foldedTrace: ReplyTraceData | null | undefined;
   live: boolean;
   turnEnd: boolean;
@@ -359,6 +372,13 @@ function AssistantMessage({
   asks: { answer?: string; onAnswer?: (text: string) => Promise<void> } | undefined;
 }) {
   const reduced = useMediaQuery('(prefers-reduced-motion: reduce)');
+  if (message.localCommand) {
+    return (
+      <AssistantMessageFrame>
+        <p className="whitespace-pre-wrap text-ink">{message.content}</p>
+      </AssistantMessageFrame>
+    );
+  }
   const split = splitInterrupt(message.parts ?? []);
   const parts = foldedTrace?.parts ?? split.parts;
   const reason = message.interrupted ? (split.reason ?? '未知错误') : null;
@@ -495,8 +515,14 @@ export function ChatThread({
   onAnswer,
   draftKey,
   fileSessionId = chat.sessionId,
+  compactionHistory,
+  messagesAfterCompaction,
+  commandReplies,
 }: {
   chat: WorkspaceChat;
+  commandReplies?: LocalCommandReply[];
+  compactionHistory?: CompactionHistoryMessage[];
+  messagesAfterCompaction?: WorkspaceChat['messages'];
   onAskImage?: (text: string, context: string[]) => Promise<void>;
   onAnswer?: (text: string) => Promise<void>;
   onSidechat?: (quote: string) => void;
@@ -558,7 +584,36 @@ export function ChatThread({
     };
   });
 
-  const messages = chat.messages;
+  const first = chat.messages[0];
+  const transcript: ThreadMessage[] = compactionHistory
+    ? [...compactionHistory, ...(messagesAfterCompaction ?? [])]
+    : first?.compacted
+      ? chat.messages.slice(1)
+      : chat.messages;
+  const local = (commandReplies ?? [])
+    .flatMap(
+      ({ input, reply, sentAt, repliedAt }) =>
+        [
+          { role: 'user', content: input, startedAt: sentAt, localCommand: true },
+          {
+            role: 'assistant',
+            content: reply,
+            startedAt: repliedAt,
+            localCommand: true,
+          },
+        ] satisfies ThreadMessage[],
+    )
+    .sort((a, b) => a.startedAt - b.startedAt);
+  const messages: ThreadMessage[] = [];
+  let cursor = 0;
+  for (const message of transcript) {
+    while (cursor < local.length && local[cursor]!.startedAt < (message.startedAt ?? 0)) {
+      messages.push(local[cursor++]!);
+    }
+    messages.push(message);
+  }
+  messages.push(...local.slice(cursor));
+  const historyLength = messages.findLastIndex((message) => message.compacted) + 1;
   const streaming = Boolean(chat.running);
   const [resumedReplyAt] = useState(() => {
     const last = chat.messages.at(-1);
@@ -567,7 +622,10 @@ export function ChatThread({
       : undefined;
   });
 
-  const lastUserIndex = messages.findLastIndex((message) => message.role === 'user');
+  const lastVisibleUserIndex = messages.findLastIndex((message) => message.role === 'user');
+  const lastUserIndex = messages.findLastIndex(
+    (message) => message.role === 'user' && !message.localCommand,
+  );
 
   const turnEnds = new Map<string, number>();
   messages.forEach((message, index) => {
@@ -575,11 +633,11 @@ export function ChatThread({
   });
   const foldedTraces = foldContinuedReplies(messages, turnEnds, streaming);
 
-  const replyStartedAt = messages[lastUserIndex + 1]?.startedAt;
+  const replyStartedAt = messages[lastVisibleUserIndex + 1]?.startedAt;
   const observeScroll = (content: HTMLDivElement | null) => {
     if (!content) return;
     const viewport = content.parentElement as HTMLDivElement;
-    const key = `${chat.sessionId}:${lastUserIndex}:${replyStartedAt ?? ''}`;
+    const key = `${chat.sessionId}:${lastVisibleUserIndex}:${replyStartedAt ?? ''}`;
     scroll.anchorTo(key, viewport, streaming);
     const resize = () => scroll.resize(viewport);
     resize();
@@ -599,7 +657,7 @@ export function ChatThread({
   const handleEditLast = (text: string) => onEditLast?.(text);
   const lastUser = lastUserIndex >= 0 ? messages[lastUserIndex] : undefined;
   const retry =
-    onEditLast && lastUser
+    onEditLast && lastUser && lastUserIndex >= historyLength
       ? () => {
           const tokens = (lastUser.images ?? []).map((image) =>
             chatImageToken(image.id, image.name),
@@ -631,7 +689,17 @@ export function ChatThread({
           >
             {messages.map((message, index) =>
               message.compacted ? (
-                <CompactionDivider key={`${chat.sessionId}:${index}`} />
+                <CompactionDivider
+                  key={message.entryId ?? `${chat.sessionId}:${index}`}
+                  mode={message.compaction?.mode}
+                  releasedTokens={message.compaction?.releasedTokens}
+                >
+                  {message.entryId && message.content && (
+                    <ChatMarkdown className="text-ui-body" mode="static">
+                      {message.content}
+                    </ChatMarkdown>
+                  )}
+                </CompactionDivider>
               ) : message.task ? (
                 <TaskNoticeMessage
                   content={message.content}
@@ -654,22 +722,31 @@ export function ChatThread({
                   onOpenSource={onOpenSource}
                   onOpenSession={onOpenSession}
                   onEdit={handleEditLast}
-                  editable={index === lastUserIndex && !streaming && onEditLast !== undefined}
+                  editable={
+                    index >= historyLength &&
+                    index === lastUserIndex &&
+                    !streaming &&
+                    onEditLast !== undefined
+                  }
                 />
               ) : (
                 <AssistantMessage
                   key={`${chat.sessionId}:${index}`}
                   sessionId={chat.sessionId}
                   showTurnChanges={chat.projectId !== null}
-                  onRetry={index === messages.length - 1 && !streaming ? retry : undefined}
-                  live={streaming && index === messages.length - 1}
+                  onRetry={
+                    index === messages.length - 1 && !streaming && !message.localCommand
+                      ? retry
+                      : undefined
+                  }
+                  live={streaming && index === messages.length - 1 && !message.localCommand}
                   turnEnd={message.turnId !== undefined && turnEnds.get(message.turnId) === index}
                   animate={message.startedAt !== resumedReplyAt}
                   message={message}
                   foldedTrace={foldedTraces.get(index)}
                   activeTool={chat.activeTool}
                   onSaveNote={onSaveNote}
-                  onFork={streaming ? undefined : onFork}
+                  onFork={streaming || index < historyLength ? undefined : onFork}
                   onOpenFile={openFile}
                   fileMenu={
                     fileSessionId ? { sessionId: fileSessionId, remote: remoteProject } : undefined
@@ -680,7 +757,8 @@ export function ChatThread({
                       ? { onAnswer: streaming ? undefined : onAnswer }
                       : {
                           answer: messages.find(
-                            (next, nextIndex) => nextIndex > index && next.role === 'user',
+                            (next, nextIndex) =>
+                              nextIndex > index && next.role === 'user' && !next.localCommand,
                           )?.content,
                         })
                   }

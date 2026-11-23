@@ -101,6 +101,7 @@ const builtinCommands = [
 
 const sessionCommandIcons: Record<SessionCommandName, typeof CommandLineIcon> = {
   compact: ArrowsPointingInIcon,
+  autocompact: ArrowsPointingInIcon,
   reload: ArrowPathIcon,
   name: TagIcon,
   new: PlusIcon,
@@ -447,9 +448,8 @@ export function ChatComposer({
             name: command.name,
             prompt: `/${command.name} `,
             icon: sessionCommandIcons[command.name],
-            hint: ['argumentHint' in command ? command.argumentHint : '', command.description]
-              .filter(Boolean)
-              .join(' · '),
+            argumentHint: 'argumentHint' in command ? command.argumentHint : undefined,
+            hint: command.description,
           })),
         ].filter((command) => command.name.includes(menu.query))
       : [];
@@ -821,6 +821,9 @@ export function ChatComposer({
                 {'name' in item ? (
                   <span className="flex min-w-0 flex-1 items-baseline gap-1.5 text-ui-body">
                     <span className="shrink-0 text-ink">/{item.name}</span>
+                    {'argumentHint' in item && typeof item.argumentHint === 'string' && (
+                      <span className="shrink-0 text-ink-2">{item.argumentHint}</span>
+                    )}
                     <span className="min-w-0 truncate text-ui-subhead text-ink-2">{item.hint}</span>
                   </span>
                 ) : item.session ? (

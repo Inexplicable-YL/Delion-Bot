@@ -3,6 +3,7 @@ import { parseSessionCommand } from '../../src/core/protocol/agent';
 
 it('recognizes session commands and keeps multiline arguments', () => {
   expect(parseSessionCommand('/compact')).toEqual({ name: 'compact', args: '' });
+  expect(parseSessionCommand('/autocompact 300k')).toEqual({ name: 'autocompact', args: '300k' });
   expect(parseSessionCommand('  /compact 保留结论\n以及待办  ')).toEqual({
     name: 'compact',
     args: '保留结论\n以及待办',

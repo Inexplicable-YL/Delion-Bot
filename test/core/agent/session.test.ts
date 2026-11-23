@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
   compacting: false,
   compact: null as ((instructions?: string) => Promise<unknown>) | null,
   compactCalls: [] as (string | undefined)[],
+  contextTokens: null as number | null,
   providers: [] as StoredLlmProvider[],
   modelSwitches: [] as string[],
   beforeTool: undefined as (() => Promise<void> | undefined) | undefined,
@@ -38,15 +39,26 @@ vi.mock('../../../src/core/agent/providers', () => ({
 }));
 vi.mock('../../../src/core/agent/pi', () => ({
   loadPi: () => import('@earendil-works/pi-coding-agent'),
-  resolveModel: async ({ model }: { model: string }) => ({ model, thinking: 'off' }),
+  resolveModel: async ({ model }: { model: string }) => ({
+    model: { id: model, name: model === 'm' ? 'Opus 5.5' : model, contextWindow: 1_000_000 },
+    thinking: 'off',
+  }),
   summarizeSessionTitle: vi.fn(async () => ''),
-  openPiSession: async (input: { beforeTool?: () => Promise<void> | undefined }) => {
+  openPiSession: async (input: {
+    selection: { model: string };
+    beforeTool?: () => Promise<void> | undefined;
+  }) => {
     state.beforeTool = input.beforeTool;
+    let modelId = input.selection.model;
     const getBranch = () =>
       state.messages.map((message, index) => ({ type: 'message', id: `e${index}`, message }));
     return {
-      setModel: async (model: string) => {
-        state.modelSwitches.push(model);
+      get model() {
+        return { id: modelId };
+      },
+      setModel: async ({ id }: { id: string }) => {
+        modelId = id;
+        state.modelSwitches.push(id);
       },
       setThinkingLevel: () => {},
       opened: ++state.opened,
@@ -67,6 +79,7 @@ vi.mock('../../../src/core/agent/pi', () => ({
         return state.compacting;
       },
       getSessionStats: () => ({ contextUsage: null }),
+      getContextUsage: () => ({ tokens: state.contextTokens, contextWindow: 1_000_000 }),
       dispose: () => {
         state.disposed++;
       },
@@ -102,6 +115,7 @@ import {
   deleteSession,
   moveSession,
   runSessionCommand,
+  runLocalSessionCommand,
   setSessionModel,
 } from '../../../src/core/agent/session/commands';
 import {
@@ -141,6 +155,7 @@ beforeEach(() => {
   state.compacting = false;
   state.compact = null;
   state.compactCalls = [];
+  state.contextTokens = null;
   state.providers = [
     {
       id: 'p1',
@@ -761,6 +776,44 @@ describe('会话命令', () => {
     await expect(runSessionCommand(chat.sessionId!, 'compact', '')).resolves.toMatchObject({
       sessionId: chat.sessionId,
     });
+  });
+
+  it('/autocompact 按模型共享阈值，设置和回执留在本地', async () => {
+    state.configured = true;
+    const first = (await newSession(null)).sessionId!;
+    const reply = async (id: string, args: string) =>
+      (await runLocalSessionCommand(id, 'autocompact', args)).at(-1)!;
+    expect((await reply(first, '300000')).reply).toContain('300k tokens');
+    expect((await reply(first, '300k')).reply).toContain('300k tokens');
+    expect((await reply(first, '1m')).reply).toContain('1m tokens');
+    expect((await reply(first, '500m')).reply).toContain('500m tokens（受模型 1m 上限限制）');
+    expect((await reply(first, '200')).reply).toContain('200k tokens');
+    expect(await reply(first, '5')).toMatchObject({
+      input: '/autocompact 5',
+      reply: expect.stringContaining('至少 100k tokens'),
+    });
+    expect((await reply(first, 'bad')).reply).toContain('至少 100k tokens');
+    expect(state.messages).toEqual([]);
+    const second = (await newSession(null)).sessionId!;
+    expect(second).not.toBe(first);
+    expect((await reply(second, '')).reply).toContain('200k tokens（来自设置）');
+    await setSessionModel(second, 'p1', 'm2');
+    expect((await reply(second, '')).reply).toContain('983.616k tokens（默认）');
+    const input = { text: '继续', attachments: [], context: [], comments: [] };
+    state.contextTokens = 200_000;
+    await askSession(second, input);
+    expect(state.compactCalls).toEqual([]);
+
+    await setSessionModel(second, 'p1', 'm');
+    const compact = vi.fn(async () => {
+      state.contextTokens = null;
+    });
+    state.compact = compact;
+    await askSession(second, input);
+    expect(compact).toHaveBeenCalledTimes(1);
+    expect(state.prompts.every((prompt) => !prompt.includes('/autocompact'))).toBe(true);
+    expect((await reply(second, 'auto')).reply).toContain('已恢复默认');
+    expect((await reply(first, '')).reply).toContain('（默认）');
   });
 
   it('回答进行中不执行命令，也不打断它', async () => {

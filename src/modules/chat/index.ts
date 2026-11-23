@@ -9,6 +9,7 @@ import {
   archiveProjectSessions,
   deleteSession,
   moveSession,
+  runLocalSessionCommand,
   updateSessionVisibility,
 } from '../../core/agent/session/commands';
 import {
@@ -16,8 +17,18 @@ import {
   openSessionFile,
   revealSessionFile,
 } from '../../core/agent/session/files';
-import { archivedSessions, preloadPi } from '../../core/agent/session/store';
+import {
+  archivedSessions,
+  localCommandReplies,
+  preloadPi,
+  row,
+} from '../../core/agent/session/store';
 import { invalidateSessions } from '../../core/agent/session/run';
+import { live, sessionBranch } from '../../core/agent/session/live';
+import {
+  projectAfterCompaction,
+  projectCompactionHistory,
+} from '../../core/agent/session/projection';
 import { exportSession } from '../../core/agent/session-export';
 import { hostPorts } from '../../core/ports';
 import { implement } from '../../core/protocol/contract';
@@ -64,6 +75,15 @@ function localProjectDirectory(projectId: string): string {
   return directory;
 }
 
+export { chatContract };
+
+export function liveCompactionTranscript(sessionId: string, streaming = false) {
+  const session = live.get(sessionId)?.session;
+  return (
+    session && projectAfterCompaction(sessionId, session.sessionManager.getBranch(), streaming)
+  );
+}
+
 export const chatModule = defineModule({
   id: 'chat',
   register: () => {
@@ -71,6 +91,18 @@ export const chatModule = defineModule({
     registerPreviewHost('chat-media', chatMediaResponse);
   },
   ipc: implement(chatContract, {
+    localCommandReplies: (id) => {
+      row(id);
+      return localCommandReplies(id);
+    },
+    runLocalCommand: withPi(({ sessionId, name, args }) =>
+      runLocalSessionCommand(sessionId, name, args),
+    ),
+    compactionHistory: withPi((id) => {
+      const { branch } = sessionBranch(id);
+      const transcript = projectAfterCompaction(id, branch);
+      return transcript && { ...transcript, history: projectCompactionHistory(branch) };
+    }),
     projectContext: getProjectChatContext,
     setProjectInstruction: ({ projectId, instruction }) =>
       updateProjectContext(projectId, { instruction }),

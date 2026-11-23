@@ -252,20 +252,25 @@ export interface SubagentDetails {
 }
 
 export const SESSION_COMMANDS = [
-  { name: 'compact', description: '压缩上下文', argumentHint: '[压缩时的说明]' },
+  { name: 'compact', description: '压缩上下文', argumentHint: '[<说明>]' },
+  {
+    name: 'autocompact',
+    description: '查看或设置当前模型的自动压缩窗口',
+    argumentHint: '[auto|<tokens>]',
+  },
   { name: 'reload', description: '重新加载 Skills、扩展与 AGENTS.md' },
   { name: 'name', description: '重命名对话', argumentHint: '<标题>' },
   { name: 'new', description: '新对话' },
   {
     name: 'btw',
     description: '旁问：带着当前对话顺便问一句，不进入主对话',
-    argumentHint: '[问题]',
+    argumentHint: '[<问题>]',
   },
 ] as const;
 
 export type SessionCommandName = (typeof SESSION_COMMANDS)[number]['name'];
 
-export type MainSessionCommand = Exclude<SessionCommandName, 'new' | 'btw'>;
+export type MainSessionCommand = Exclude<SessionCommandName, 'new' | 'btw' | 'autocompact'>;
 
 export function parseSessionCommand(
   text: string,

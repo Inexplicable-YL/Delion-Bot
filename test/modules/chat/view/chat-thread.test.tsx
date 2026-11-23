@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { WorkspaceChat } from '../../../../src/core/protocol/agent';
 import { ChatThread } from '../../../../src/modules/chat/view/ChatThread';
+import { commentRange } from '../../../../src/modules/chat/view/ReplyComment';
 
 vi.mock('../../../../src/modules/chat/view/Markdown', () => ({
   ChatMarkdown: ({ children }: { children: ReactNode }) => <span>{children}</span>,
@@ -57,6 +58,79 @@ afterEach(async () => {
   delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTo;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it('本地命令和回执按时间显示为普通消息', async () => {
+  await act(async () =>
+    root.render(
+      <ChatThread
+        chat={{
+          ...chat,
+          running: false,
+          messages: [
+            {
+              role: 'assistant',
+              content: '上一条',
+              startedAt: 1,
+              parts: [{ type: 'text', text: '上一条' }],
+            },
+            { role: 'user', content: '继续聊天', startedAt: 4 },
+          ],
+        }}
+        commandReplies={[
+          { input: '/autocompact 300k', reply: '已设置为 300k tokens。', sentAt: 2, repliedAt: 3 },
+        ]}
+        onSaveNote={vi.fn()}
+      />,
+    ),
+  );
+  expect(host.querySelector('[aria-label="对话消息"]')?.textContent).toBe(
+    '上一条/autocompact 300k已设置为 300k tokens。继续聊天',
+  );
+  expect(host.querySelectorAll('button[aria-label="复制回答"]')).toHaveLength(1);
+  expect(host.querySelectorAll('button[aria-label="保存为笔记"]')).toHaveLength(1);
+  const localReply = [...host.querySelectorAll('p')].find(
+    (p) => p.textContent === '已设置为 300k tokens。',
+  )!;
+  const selection = window.getSelection()!;
+  const range = document.createRange();
+  range.selectNodeContents(localReply);
+  selection.addRange(range);
+  expect(commentRange(selection, host)).toBeNull();
+  selection.removeAllRanges();
+});
+
+it('压缩分隔线位于旧回复之后，点击才显示摘要', async () => {
+  await act(async () =>
+    root.render(
+      <ChatThread
+        chat={{
+          ...chat,
+          running: false,
+          messages: [{ role: 'assistant', content: '', compacted: true }, ...chat.messages],
+        }}
+        compactionHistory={[
+          ...chat.messages,
+          {
+            role: 'assistant',
+            content: '压缩后的摘要',
+            compacted: true,
+            entryId: 'compaction-1',
+            compaction: { mode: 'manual', releasedTokens: 100_000 },
+          },
+        ]}
+        messagesAfterCompaction={[]}
+      />,
+    ),
+  );
+  const summary = host.querySelector('summary')!;
+  expect(summary.textContent).toBe('上下文已压缩 · 手动 · 100k tokens 已释放');
+  expect(host.textContent?.indexOf('正在回答')).toBeLessThan(
+    host.textContent!.indexOf(summary.textContent!),
+  );
+  expect(host.textContent).not.toContain('压缩后的摘要');
+  await act(async () => summary.click());
+  await vi.waitFor(() => expect(host.textContent).toContain('压缩后的摘要'));
 });
 
 it('整轮失败显示错误卡与重试，重试以原文重发', async () => {

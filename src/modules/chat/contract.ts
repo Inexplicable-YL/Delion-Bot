@@ -5,6 +5,7 @@ import type {
   ChatSessionSummary,
   FileChangeDetail,
 } from '../../core/protocol/agent';
+import { chatMessageSchema } from '../../core/protocol/agent';
 import type { UncommittedChanges } from '../../core/protocol/changes';
 import { defineContract } from '../../core/protocol/contract';
 
@@ -32,7 +33,40 @@ const imagePreviewSource = z.union([replyImage, z.object({ id: z.uuid() })]);
 export type ImagePreview = z.infer<typeof imagePreview>;
 export type ImagePreviewSource = z.infer<typeof imagePreviewSource>;
 
-export const chatContract = defineContract('chat', {
+const compactionHistoryMessage = chatMessageSchema.extend({
+  compaction: z
+    .object({ mode: z.enum(['manual', 'auto']), releasedTokens: z.number().optional() })
+    .optional(),
+});
+const compactionTranscript = z.object({
+  entryId: z.string(),
+  messages: z.array(chatMessageSchema),
+});
+
+export type CompactionHistoryMessage = z.infer<typeof compactionHistoryMessage>;
+
+const localCommandReply = z.object({
+  input: z.string(),
+  reply: z.string(),
+  sentAt: z.number(),
+  repliedAt: z.number(),
+});
+export type LocalCommandReply = z.infer<typeof localCommandReply>;
+
+const procedures = {
+  localCommandReplies: { input: sessionId, output: z.array(localCommandReply) },
+  runLocalCommand: {
+    input: z.object({
+      sessionId,
+      name: z.enum(['compact', 'autocompact', 'name', 'reload']),
+      args: z.string().trim().max(2000),
+    }),
+    output: z.array(localCommandReply),
+  },
+  compactionHistory: {
+    input: sessionId,
+    output: compactionTranscript.extend({ history: z.array(compactionHistoryMessage) }).nullable(),
+  },
   projectContext: { input: projectId, output: projectContext },
   setProjectInstruction: {
     input: z.object({ projectId, instruction: z.string().trim().max(2000) }),
@@ -96,6 +130,11 @@ export const chatContract = defineContract('chat', {
     input: z.object({ projectId, path: filePath }),
     output: z.custom<FileChangeDetail>(),
   },
+};
+
+export const chatContract = defineContract('chat', procedures, {
+  compactionChanged: compactionTranscript.extend({ sessionId }),
+  compactionStream: z.object({ sessionId, entryId: z.string(), message: chatMessageSchema }),
 });
 
 declare module '../../app/module' {

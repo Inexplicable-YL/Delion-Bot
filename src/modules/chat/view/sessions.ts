@@ -5,7 +5,13 @@ import type {
   WorkspaceChat,
 } from '../../../core/protocol/agent';
 import { showToast } from '../../../ui/Toast';
-import { agentClient, chatClient, onAgentEvent } from './client';
+import {
+  agentClient,
+  chatClient,
+  onAgentEvent,
+  onCompactionChanged,
+  onCompactionStream,
+} from './client';
 
 export function poolKey(projectId: string | null): string {
   return projectId ?? 'general';
@@ -14,6 +20,7 @@ export function poolKey(projectId: string | null): string {
 interface SessionsState {
   lists: Record<string, ChatSessionSummary[]>;
   chats: Record<string, WorkspaceChat>;
+  compacted: Record<string, { entryId: string; messages: ChatMessage[] }>;
   homeSessionId: string | null;
   refreshTimers: Record<string, ReturnType<typeof setTimeout>>;
   refresh: (projectId: string | null) => Promise<void>;
@@ -43,6 +50,7 @@ export const useSessions = create<SessionsState>((set, get) => {
   return {
     lists: {},
     chats: {},
+    compacted: {},
     homeSessionId: null,
     refreshTimers: {},
     refresh: async (projectId) => {
@@ -60,10 +68,12 @@ export const useSessions = create<SessionsState>((set, get) => {
       set((state) => {
         const chats = { ...state.chats };
         delete chats[sessionId];
+        const compacted = { ...state.compacted };
+        delete compacted[sessionId];
         const lists: Record<string, ChatSessionSummary[]> = {};
         for (const [key, list] of Object.entries(state.lists))
           lists[key] = list.filter((item) => item.id !== sessionId);
-        return { chats, lists };
+        return { chats, compacted, lists };
       }),
   };
 });
@@ -80,17 +90,23 @@ export function querySessions(
 onAgentEvent('session-update', ({ sessionId, chat }) => {
   useSessions.getState().putChat(sessionId, chat);
 });
+onCompactionChanged(({ sessionId, ...transcript }) => {
+  useSessions.setState((state) => ({
+    compacted: { ...state.compacted, [sessionId]: transcript },
+  }));
+});
+onCompactionStream(({ sessionId, entryId, message }) => {
+  useSessions.setState((state) => {
+    const transcript = state.compacted[sessionId];
+    if (transcript?.entryId !== entryId) return state;
+    const messages = mergeStreamReply(transcript.messages, message);
+    return { compacted: { ...state.compacted, [sessionId]: { entryId, messages } } };
+  });
+});
 onAgentEvent('session-stream', ({ sessionId, message, activeTool, contextUsage }) => {
   const current = useSessions.getState().chats[sessionId];
   if (!current?.running) return;
-  const last = current.messages.at(-1);
-  const replaceLast =
-    last?.role === 'assistant' &&
-    last.startedAt === message.startedAt &&
-    last.finishedAt === undefined;
-  const messages = replaceLast
-    ? [...current.messages.slice(0, -1), keepToolImages(last, message)]
-    : [...current.messages, message];
+  const messages = mergeStreamReply(current.messages, message);
   useSessions.getState().putChat(sessionId, { ...current, messages, activeTool, contextUsage });
 });
 onAgentEvent('queue', ({ sessionId, queued }) => {
@@ -100,6 +116,15 @@ onAgentEvent('queue', ({ sessionId, queued }) => {
 
 type ChatMessage = WorkspaceChat['messages'][number];
 type ToolStep = NonNullable<ChatMessage['toolResults']>[number];
+
+function mergeStreamReply(messages: ChatMessage[], message: ChatMessage): ChatMessage[] {
+  const last = messages.at(-1);
+  return last?.role === 'assistant' &&
+    last.startedAt === message.startedAt &&
+    last.finishedAt === undefined
+    ? [...messages.slice(0, -1), keepToolImages(last, message)]
+    : [...messages, message];
+}
 
 export function keepToolImages(previous: ChatMessage | undefined, next: ChatMessage): ChatMessage {
   const images = new Map<string, NonNullable<AgentToolOutput['image']>>();

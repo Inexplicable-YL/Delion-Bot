@@ -189,6 +189,52 @@ export function storeProject(id: string, projectId: string | null) {
   db.prepare('UPDATE sessions SET project_id=? WHERE parent_id=?').run(projectId, id);
 }
 
+export function modelAutoCompaction(providerId: string, modelId: string): number | undefined {
+  const setting = hostPorts()
+    .database()
+    .prepare('SELECT value FROM workspace_settings WHERE key=?')
+    .get(`model-autocompact:${providerId}:${modelId}`) as { value: string } | undefined;
+  return setting ? Number(setting.value) : undefined;
+}
+
+export function storeModelAutoCompaction(
+  providerId: string,
+  modelId: string,
+  tokens: number | null,
+) {
+  const db = hostPorts().database();
+  const key = `model-autocompact:${providerId}:${modelId}`;
+  if (tokens === null) db.prepare('DELETE FROM workspace_settings WHERE key=?').run(key);
+  else
+    db.prepare('INSERT OR REPLACE INTO workspace_settings VALUES (?, ?)').run(key, String(tokens));
+}
+
+export type LocalCommandReply = { input: string; reply: string; sentAt: number; repliedAt: number };
+
+export function localCommandReplies(id: string): LocalCommandReply[] {
+  const setting = hostPorts()
+    .database()
+    .prepare('SELECT value FROM workspace_settings WHERE key=?')
+    .get(`session-commands:${id}`) as { value: string } | undefined;
+  return setting ? (JSON.parse(setting.value) as LocalCommandReply[]) : [];
+}
+
+export function storeLocalCommandReply(id: string, reply: LocalCommandReply): LocalCommandReply[] {
+  const replies = [...localCommandReplies(id), reply];
+  const db = hostPorts().database();
+  db.transaction(() => {
+    db.prepare('INSERT OR REPLACE INTO workspace_settings VALUES (?, ?)').run(
+      `session-commands:${id}`,
+      JSON.stringify(replies),
+    );
+    db.prepare('UPDATE sessions SET updated_at=? WHERE id=?').run(
+      new Date(reply.repliedAt).toISOString(),
+      id,
+    );
+  })();
+  return replies;
+}
+
 export function archiveProject(projectId: string | null): string[] {
   const db = hostPorts().database();
   const ids = db
@@ -206,7 +252,14 @@ export const childSessionIds = (id: string) =>
   ).map((child) => child.id);
 
 export function removeSession(id: string) {
-  hostPorts().database().prepare('DELETE FROM sessions WHERE id=?').run(id);
+  const db = hostPorts().database();
+  db.transaction(() => {
+    db.prepare('DELETE FROM sessions WHERE id=?').run(id);
+    db.prepare('DELETE FROM workspace_settings WHERE key IN (?, ?)').run(
+      `session-commands:${id}`,
+      `session-autocompact:${id}`,
+    );
+  })();
 }
 
 const summaryColumns =
@@ -219,7 +272,8 @@ export function listSessions(projectId: string | null, query: string): ChatSessi
   return hostPorts()
     .database()
     .prepare(
-      `SELECT ${summaryColumns} FROM sessions WHERE project_id IS ? AND archived = 0 AND message_count > 0 AND parent_id IS NULL
+      `SELECT ${summaryColumns} FROM sessions WHERE project_id IS ? AND archived = 0 AND parent_id IS NULL
+       AND (message_count > 0 OR EXISTS (SELECT 1 FROM workspace_settings WHERE key='session-commands:' || sessions.id))
        ${query ? "AND title LIKE ? ESCAPE '\\'" : ''} ORDER BY pinned DESC, updated_at DESC LIMIT 100`,
     )
     .all(...(query ? [projectId, pattern] : [projectId]))
@@ -243,6 +297,7 @@ function emptyGeneralSessionId(): string | undefined {
     .prepare(
       `SELECT id FROM sessions WHERE project_id IS NULL AND archived = 0 AND message_count = 0
        AND parent_id IS NULL AND substr(cwd, 1, ?) = ?
+       AND NOT EXISTS (SELECT 1 FROM workspace_settings WHERE key='session-commands:' || sessions.id)
        ORDER BY updated_at DESC LIMIT 1`,
     )
     .get(privateRoot.length, privateRoot) as { id: string } | undefined;
@@ -255,7 +310,9 @@ export function emptySessionId(projectId: string | null): string | undefined {
     hostPorts()
       .database()
       .prepare(
-        'SELECT id FROM sessions WHERE project_id IS ? AND archived = 0 AND message_count = 0 AND parent_id IS NULL ORDER BY updated_at DESC LIMIT 1',
+        `SELECT id FROM sessions WHERE project_id IS ? AND archived = 0 AND message_count = 0
+         AND parent_id IS NULL AND NOT EXISTS (SELECT 1 FROM workspace_settings WHERE key='session-commands:' || sessions.id)
+         ORDER BY updated_at DESC LIMIT 1`,
       )
       .get(projectId) as { id: string } | undefined
   )?.id;

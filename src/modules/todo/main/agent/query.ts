@@ -13,7 +13,7 @@ import {
 } from '../../../../core/capabilities/domain-tools';
 
 export const queryTodosTool = tool(
-  'Find personal to-dos without modifying them. Search titles and notes by keyword or filter by completion status.',
+  'Find personal tasks without modifying them. Search titles and notes by keyword or filter by completion status.',
   z.object({ query, completed: z.boolean().optional(), offset, limit }).strict(),
   ({ query, completed, offset, limit }) => {
     const items = getTodoState().items.filter(

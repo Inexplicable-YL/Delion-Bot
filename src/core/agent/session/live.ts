@@ -12,6 +12,7 @@ export interface Live {
   unsubscribe: () => void;
   stale?: boolean;
   compactedTokens?: number;
+  extraCompacting?: boolean;
 }
 
 export interface Run {
