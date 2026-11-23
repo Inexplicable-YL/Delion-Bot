@@ -59,6 +59,13 @@ export type TraceRunning = {
   formatElapsed: (ms: number) => string;
 };
 
+function markOverflow(node: HTMLSpanElement) {
+  const update = () => node.toggleAttribute('data-overflow', node.scrollWidth > node.clientWidth);
+  const observer = new ResizeObserver(update);
+  observer.observe(node);
+  return () => observer.disconnect();
+}
+
 function RunningElapsed({ running }: { running: TraceRunning }) {
   const now = useNow(1000);
   return <>处理中 {running.formatElapsed(Math.max(0, now - running.startedAt))}</>;
@@ -97,9 +104,15 @@ export function Trace({
           <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center">
             <ThinkingMark />
           </span>
-          <Shimmer className="min-w-0 truncate">
-            {expanded && !waiting ? <RunningElapsed running={running} /> : running.current}
-          </Shimmer>
+          <span
+            key={typeof running.current === 'string' ? running.current : undefined}
+            ref={markOverflow}
+            className={cn(fadeIn, 'min-w-0 overflow-hidden data-overflow:mask-r-from-80%')}
+          >
+            <Shimmer className="whitespace-nowrap">
+              {expanded && !waiting ? <RunningElapsed running={running} /> : running.current}
+            </Shimmer>
+          </span>
           {!waiting && <CollapseChevron className={cn('-ml-1', chevronClass)} open={expanded} />}
         </button>
       )}

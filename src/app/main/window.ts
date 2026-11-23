@@ -12,10 +12,8 @@ export function checkWorkspaceSender(event: IpcMainInvokeEvent) {
 function isWorkspaceWindow(value: string): boolean {
   try {
     const url = new URL(value);
-    return (
-      (url.protocol === 'file:' && url.pathname.endsWith('/renderer/index.html')) ||
-      url.origin === 'http://127.0.0.1:5173'
-    );
+    if (url.protocol === 'file:') return url.pathname.endsWith('/renderer/index.html');
+    return url.origin === 'http://127.0.0.1:5173' && url.pathname === '/';
   } catch {
     return false;
   }

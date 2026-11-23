@@ -7,6 +7,7 @@ import {
   Menu,
   nativeImage,
   nativeTheme,
+  screen,
   shell,
   Tray,
 } from 'electron';
@@ -39,6 +40,7 @@ import {
 } from './agent-ipc';
 import { provideHostPorts } from '../../core/ports';
 import { electronPorts } from './host-electron';
+import { trayMenuPosition } from './tray-menu-position';
 import {
   applyTheme,
   savedIcon,
@@ -53,6 +55,8 @@ import { spawn as spawnPty } from 'node-pty';
 app.commandLine.appendSwitch('enable-smooth-scrolling');
 app.commandLine.appendSwitch('lang', 'zh-CN');
 registerPreviewScheme();
+
+const devUrl = !app.isPackaged ? process.env.DELION_DEV_URL : undefined;
 
 ipcMain.on('window:minimize', (event) => {
   BrowserWindow.fromWebContents(event.sender)?.minimize();
@@ -103,6 +107,10 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 let stopModules: (() => void)[] = [];
 let tray: Tray | undefined;
+let trayMenu: BrowserWindow | undefined;
+let trayMenuInset = 0;
+let trayIconWatch: NodeJS.Timeout | undefined;
+const trayIconWatchInterval = 200;
 let mainWindow: BrowserWindow | undefined;
 let quitting = false;
 
@@ -294,7 +302,6 @@ async function createWindow(): Promise<void> {
   window.on('maximize', sendWindowState);
   window.on('unmaximize', sendWindowState);
 
-  const devUrl = !app.isPackaged ? process.env.DELION_DEV_URL : undefined;
   if (devUrl) {
     if (new URL(devUrl).origin !== 'http://127.0.0.1:5173') {
       throw new Error('Unexpected development server origin');
@@ -370,6 +377,12 @@ function createTray(window: BrowserWindow): void {
     .resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   tray.setToolTip('Delion Bot');
+  tray.on('click', () => showMainWindow(window));
+  if (process.platform === 'win32') {
+    createTrayMenuWindow();
+    tray.on('right-click', showTrayMenu);
+    return;
+  }
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: '打开主窗口', click: () => showMainWindow(window) },
@@ -395,8 +408,100 @@ function createTray(window: BrowserWindow): void {
       },
     ]),
   );
-  tray.on('click', () => showMainWindow(window));
 }
+
+function createTrayMenuWindow(): BrowserWindow {
+  if (trayMenu && !trayMenu.isDestroyed()) return trayMenu;
+  const window = new BrowserWindow({
+    width: 200,
+    height: 200,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    hasShadow: false,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  window.on('blur', () => {
+    if (!window.webContents.isDevToolsOpened()) window.hide();
+  });
+  window.on('hide', () => clearInterval(trayIconWatch));
+  window.on('closed', () => {
+    clearInterval(trayIconWatch);
+    trayMenu = undefined;
+  });
+  trayMenu = window;
+  if (devUrl) void window.loadURL(`${devUrl}/tray-menu.html`);
+  else void window.loadFile(join(__dirname, '../renderer/tray-menu.html'));
+  return window;
+}
+
+function showTrayMenu(): void {
+  const cursor = screen.getCursorScreenPoint();
+  const window = createTrayMenuWindow();
+  const workArea = screen.getDisplayNearestPoint(cursor).workArea;
+  const { width, height } = window.getBounds();
+  const { x, y } = trayMenuPosition(cursor, workArea, { width, height }, trayMenuInset);
+  window.setPosition(x, y);
+  window.show();
+  window.focus();
+  const iconBounds = tray?.getBounds();
+  clearInterval(trayIconWatch);
+  trayIconWatch = setInterval(() => {
+    const current = tray?.getBounds();
+    if (
+      current?.x !== iconBounds?.x ||
+      current?.y !== iconBounds?.y ||
+      current?.width !== iconBounds?.width ||
+      current?.height !== iconBounds?.height
+    )
+      window.hide();
+  }, trayIconWatchInterval);
+}
+
+ipcMain.on('tray-menu:select', (event, action: unknown) => {
+  if (!trayMenu || event.sender !== trayMenu.webContents) return;
+  if (action !== 'open' && action !== 'new-chat' && action !== 'new-project' && action !== 'quit')
+    return;
+  trayMenu.hide();
+  if (action === 'quit') {
+    quitApp();
+    return;
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  showMainWindow(mainWindow);
+  if (action !== 'open') mainWindow.webContents.send('window:tray-action', action);
+});
+
+ipcMain.on('tray-menu:dismiss', (event) => {
+  if (trayMenu && event.sender === trayMenu.webContents) trayMenu.hide();
+});
+
+ipcMain.on('tray-menu:resize', (event, size: unknown) => {
+  if (!trayMenu || event.sender !== trayMenu.webContents) return;
+  if (typeof size !== 'object' || size === null) return;
+  const { width, height, inset } = size as {
+    width?: unknown;
+    height?: unknown;
+    inset?: unknown;
+  };
+  if (typeof width !== 'number' || typeof height !== 'number' || typeof inset !== 'number') return;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || !Number.isFinite(inset)) return;
+  trayMenuInset = Math.max(0, Math.round(inset));
+  trayMenu.setContentSize(Math.ceil(width), Math.ceil(height));
+});
 
 app
   .whenReady()

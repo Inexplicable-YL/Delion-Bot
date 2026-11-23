@@ -6,6 +6,13 @@ import { ErrorCard, MessageChip } from '../../../src/ui/agent/Message';
 import { Trace } from '../../../src/ui/agent/Trace';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+vi.stubGlobal(
+  'ResizeObserver',
+  class {
+    observe() {}
+    disconnect() {}
+  },
+);
 
 async function render(node: React.ReactNode) {
   const host = document.createElement('div');

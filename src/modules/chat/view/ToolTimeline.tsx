@@ -14,7 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { ReactNode } from 'react';
 import type { AgentToolResult, SubagentDetails, WorkspaceChat } from '../../../core/protocol/agent';
-import { Reasoning } from '../../../ui/agent/Reasoning';
+import { Reasoning, useReasoningSnippet } from '../../../ui/agent/Reasoning';
 import { ToolGroup, ToolStep, type ToolStepStatus } from '../../../ui/agent/Tool';
 import { Trace } from '../../../ui/agent/Trace';
 import { useConnectorCatalog, type ConnectorApp } from '../../connectors/view';
@@ -247,10 +247,16 @@ export function ReplyTrace({
   const keepLast = blocks[lastIndex]?.part.type === 'text';
   const current = blocks[keepLast ? lastIndex - 1 : lastIndex]?.part;
   const currentResult = current?.type === 'tools' ? current.results.at(-1) : undefined;
+  const reasoningSnippet = useReasoningSnippet(
+    live && current?.type === 'reasoning' ? current.text : undefined,
+    current?.type === 'reasoning' && current.finishedAt !== undefined,
+  );
   const currentLabel = currentResult ? (
     <CurrentStepLabel result={currentResult} />
   ) : current?.type === 'text' ? (
     current.text.trim().split('\n')[0]!
+  ) : reasoningSnippet ? (
+    reasoningSnippet
   ) : (
     'Thinking'
   );

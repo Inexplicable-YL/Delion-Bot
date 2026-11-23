@@ -7,6 +7,7 @@ export interface DelionBotApi {
   readonly version: string;
   readonly updatedOnLaunch: boolean;
   readonly window: WindowApi;
+  readonly trayMenu: TrayMenuApi;
 }
 
 export interface WindowState {
@@ -14,6 +15,14 @@ export interface WindowState {
 }
 
 export type TrayAction = 'new-chat' | 'new-project' | 'open-settings';
+
+export type TrayMenuAction = 'open' | 'new-chat' | 'new-project' | 'quit';
+
+export interface TrayMenuApi {
+  select(action: TrayMenuAction): void;
+  dismiss(): void;
+  resize(size: { width: number; height: number; inset: number }): void;
+}
 
 export interface WindowApi {
   minimize(): void;
