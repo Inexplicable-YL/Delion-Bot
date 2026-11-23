@@ -20,7 +20,7 @@ const { read, delion } = vi.hoisted(() => {
 vi.mock('../../../../src/modules/note/view/MarkdownEditor', () => ({
   MarkdownEditor: ({ value }: { value: string }) => <pre data-testid="editor">{value}</pre>,
 }));
-vi.mock('../../../../src/modules/note/view/DocumentToolbar', () => ({
+vi.mock('../../../../src/ui/DocumentToolbar', () => ({
   DocumentToolbar: () => null,
 }));
 

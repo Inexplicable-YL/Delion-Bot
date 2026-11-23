@@ -12,7 +12,7 @@ import type { ImagePreview } from '../contract';
 import { chatClient } from './client';
 import { useReplyImageContext } from './ReplyImageContext';
 import { fetchImagePreview, imageQuestion, type ReplyImagePreview } from './reply-images';
-import { ZoomableImage } from './ZoomableImage';
+import { ZoomableImage } from '../../../ui/ZoomableImage';
 
 const viewerSurface = 'bg-surface ring-1 ring-inset ring-line';
 const viewerButton = `${viewerSurface} size-control-md rounded-full hover:bg-hover-strong`;
@@ -260,6 +260,8 @@ export function ImageViewer({
             <ZoomableImage
               alt={image.title}
               className="mt-15 min-h-0 w-full flex-1"
+              data-backdrop
+              imageClassName="rounded-chip"
               key={image.src}
               preview={preview}
               src={image.src}

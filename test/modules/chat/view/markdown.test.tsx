@@ -8,7 +8,7 @@ import { ChatTabSourceProvider } from '../../../../src/modules/chat/view/ChatSou
 import { ReplyImageContext } from '../../../../src/modules/chat/view/ReplyImageContext';
 import { sourceReferences } from '../../../../src/modules/chat/view/reference-tokens';
 import { chatClient } from '../../../../src/modules/chat/view/client';
-import { ZoomableImage } from '../../../../src/modules/chat/view/ZoomableImage';
+import { ZoomableImage } from '../../../../src/ui/ZoomableImage';
 
 let host: HTMLDivElement;
 let root: Root;

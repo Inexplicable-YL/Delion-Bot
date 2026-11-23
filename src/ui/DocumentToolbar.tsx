@@ -4,17 +4,17 @@ import {
   CodeBracketIcon as Code,
   FolderOpenIcon as FolderOpen,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/Button';
-import { cn } from '../../../ui/cn';
-import { Spinner } from '../../../ui/Spinner';
+import { Button } from './Button';
+import { cn } from './cn';
+import { Spinner } from './Spinner';
 
-export type NoteMode = 'live' | 'source';
+export type DocumentMode = 'live' | 'source';
 
 export function DocumentToolbar({
   path,
-  markdown,
-  mode,
+  mode = 'live',
   onModeChange,
+  previewLabel = '返回即时渲染',
   saving,
   dirty,
   failed,
@@ -22,12 +22,12 @@ export function DocumentToolbar({
   onReload,
 }: {
   path: string[];
-  markdown: boolean;
-  mode: NoteMode;
-  onModeChange: (mode: NoteMode) => void;
-  saving: boolean;
-  dirty: boolean;
-  failed: boolean;
+  mode?: DocumentMode;
+  onModeChange?: (mode: DocumentMode) => void;
+  previewLabel?: string;
+  saving?: boolean;
+  dirty?: boolean;
+  failed?: boolean;
   onOpenInFolder?: () => void;
   onReload: () => void;
 }) {
@@ -66,12 +66,12 @@ export function DocumentToolbar({
           '未保存'
         ) : null}
       </span>
-      {markdown && (
+      {onModeChange && (
         <Button
           size="icon-xs"
           variant={mode === 'source' ? 'secondary' : 'ghost'}
-          title={mode === 'source' ? '返回即时渲染' : '源码模式'}
-          aria-label={mode === 'source' ? '返回即时渲染' : '源码模式'}
+          title={mode === 'source' ? previewLabel : '源码模式'}
+          aria-label={mode === 'source' ? previewLabel : '源码模式'}
           aria-pressed={mode === 'source'}
           onClick={() => onModeChange(mode === 'source' ? 'live' : 'source')}
         >

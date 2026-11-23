@@ -2,9 +2,9 @@ import { useState } from 'react';
 
 import { Button } from '../../../ui/Button';
 import { showToast } from '../../../ui/Toast';
-import { parseRemoteNodeId, type TabId, type WorkspaceEntry } from '../../workspace/contract';
-import { useWorkspaceStore, workspaceClient } from '../../workspace/view';
-import { DocumentToolbar } from './DocumentToolbar';
+import { parseRemoteNodeId, type TabId } from '../../workspace/contract';
+import { useWorkspaceStore, workspaceClient, workspaceEntryPath } from '../../workspace/view';
+import { DocumentToolbar } from '../../../ui/DocumentToolbar';
 import { useNoteDraftSource } from './DraftSource';
 import { MarkdownEditor } from './MarkdownEditor';
 import {
@@ -32,12 +32,6 @@ const imageInsert = (entryId: string) =>
     (cause) =>
       showToast({ variant: 'error', title: '插入图片失败', description: errorMessage(cause) }),
   );
-
-function entryPath(entries: WorkspaceEntry[], id: string): string[] {
-  const entry = entries.find((item) => item.id === id);
-  if (!entry) return [];
-  return entry.parentId ? [...entryPath(entries, entry.parentId), entry.name] : [entry.name];
-}
 
 export function parseNoteTabId(tabId: string): string | null {
   if (!tabId.startsWith('note:')) return null;
@@ -131,7 +125,7 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
         </Button>
       </section>
     );
-  const path = entryPath(entries, entryId);
+  const path = workspaceEntryPath(entries, entryId);
   const markdown = draft.content.format === 'markdown';
   const readOnly = draft.content.readOnly === true;
   const dirty = draft.text !== draft.saved;
@@ -155,9 +149,8 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
     >
       <DocumentToolbar
         path={path.length ? path : [draft.content.title]}
-        markdown={markdown}
         mode={mode}
-        onModeChange={(next) => rememberNoteMode(entryId, next)}
+        onModeChange={markdown ? (next) => rememberNoteMode(entryId, next) : undefined}
         saving={draft.saving}
         dirty={dirty}
         failed={draft.error !== null || error !== null}

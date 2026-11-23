@@ -198,6 +198,10 @@ export function Explorer({
     const selection = JSON.stringify([virtualized, selected, expanded, folderReveal?.key]);
     const selectionChanged = position.selection !== selection;
     const pendingChanged = position.pendingAnchor !== pendingAnchor;
+    const scrollBehavior = () =>
+      window.matchMedia('(pointer: fine) and (prefers-reduced-motion: no-preference)').matches
+        ? 'smooth'
+        : 'auto';
     position.selection = selection;
     position.pendingAnchor = pendingAnchor;
     if (virtualized && (selectionChanged || pendingChanged)) {
@@ -209,14 +213,15 @@ export function Explorer({
         }
         if (selectionChanged && selected) {
           const index = visible.findIndex((row) => row.item.id === selected);
-          if (index >= 0) virtualizer.scrollToIndex(index, { align: 'auto' });
+          if (index >= 0)
+            virtualizer.scrollToIndex(index, { align: 'auto', behavior: scrollBehavior() });
         }
       });
     }
     if (!virtualized && selectionChanged && selected)
       tree
         .querySelector('[role="treeitem"][aria-selected="true"]')
-        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        ?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: scrollBehavior() });
   };
   const virtualRows = virtualizer.getVirtualItems();
   const rendered = virtualized
@@ -490,6 +495,13 @@ export function Explorer({
                 )}
                 style={{ paddingLeft: `calc(var(--spacing) * ${2 + (level - 1) * 4})` }}
               >
+                {folderReveal?.id === item.id && (
+                  <span
+                    key={folderReveal.key}
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 top-0 bottom-px -z-10 animate-folder-reveal rounded-chip bg-accent-tint opacity-0 motion-reduce:animate-none"
+                  />
+                )}
                 {Array.from({ length: level - 1 }, (_, guide) =>
                   projectIds.has(ancestors[guide] ?? '') ? null : (
                     <span
@@ -524,20 +536,9 @@ export function Explorer({
                     <Icon className="size-4 shrink-0 text-ink-2" style={accent} />
                   ))}
                 <span
-                  className={cn(
-                    'min-w-0 flex-1 truncate',
-                    item.gitIgnored && 'text-ink-2',
-                    folderReveal?.id === item.id && 'relative isolate',
-                  )}
+                  className={cn('min-w-0 flex-1 truncate', item.gitIgnored && 'text-ink-2')}
                   title={item.title ?? item.name}
                 >
-                  {folderReveal?.id === item.id && (
-                    <span
-                      key={folderReveal.key}
-                      aria-hidden
-                      className="pointer-events-none absolute inset-0 -z-10 animate-folder-reveal rounded-chip bg-accent-tint opacity-0 motion-reduce:animate-none"
-                    />
-                  )}
                   {item.name}
                 </span>
                 {item.badge && (

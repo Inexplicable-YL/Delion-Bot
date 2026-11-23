@@ -3,17 +3,20 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Button } from '../../../ui/Button';
 import { Card } from '../../../ui/Card';
+import { DocumentToolbar } from '../../../ui/DocumentToolbar';
 import { useRootFontSize } from '../../../ui/root-font-size';
 import { sanitizeHtml, sanitizeHtmlWithAssets } from './sanitize-html';
 import { showToast } from '../../../ui/Toast';
-import type { TabId } from '../../workspace/contract';
+import { parseRemoteNodeId, type TabId } from '../../workspace/contract';
+import { useWorkspaceStore, workspaceClient, workspaceEntryPath } from '../../workspace/view';
 import { CodeViewer } from './CodeViewer';
 import { useContentLoader, type LoadedDocument } from './Loader';
 import { OfficeExportBanner, OfficePromptCard } from './OfficePrompt';
-import { previewScrollOf, rememberPreviewScroll } from './scroll-memory';
+import { previewScrollOf, rememberPreviewScroll, useHtmlPreviewModes } from './scroll-memory';
 import { parsePreviewTabId } from './tab-id';
 import { Spinner } from '../../../ui/Spinner';
 import { errorMessage } from '../../../core/protocol/contract';
+import { ImagePreview } from './ImagePreview';
 
 const PdfReader = lazy(() =>
   import('./PdfReader').then((module) => ({ default: module.PdfReader })),
@@ -47,6 +50,9 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
   const loader = useContentLoader();
   const rootSize = useRootFontSize();
   const target = parsePreviewTabId(tabId);
+  const entryId = target && 'entryId' in target ? target.entryId : null;
+  const entries = useWorkspaceStore((state) => state.workspace.entries);
+  const htmlMode = useHtmlPreviewModes((modes) => modes[tabId] ?? 'live');
   const query = useQuery({
     queryKey: ['preview', tabId, rootSize],
     queryFn: async () => {
@@ -69,6 +75,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
   const scrollKey = `${tabId}:${groupId}`;
   const initialScroll = () => previewScrollOf(scrollKey);
   const onScroll = (top: number) => rememberPreviewScroll(scrollKey, top);
+  const sourceScrollKey = `${scrollKey}:source`;
 
   const load = () =>
     void query.refetch().then((result) => {
@@ -115,6 +122,20 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
     );
 
   const branch = previewBranchOf(doc);
+  const path = branch === 'html' && entryId ? workspaceEntryPath(entries, entryId) : [];
+  const openInFolder =
+    entryId && !parseRemoteNodeId(entryId)
+      ? () => {
+          if (window.delionBot)
+            void workspaceClient.openLocal(entryId).catch((cause) =>
+              showToast({
+                variant: 'error',
+                title: '打开所在文件夹失败',
+                description: errorMessage(cause),
+              }),
+            );
+        }
+      : undefined;
   const SourceDocument = doc.source?.document;
   const exported = content.office?.export;
   const bytes = content.bytes;
@@ -139,6 +160,24 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
         />
       )}
       {branch === 'html' && (
+        <DocumentToolbar
+          path={path.length ? path : [content.title]}
+          mode={htmlMode}
+          onModeChange={(mode) => useHtmlPreviewModes.setState({ [tabId]: mode })}
+          previewLabel="返回安全预览"
+          onOpenInFolder={openInFolder}
+          onReload={load}
+        />
+      )}
+      {branch === 'html' && htmlMode === 'source' && (
+        <CodeViewer
+          value={content.text ?? ''}
+          filename={content.title}
+          initialScroll={() => previewScrollOf(sourceScrollKey)}
+          onScroll={(top) => rememberPreviewScroll(sourceScrollKey, top)}
+        />
+      )}
+      {branch === 'html' && htmlMode === 'live' && (
         <Card className="min-h-0 flex-1">
           <iframe
             title={content.title}
@@ -179,23 +218,13 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
         ) : (
           <p className="p-4 text-ui-body text-ink-2">正在准备预览…</p>
         ))}
-      {branch === 'image' && (
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          {bytes && (
-            <img
-              alt={content.title}
-              className="max-w-full"
-              ref={(image) => {
-                if (!image) return;
-                const url = URL.createObjectURL(
-                  new Blob([new Uint8Array(bytes)], { type: content.mime }),
-                );
-                image.src = url;
-                return () => URL.revokeObjectURL(url);
-              }}
-            />
-          )}
-        </div>
+      {branch === 'image' && bytes && (
+        <ImagePreview
+          key={tabId + ':' + (content.revision ?? '')}
+          bytes={bytes}
+          mime={content.mime}
+          title={content.title}
+        />
       )}
       {(branch === 'docx' || branch === 'xlsx') &&
         (content.previewUrl ? (
@@ -241,7 +270,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
           这个文件不是 UTF-8 文本或体积过大，无法内嵌预览，请下载文件或用默认程序打开。
         </p>
       )}
-      {content.truncated && branch === 'text' && (
+      {content.truncated && (branch === 'text' || branch === 'html') && (
         <p className="shrink-0 border-b px-4 py-2 text-ui-subhead text-ink-2">
           文件超过 1 MB，这里只显示开头部分。
         </p>
