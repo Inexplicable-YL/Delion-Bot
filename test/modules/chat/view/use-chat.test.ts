@@ -2,7 +2,11 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkspaceChat } from '../../../../src/core/protocol/agent';
 import { chatImageToken } from '../../../../src/core/protocol/chat-input';
-import { canSendInput, shouldRestoreDraft } from '../../../../src/modules/chat/view/use-chat';
+import {
+  canSendInput,
+  shouldRestoreDraft,
+  showSentMessage,
+} from '../../../../src/modules/chat/view/use-chat';
 
 function chatWith(userTexts: string[]): WorkspaceChat {
   return {
@@ -61,5 +65,25 @@ describe('shouldRestoreDraft（发送失败草稿恢复判定）', () => {
     const sent = `看图${token}`;
     expect(shouldRestoreDraft(chatWith(['看图']), sent)).toBe(false);
     expect(shouldRestoreDraft(chatWith(['其他']), sent)).toBe(true);
+  });
+});
+
+describe('showSentMessage（发送后立即上屏）', () => {
+  const sent = { role: 'user' as const, content: '新问题', startedAt: 2000 };
+
+  it('服务端快照尚未包含新消息时追加并标记运行中', () => {
+    const chat = chatWith(['上一条']);
+    const shown = showSentMessage(chat, sent);
+    expect(shown?.running).toBe(true);
+    expect(shown?.messages.at(-1)).toBe(sent);
+  });
+
+  it('服务端写入发送之后的用户消息后改用快照', () => {
+    const chat = chatWith(['上一条']);
+    const arrived = {
+      ...chat,
+      messages: [...chat.messages, { role: 'user' as const, content: '新问题', startedAt: 2005 }],
+    };
+    expect(showSentMessage(arrived, sent)).toBe(arrived);
   });
 });

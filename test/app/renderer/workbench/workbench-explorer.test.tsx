@@ -110,7 +110,13 @@ beforeEach(() => {
   });
   useNavigationStore.setState({ view: 'home', projectId: null, restoreRequest: null });
   useWorkbenchLayout.setState({ ...createDefaultLayout(), projectId: null, ready: false });
-  useTreeState.setState({ expanded: [], query: '', selected: null, pendingCreate: null });
+  useTreeState.setState({
+    expanded: [],
+    query: '',
+    selected: null,
+    pendingCreate: null,
+    folderReveal: null,
+  });
 });
 
 afterEach(async () => {
@@ -154,6 +160,23 @@ it('hides the write entries while a remote project is open', async () => {
   await act(async () => blank().dispatchEvent(new MouseEvent('dblclick', { bubbles: true })));
   expect(onAction).not.toHaveBeenCalled();
   expect(nameInput()).toBeNull();
+});
+
+it('reveals a nested folder while a document remains active', async () => {
+  const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+  useWorkspaceStore.setState({
+    workspace: { ...workspace, entries: [...workspace.entries, localFolder] },
+  });
+  await render(null, 'active-document');
+  const target = () => container.querySelector('[role="treeitem"][aria-label="资料"]');
+  expect(target()).toBeNull();
+  useTreeState.getState().setQuery('unrelated');
+
+  await act(async () => useTreeState.getState().revealFolder([localProject.id, localFolder.id]));
+  expect(target()?.getAttribute('aria-expanded')).toBe('true');
+  expect(target()?.getAttribute('aria-selected')).toBe('true');
+  expect(scroll.mock.contexts).toContain(target());
+  scroll.mockRestore();
 });
 
 function type(input: HTMLInputElement, value: string) {

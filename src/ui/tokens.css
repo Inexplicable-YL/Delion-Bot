@@ -364,8 +364,19 @@
   --animate-view-in: view-in 160ms ease-out backwards;
   --animate-step-in-next: step-in-next 220ms ease-out backwards;
   --animate-step-in-prev: step-in-prev 220ms ease-out backwards;
+  --animate-folder-reveal: folder-reveal var(--transition-duration-slow) var(--ease-in-out) 2;
   --animate-thinking-spin: spin 14s linear infinite;
   --animate-thinking-ray: thinking-ray 1.6s var(--ease-in-out) infinite;
+}
+
+@keyframes folder-reveal {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 @keyframes shimmer-text {

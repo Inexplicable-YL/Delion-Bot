@@ -35,6 +35,11 @@ export function imageMimeOf(name: string): string | undefined {
   return imageMime[extensionOf(name)];
 }
 
+export function isHtmlFile(name: string): boolean {
+  const extension = extensionOf(name);
+  return extension === '.html' || extension === '.htm';
+}
+
 export function formatByName(name: string): FileFormat | null {
   return byExtension[extensionOf(name)] ?? null;
 }
@@ -61,7 +66,7 @@ export function isTextContent(head: Uint8Array, truncated = false): boolean {
 
 export function opensInEditor(name: string): boolean {
   const format = formatByName(name);
-  return format === null || format === 'markdown';
+  return format === 'markdown' || (format === null && !isHtmlFile(name));
 }
 
 export function fileFormatOf(name: string, head: Uint8Array, truncated = false): FileFormat {

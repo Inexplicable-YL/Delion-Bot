@@ -11,6 +11,10 @@ export interface LoadedDocument {
 
 export interface ContentLoader {
   loadDocument(tabKey: TabId): Promise<LoadedDocument>;
+  readHtmlAsset?(
+    documentId: string,
+    path: string,
+  ): Promise<{ mime: string; content: string } | null>;
   openLink(url: string): void;
   navigate: Navigate;
   onExported?(tabKey: TabId): void;

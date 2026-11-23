@@ -82,6 +82,7 @@ export function ProjectFileTree({
   entries: baseEntries,
   rootId,
   selected,
+  folderReveal,
   expanded,
   onExpand,
   onSelect,
@@ -102,6 +103,7 @@ export function ProjectFileTree({
   entries: WorkspaceEntry[];
   rootId: string | null;
   selected: string | null;
+  folderReveal?: { id: string; key: string } | null;
   expanded: string[];
   onExpand: (id: string, open: boolean) => void;
   onSelect: (id: string) => void;
@@ -359,6 +361,7 @@ export function ProjectFileTree({
       )}
       {remote.connecting && <ConnectingHint />}
       <Explorer
+        folderReveal={folderReveal}
         onTreeCommit={updateTree}
         label="我的内容"
         items={filtered}

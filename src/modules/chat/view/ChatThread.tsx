@@ -34,7 +34,6 @@ import {
   UserMessageEditor,
 } from '../../../ui/agent/Message';
 import { TaskNotice } from '../../../ui/agent/Task';
-import { Shimmer } from '../../../ui/Shimmer';
 import type { ChatComment, TaskNoticeDetails, WorkspaceChat } from '../../../core/protocol/agent';
 import type { CompactionHistoryMessage, LocalCommandReply } from '../contract';
 import { chatImageToken } from '../../../core/protocol/chat-input';
@@ -382,9 +381,6 @@ function AssistantMessage({
   const split = splitInterrupt(message.parts ?? []);
   const parts = foldedTrace?.parts ?? split.parts;
   const reason = message.interrupted ? (split.reason ?? '未知错误') : null;
-  const empty = !parts.some((part) =>
-    part.type === 'tools' ? part.results.length > 0 : Boolean(part.text.trim()),
-  );
   const moved = foldedTrace === null;
   const content = moved
     ? ''
@@ -403,11 +399,6 @@ function AssistantMessage({
 
   return (
     <AssistantMessageFrame data-reply-live={live || undefined}>
-      {live && empty && (
-        <p className="h-7 text-ui-body" role="status">
-          <Shimmer>Thinking</Shimmer>
-        </p>
-      )}
       {!moved && (
         <ReplyTrace
           key={foldedTrace ? 'continued' : message.startedAt}
@@ -615,6 +606,9 @@ export function ChatThread({
   messages.push(...local.slice(cursor));
   const historyLength = messages.findLastIndex((message) => message.compacted) + 1;
   const streaming = Boolean(chat.running);
+  const lastMessage = messages.at(-1);
+  if (streaming && !chat.compacting && lastMessage?.role === 'user' && !lastMessage.localCommand)
+    messages.push({ role: 'assistant', content: '', parts: [], startedAt: lastMessage.startedAt });
   const [resumedReplyAt] = useState(() => {
     const last = chat.messages.at(-1);
     return chat.running && last?.role === 'assistant' && last.content.trim()

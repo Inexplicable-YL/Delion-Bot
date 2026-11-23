@@ -17,6 +17,7 @@ import {
 } from 'streamdown';
 import { cn } from '../../../ui/cn';
 import { FileIcon } from '../../../ui/FileIcon';
+import { LibraryIcon } from '../../../ui/LibraryIcon';
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '../../../ui/ContextMenu';
 import { mermaidConfig, renderMermaid } from '../../preview/view';
 import { useChatTabSource } from './ChatSource';
@@ -314,7 +315,7 @@ function FileReference({
   const label = children ?? path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
   const [lead, ...rest] = typeof label === 'string' ? Array.from(label) : [label];
   const open = (key = path) => references?.onOpen(key);
-  const link = (activate: () => void, directory = false) => (
+  const link = (activate: () => void, kind: 'file' | 'folder' | 'workspace' = 'file') => (
     <span
       className={cn(
         'cursor-pointer font-semibold text-accent-ink',
@@ -331,7 +332,9 @@ function FileReference({
       title={path}
     >
       <span className="whitespace-nowrap">
-        {directory ? (
+        {kind === 'workspace' ? (
+          <LibraryIcon className="mr-0.5 ml-0.5 inline size-4 align-text-bottom" />
+        ) : kind === 'folder' ? (
           <FolderIcon className="mr-0.5 ml-0.5 inline size-4 align-text-bottom" />
         ) : (
           <FileIcon
@@ -362,8 +365,9 @@ function ReplyReference({
 }: NonNullable<MarkdownReferences['fileMenu']> & {
   path: string;
   onOpenFile: (key: string) => void;
-  children: (open: () => void, directory: boolean) => ReactElement;
+  children: (open: () => void, kind: 'file' | 'folder' | 'workspace') => ReactElement;
 }) {
+  const { revealWorkspaceFolder } = useChatTabSource();
   const queryClient = useQueryClient();
   const file = { sessionId, path };
   const options = {
@@ -379,15 +383,21 @@ function ReplyReference({
       onOpenFile(current?.path ?? path);
       return;
     }
-    await chatClient
-      .openReferenceDirectory(file)
-      .catch((cause: unknown) =>
-        showToast({ variant: 'error', title: '打开失败', description: errorMessage(cause) }),
-      );
+    try {
+      if (current.workspaceFolder) await revealWorkspaceFolder?.(current.path, sessionId);
+      else await chatClient.openReferenceDirectory(file);
+    } catch (cause) {
+      showToast({ variant: 'error', title: '打开失败', description: errorMessage(cause) });
+    }
   };
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>{children(() => void open(), directory)}</ContextMenuTrigger>
+      <ContextMenuTrigger asChild>
+        {children(
+          () => void open(),
+          info?.workspaceFolder ? 'workspace' : directory ? 'folder' : 'file',
+        )}
+      </ContextMenuTrigger>
       <ContextMenuContent>
         <ReplyFileMenu directory={directory} path={path} remote={remote} sessionId={sessionId} />
       </ContextMenuContent>

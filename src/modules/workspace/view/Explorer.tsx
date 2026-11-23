@@ -52,6 +52,7 @@ export function Explorer({
   items,
   expanded,
   selected,
+  folderReveal,
   onExpand,
   onSelect,
   label,
@@ -68,6 +69,7 @@ export function Explorer({
   items: ExplorerItem[];
   expanded: string[];
   selected: string | null;
+  folderReveal?: { id: string; key: string } | null;
   onExpand: (id: string, open: boolean) => void;
   onSelect: (id: string) => void;
   label: string;
@@ -193,7 +195,7 @@ export function Explorer({
     root.current = tree;
     if (!tree) return;
     onTreeCommit?.();
-    const selection = JSON.stringify([virtualized, selected, expanded]);
+    const selection = JSON.stringify([virtualized, selected, expanded, folderReveal?.key]);
     const selectionChanged = position.selection !== selection;
     const pendingChanged = position.pendingAnchor !== pendingAnchor;
     position.selection = selection;
@@ -522,9 +524,20 @@ export function Explorer({
                     <Icon className="size-4 shrink-0 text-ink-2" style={accent} />
                   ))}
                 <span
-                  className={cn('min-w-0 flex-1 truncate', item.gitIgnored && 'text-ink-2')}
+                  className={cn(
+                    'min-w-0 flex-1 truncate',
+                    item.gitIgnored && 'text-ink-2',
+                    folderReveal?.id === item.id && 'relative isolate',
+                  )}
                   title={item.title ?? item.name}
                 >
+                  {folderReveal?.id === item.id && (
+                    <span
+                      key={folderReveal.key}
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 -z-10 animate-folder-reveal rounded-chip bg-accent-tint opacity-0 motion-reduce:animate-none"
+                    />
+                  )}
                   {item.name}
                 </span>
                 {item.badge && (

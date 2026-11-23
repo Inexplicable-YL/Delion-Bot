@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ChatMarkdown } from '../../../../src/modules/chat/view/Markdown';
+import { ChatTabSourceProvider } from '../../../../src/modules/chat/view/ChatSource';
 import { ReplyImageContext } from '../../../../src/modules/chat/view/ReplyImageContext';
 import { sourceReferences } from '../../../../src/modules/chat/view/reference-tokens';
 import { chatClient } from '../../../../src/modules/chat/view/client';
@@ -181,7 +182,7 @@ it('回复里指向本地文件的链接渲染为文件引用，网页链接仍�
 
 it('单击目录引用会等待路径类型确认，然后打开系统文件管理器', async () => {
   const onOpen = vi.fn();
-  let identify!: (info: { path: string; directory: boolean }) => void;
+  let identify!: (info: { path: string; directory: boolean; workspaceFolder: boolean }) => void;
   vi.spyOn(chatClient, 'referenceFileInfo').mockImplementation(
     () =>
       new Promise((resolve) => {
@@ -200,9 +201,43 @@ it('单击目录引用会等待路径类型确认，然后打开系统文件管�
   );
   await act(async () => host.querySelector<HTMLElement>('[role=button]')!.click());
   expect(openDirectory).not.toHaveBeenCalled();
-  await act(async () => identify({ path: '/project/src/v2.1', directory: true }));
+  await act(async () =>
+    identify({ path: '/project/src/v2.1', directory: true, workspaceFolder: false }),
+  );
   expect(openDirectory).toHaveBeenCalledWith({ sessionId, path: 'src/v2.1' });
   expect(onOpen).not.toHaveBeenCalled();
+});
+
+it('opens a workspace folder reference in the library instead of the file manager', async () => {
+  const path = '/storage/workspace/Report bundle';
+  const revealWorkspaceFolder = vi.fn().mockResolvedValue(undefined);
+  const openDirectory = vi.spyOn(chatClient, 'openReferenceDirectory').mockResolvedValue(undefined);
+  vi.spyOn(chatClient, 'referenceFileInfo').mockResolvedValue({
+    path,
+    directory: true,
+    workspaceFolder: true,
+  });
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ChatTabSourceProvider
+          source={{
+            navigate: () => false,
+            workbench: { open: vi.fn(), openDocument: vi.fn(), close: vi.fn() },
+            opensLink: () => false,
+            revealWorkspaceFolder,
+          }}
+        >
+          <ChatMarkdown references={{ onOpen: vi.fn(), fileMenu: { sessionId, remote: false } }}>
+            {`[Report bundle](<${path}>)`}
+          </ChatMarkdown>
+        </ChatTabSourceProvider>
+      </QueryClientProvider>,
+    ),
+  );
+  await act(async () => host.querySelector<HTMLElement>('[role=button]')!.click());
+  expect(revealWorkspaceFolder).toHaveBeenCalledWith(path, sessionId);
+  expect(openDirectory).not.toHaveBeenCalled();
 });
 
 it.each([true, false])('文件引用菜单根据 VS Code 可用性 %s 显示并执行操作', async (available) => {
@@ -215,6 +250,7 @@ it.each([true, false])('文件引用菜单根据 VS Code 可用性 %s 显示并�
   vi.spyOn(chatClient, 'referenceFileInfo').mockResolvedValue({
     path: `/project/${path}`,
     directory: false,
+    workspaceFolder: false,
   });
   vi.spyOn(chatClient, 'referenceFilePath').mockResolvedValue(`/project/${path}`);
   vi.spyOn(chatClient, 'readReferenceFile').mockResolvedValue('export {};');

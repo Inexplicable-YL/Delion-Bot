@@ -46,6 +46,7 @@ import {
   workspaceRootDirectory,
 } from './main/api';
 import { loadWorkspaceLayout, saveWorkspaceLayout } from './main/layout';
+import { readHtmlAsset } from './main/html-assets';
 import { listLocalDirectory, localEntryAncestors, searchLocalWorkspace } from './main/local-tree';
 import {
   openProjectDirectory,
@@ -120,6 +121,7 @@ export const workspaceModule = defineModule({
       invalidateSessions();
     },
     read: readWorkspaceEntry,
+    readHtmlAsset: ({ documentId, path }) => readHtmlAsset(documentId, path),
     readSource: (id) => workspaceSource(id).preview(id),
     saveNote: ({ id, text, revision }) => saveWorkspaceNote(id, text, revision),
     saveNoteImage: ({ id, name, bytes }) => saveNoteImage(id, name, bytes),

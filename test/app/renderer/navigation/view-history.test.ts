@@ -88,6 +88,16 @@ describe('打开回复引用的文件', () => {
     expect(useWorkbenchLayout.getState().explorerCollapsedForReply).toBe(false);
   });
 
+  it('opens HTML references in a preview tab even when a source tab already exists', async () => {
+    seed('workbench', null);
+    await useWorkbenchLayout.getState().init(null);
+    const html = 'D:/code/report.HTML';
+    useWorkbenchLayout.getState().openTab(`note:${html}`);
+
+    expect(useNavigationStore.getState().openReplyFile(html, 'session', null)).toBe(true);
+    expect(groups()[0]?.active).toBe(`preview:${html}`);
+  });
+
   it('首页引用已用条目 ID 打开的文件时复用该标签', async () => {
     useWorkspaceStore.setState({
       workspace: {

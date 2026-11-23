@@ -30,22 +30,18 @@ export function useExplorerVisible(): boolean {
   return narrow ? mobileOpen : !collapsed && !collapsedForReply;
 }
 
+export function showExplorer() {
+  if (useExplorerState.getState().narrow) useMobileDrawer.getState().setDrawer('explorer');
+  else {
+    useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
+    usePreferences.getState().setPreference('workspaceSidebarCollapsed', false);
+  }
+}
+
 export function ExplorerRevealButton({ className }: { className?: string }) {
   if (useExplorerVisible()) return null;
   return (
-    <IconButton
-      aria-label="展开目录"
-      className={className}
-      onClick={() => {
-        const state = useExplorerState.getState();
-        if (state.narrow) useMobileDrawer.getState().setDrawer('explorer');
-        else {
-          useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
-          usePreferences.getState().setPreference('workspaceSidebarCollapsed', false);
-        }
-      }}
-      title="展开目录"
-    >
+    <IconButton aria-label="展开目录" className={className} onClick={showExplorer} title="展开目录">
       <PanelLeft />
     </IconButton>
   );

@@ -109,7 +109,7 @@ const procedures = {
   referenceFilePath: { input: sessionFile, output: z.string() },
   referenceFileInfo: {
     input: sessionFile,
-    output: z.object({ path: filePath, directory: z.boolean() }),
+    output: z.object({ path: filePath, directory: z.boolean(), workspaceFolder: z.boolean() }),
   },
   openReferenceDirectory: { input: sessionFile, output: z.void() },
   readReferenceFile: { input: sessionFile, output: z.string() },

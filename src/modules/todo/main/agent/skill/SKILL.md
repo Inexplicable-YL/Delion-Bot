@@ -1,9 +1,9 @@
 ---
 name: todo
-description: Find, create, update, and delete personal to-dos.
+description: Find, create, update, and delete personal tasks.
 ---
 
-# Personal to-dos
+# Personal tasks
 
 - Find items with `delion query_todos '{"query":"expenses","completed":false}'`. The query matches titles and notes. Use `offset` and `limit` for pagination.
 - Create an item with `delion save_todo '{"title":"Submit expenses","dueAt":"2026-12-01T09:00:00Z"}'`. Use UTC for due dates. Omit `dueAt` when no due date is needed.

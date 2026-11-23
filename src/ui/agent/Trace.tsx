@@ -18,20 +18,23 @@ const chevronClass = 'opacity-0 group-hover/row:opacity-100 group-focus-visible/
 export function TraceDisclosure({
   head,
   icon,
+  defaultOpen = false,
   children,
 }: {
   head: ReactNode;
   icon?: ReactNode;
+  defaultOpen?: boolean;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
+  const [toggled, setToggled] = useState<boolean | null>(null);
+  const open = toggled ?? defaultOpen;
   return (
     <div className="min-w-0">
       <button
         type="button"
         aria-expanded={open}
         data-trace-toggle
-        onClick={() => setOpen(!open)}
+        onClick={() => setToggled(!open)}
         className={toggleClass}
       >
         {icon && (
@@ -72,6 +75,7 @@ export function Trace({
 }) {
   const [expanded, setExpanded] = useState(false);
   const lastIndex = blocks.length - 1;
+  const waiting = blocks.length === 0;
   const folded = running
     ? running.keepLast
       ? lastIndex
@@ -81,21 +85,22 @@ export function Trace({
       : 0;
   return (
     <div aria-label="对话过程" className="min-w-0">
-      {running && folded > 0 && (
+      {running && (folded > 0 || waiting) && (
         <button
           type="button"
-          aria-expanded={expanded}
+          aria-expanded={waiting ? undefined : expanded}
           data-trace-toggle
+          disabled={waiting}
           onClick={() => setExpanded(!expanded)}
-          className={cn(toggleClass, 'mb-1 w-auto max-w-full')}
+          className={cn(toggleClass, 'mb-1 w-auto max-w-full disabled:pointer-events-none')}
         >
           <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center">
             <ThinkingMark />
           </span>
           <Shimmer className="min-w-0 truncate">
-            {expanded ? <RunningElapsed running={running} /> : running.current}
+            {expanded && !waiting ? <RunningElapsed running={running} /> : running.current}
           </Shimmer>
-          <CollapseChevron className={cn('-ml-1', chevronClass)} open={expanded} />
+          {!waiting && <CollapseChevron className={cn('-ml-1', chevronClass)} open={expanded} />}
         </button>
       )}
       {!running && foldLabel !== undefined && (

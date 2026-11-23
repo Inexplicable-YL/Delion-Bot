@@ -46,7 +46,7 @@ import { currentContainerOf, WorkbenchExplorer } from './WorkbenchExplorer';
 import { openTarget } from './open-target';
 import { ErrorText } from '../../../ui/Alert';
 import { cn } from '../../../ui/cn';
-import { useExplorerVisible } from './ExplorerState';
+import { showExplorer, useExplorerVisible } from './ExplorerState';
 import { officeRefOf, opensInApp, sourceOf, sourceOfLink } from '../../views';
 import { workspaceClient, useWorkspaceStore } from '../../../modules/workspace/view';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -210,6 +210,23 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
     opensLink: opensInApp,
     openReplyFile: (key, sessionId, projectId) =>
       void useNavigationStore.getState().openReplyFile(key, sessionId, projectId),
+    revealWorkspaceFolder: async (path, sessionId) => {
+      const ancestors = await workspaceClient.localAncestors(path);
+      const folder = ancestors.at(-1);
+      if (folder?.kind !== 'folder' && folder?.kind !== 'project')
+        throw new Error('资料文件夹不存在');
+      const navigation = useNavigationStore.getState();
+      if (navigation.view === 'home' && navigation.projectId === null) {
+        if (!navigation.openChatTab(sessionId, null)) return;
+      } else if (
+        (navigation.view !== 'workbench' || navigation.projectId !== null) &&
+        !navigation.openProject('')
+      )
+        return;
+      useWorkspaceStore.getState().rememberEntries(ancestors);
+      useTreeState.getState().revealFolder(ancestors.map(({ id }) => id));
+      showExplorer();
+    },
     onSaveNote: (text) =>
       openDialog(
         'note',
@@ -229,6 +246,7 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
   };
 
   const loader: ContentLoader = {
+    readHtmlAsset: (documentId, path) => workspaceClient.readHtmlAsset({ documentId, path }),
     loadDocument: async (tabKey: TabId): Promise<LoadedDocument> => {
       const target = parsePreviewTabId(tabKey);
       if (!target) throw new Error('无效的预览标签');
@@ -271,7 +289,7 @@ export function WorkbenchShell({ home }: { home?: boolean }) {
     openLink: (url) => {
       const sourceId = sourceOfLink(url, queryClient);
       if (sourceId) void useNavigationStore.getState().openDocument(`source:${sourceId}`);
-      else window.open(url);
+      else window.open(url, '_blank', 'noopener,noreferrer');
     },
     navigate: (target) => useNavigationStore.getState().navigate(target),
     onExported: () => {

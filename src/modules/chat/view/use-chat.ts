@@ -16,6 +16,7 @@ import {
   CHAT_TEXT_ATTACHMENT_MAX_BYTES,
   chatFileKindOfFile,
   hasChatImages,
+  parseChatBlocks,
   stripChatImageTokens,
 } from '../../../core/protocol/chat-input';
 import { agentClient, chatClient, commandRepliesKey } from './client';
@@ -54,6 +55,32 @@ export function shouldRestoreDraft(fresh: WorkspaceChat | null, sentText: string
   return !fresh.messages.some((message) => message.role === 'user' && message.content === stripped);
 }
 
+type ChatMessage = WorkspaceChat['messages'][number];
+
+export function showSentMessage(
+  chat: WorkspaceChat | null,
+  sent: ChatMessage | null,
+): WorkspaceChat | null {
+  if (!chat || !sent) return chat;
+  const arrived = chat.messages.some(
+    (message) => message.role === 'user' && (message.startedAt ?? 0) >= (sent.startedAt ?? 0),
+  );
+  return arrived ? chat : { ...chat, running: true, messages: [...chat.messages, sent] };
+}
+
+function sentMessage(text: string, extras: Partial<ChatMessage>): ChatMessage {
+  const images = parseChatBlocks(text).flatMap((block) =>
+    block.type === 'image' ? [{ id: block.id, name: block.name }] : [],
+  );
+  return {
+    role: 'user',
+    content: stripChatImageTokens(text),
+    startedAt: Date.now(),
+    ...(images.length ? { images } : {}),
+    ...extras,
+  };
+}
+
 export function useChatDraft(sessionId: string) {
   return useChatDrafts((state) => state.drafts[sessionId] ?? emptyDraft);
 }
@@ -65,7 +92,9 @@ export function useChat(
 ) {
   const queryClient = useQueryClient();
   const { navigate } = useChatTabSource();
-  const chat = useSessions((state) => state.chats[sessionId] ?? null);
+  const storedChat = useSessions((state) => state.chats[sessionId] ?? null);
+  const [sent, setSent] = useState<ChatMessage | null>(null);
+  const chat = showSentMessage(storedChat, sent);
   const { attachments, update: setAttachments, hasAttachments, release } = useChatAttachments();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
@@ -152,6 +181,23 @@ export function useChat(
       ref.session ? [{ id: ref.key, title: ref.title }] : [],
     );
     const sentAttachments = attachments;
+    setPending((count) => count + 1);
+    setError(null);
+    clearDraft(requested);
+    setAttachments([]);
+    if (!busy)
+      setSent(
+        sentMessage(text, {
+          ...(sentReferences.length
+            ? { sources: sentReferences.map((ref) => ({ key: ref.key, title: ref.key })) }
+            : {}),
+          ...(sentSessions.length ? { sessions: sentSessions } : {}),
+          ...(sentAttachments.length
+            ? { attachments: sentAttachments.map(({ name }) => ({ name })) }
+            : {}),
+          ...(comments.length ? { comments } : {}),
+        }),
+      );
     try {
       if (flushReference) {
         for (const ref of sentReferences) {
@@ -161,12 +207,12 @@ export function useChat(
       }
     } catch (e) {
       showToast({ variant: 'error', title: '发送失败', description: errorMessage(e) });
+      setSent(null);
+      setPending((count) => Math.max(0, count - 1));
+      updateDraft(requested, { prompt: text, comments });
+      setAttachments(sentAttachments);
       return;
     }
-    setPending((count) => count + 1);
-    setError(null);
-    clearDraft(requested);
-    setAttachments([]);
     try {
       const result = await agentClient.ask({
         sessionId: requested,
@@ -188,6 +234,7 @@ export function useChat(
         }
       }
     } finally {
+      setSent(null);
       setPending((count) => Math.max(0, count - 1));
     }
   };
@@ -314,6 +361,13 @@ export function useChat(
     const requested = sessionId;
     setPending((count) => count + 1);
     setError(null);
+    if (!busy)
+      setSent(
+        sentMessage(
+          text,
+          context.length ? { sources: context.map((key) => ({ key, title: key })) } : {},
+        ),
+      );
     try {
       const result = await agentClient.ask({
         sessionId: requested,
@@ -326,6 +380,7 @@ export function useChat(
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      setSent(null);
       setPending((count) => Math.max(0, count - 1));
     }
   };

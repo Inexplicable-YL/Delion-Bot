@@ -1,5 +1,5 @@
-import { readFile, stat } from 'node:fs/promises';
-import { posix, resolve } from 'node:path';
+import { readFile, realpath, stat } from 'node:fs/promises';
+import { isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { locateSessionFile } from '../../../core/agent/session/files';
 import { row, sessionCwd } from '../../../core/agent/session/store';
 import { hostPorts } from '../../../core/ports';
@@ -7,6 +7,7 @@ import { isTextContent, TEXT_PREVIEW_MAX_BYTES } from '../../../core/protocol/fi
 import { readRemoteRange, statRemoteFile } from '../../../core/remote/operations';
 import { helperSession } from '../../../core/remote/helper';
 import { openInVsCode } from '../../workspace';
+import { hiddenWorkspaceNames } from '../../workspace/contract';
 
 function referenceFile(sessionId: string, path: string) {
   const meta = row(sessionId);
@@ -26,7 +27,17 @@ export async function referenceFileInfo(sessionId: string, path: string) {
   const directory = file.target
     ? ((await helperSession(file.target).stat([file.path]))[0]?.directory ?? false)
     : (await stat(file.path)).isDirectory();
-  return { path: file.path, directory };
+  const root = join(hostPorts().paths.storage(), 'workspace');
+  const suffix = relative(root, file.path);
+  const segments = suffix.split(sep);
+  const workspaceFolder =
+    !file.target &&
+    directory &&
+    suffix !== '' &&
+    !isAbsolute(suffix) &&
+    !segments.some((segment) => segment === '..' || hiddenWorkspaceNames.has(segment)) &&
+    relative(join(await realpath(root), suffix), await realpath(file.path)) === '';
+  return { path: file.path, directory, workspaceFolder };
 }
 
 export async function openReferenceDirectory(sessionId: string, path: string): Promise<void> {

@@ -114,6 +114,7 @@ export function WorkbenchExplorer({
   const connections = useRemoteConnections();
   const activity = useRemoteActivity((s) => s.byProject);
   const selected = useTreeState((s) => s.selected);
+  const folderReveal = useTreeState((s) => s.folderReveal);
   const expanded = useTreeState((s) => s.expanded);
   const query = useTreeState((s) => s.query);
   const pendingCreate = useTreeState((s) => s.pendingCreate);
@@ -149,7 +150,10 @@ export function WorkbenchExplorer({
     if (item.kind === 'folder' || item.kind === 'project') {
       useTreeState.getState().select(id);
       expand(id, !expanded.includes(id));
-    } else onOpenDocument(id);
+    } else {
+      if (folderReveal) useTreeState.getState().select(null);
+      onOpenDocument(id);
+    }
   };
 
   const openToSide = (key: string) => {
@@ -475,6 +479,7 @@ export function WorkbenchExplorer({
                     canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}
                     entries={entries}
                     expanded={expanded}
+                    folderReveal={projectId === null ? folderReveal : null}
                     pending={pending}
                     onAction={treeAction}
                     onExpand={expand}
@@ -488,7 +493,7 @@ export function WorkbenchExplorer({
                     onSelect={selectEntry}
                     query={query}
                     rootId={rootId}
-                    selected={activeDocKey ?? selected}
+                    selected={(projectId === null && folderReveal?.id) || activeDocKey || selected}
                   />
                 )}
               </div>

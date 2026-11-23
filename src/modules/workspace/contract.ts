@@ -128,6 +128,13 @@ export const workspaceContract = defineContract(
     },
     remove: { input: entryId, output: z.void() },
     read: { input: entryId, output: document },
+    readHtmlAsset: {
+      input: z.object({
+        documentId: z.string().min(1).max(32_767),
+        path: z.string().min(1).max(4096),
+      }),
+      output: z.object({ mime: z.string(), content: z.string() }).nullable(),
+    },
     readSource: { input: z.string().max(512), output: document },
     saveNote: {
       input: z.object({

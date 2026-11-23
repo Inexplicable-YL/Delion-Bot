@@ -32,7 +32,7 @@ import {
   type WorkspaceState,
 } from '../contract';
 import { parseRemoteNodeId } from '../../remotes/contract';
-import { imageMimeOf } from '../../../core/protocol/files';
+import { imageMimeOf, isHtmlFile } from '../../../core/protocol/files';
 import { localFileFormat, readLocalText, textRevision, writeLocalText } from './files';
 
 export const idSchema = z.string().uuid();
@@ -715,7 +715,7 @@ export async function readWorkspaceEntry(id: string): Promise<DocumentContent> {
     if (read.kind === 'binary') return { title: item.name, format: 'binary', revision: version };
     return {
       title: item.name,
-      format: read.format,
+      format: isHtmlFile(path) ? 'html' : read.format,
       text: read.text,
       readOnly: read.readOnly || undefined,
       truncated: read.truncated || undefined,

@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '../../../ui/Button';
 import { Card } from '../../../ui/Card';
 import { useRootFontSize } from '../../../ui/root-font-size';
-import { sanitizeHtml } from './sanitize-html';
+import { sanitizeHtml, sanitizeHtmlWithAssets } from './sanitize-html';
 import { showToast } from '../../../ui/Toast';
 import type { TabId } from '../../workspace/contract';
 import { CodeViewer } from './CodeViewer';
@@ -45,13 +45,26 @@ function previewBranchOf(doc: LoadedDocument): PreviewBranch {
 
 export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
   const loader = useContentLoader();
+  const rootSize = useRootFontSize();
+  const target = parsePreviewTabId(tabId);
   const query = useQuery({
-    queryKey: ['preview', tabId],
-    queryFn: () => loader.loadDocument(tabId),
-    enabled: parsePreviewTabId(tabId) !== null,
+    queryKey: ['preview', tabId, rootSize],
+    queryFn: async () => {
+      const doc = await loader.loadDocument(tabId);
+      if (doc.content.format !== 'html' || doc.source) return { doc, html: '' };
+      const readAsset = loader.readHtmlAsset;
+      const html =
+        target && 'entryId' in target && readAsset
+          ? await sanitizeHtmlWithAssets(doc.content.text, rootSize, (path) =>
+              readAsset(target.entryId, path),
+            )
+          : sanitizeHtml(doc.content.text, '', rootSize, 'auto');
+      return { doc, html };
+    },
+    enabled: target !== null,
     gcTime: 0,
   });
-  const doc = query.data;
+  const doc = query.data?.doc;
   const error = query.isError && !doc && !query.isFetching ? errorMessage(query.error) : null;
   const scrollKey = `${tabId}:${groupId}`;
   const initialScroll = () => previewScrollOf(scrollKey);
@@ -76,13 +89,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
   };
 
   const content = doc?.content;
-  const rootSize = useRootFontSize();
-  const html =
-    content?.format === 'html' && !doc?.source
-      ? sanitizeHtml(content.text, '', rootSize, 'auto')
-      : '';
-
-  if (!parsePreviewTabId(tabId))
+  if (!target)
     return (
       <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6 text-ui-body text-ink-2">
         无效的预览标签：{tabId}
@@ -138,17 +145,18 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
             className="size-full border-0 bg-paper"
             sandbox="allow-same-origin"
             referrerPolicy="no-referrer"
-            srcDoc={html}
+            srcDoc={query.data?.html}
             onLoad={(event) => {
               const frame = event.currentTarget;
               const frameDoc = frame.contentDocument;
               if (!frameDoc) return;
               frame.contentWindow?.scrollTo(0, initialScroll());
               frameDoc.addEventListener('click', (e) => {
-                const target = (e.target as Element).closest?.('a[href]');
-                if (target) {
+                const target = (e.target as Element).closest?.('a[data-preview-href]');
+                const href = target?.getAttribute('data-preview-href');
+                if (href) {
                   e.preventDefault();
-                  openLink(target.getAttribute('href')!);
+                  openLink(href);
                 }
               });
               frame.contentWindow?.addEventListener('scroll', () =>

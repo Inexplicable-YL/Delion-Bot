@@ -13,7 +13,7 @@ import { useMobileDrawer } from '../shell/mobile-drawer';
 import type { SettingsSectionId } from '../../../modules/settings/contract';
 import type { TabId } from '../../../modules/workspace/contract';
 import { useWorkspaceStore } from '../../../modules/workspace/view';
-import { formatByName, opensInEditor } from '../../../core/protocol/files';
+import { formatByName, isHtmlFile, opensInEditor } from '../../../core/protocol/files';
 import { parseRemoteNodeId } from '../../../modules/remotes/contract';
 import { showToast } from '../../../ui/Toast';
 import type { NavTarget, NavTargets } from '../../module';
@@ -117,7 +117,12 @@ function openExistingReplyFile(key: string): boolean {
   const identity = fileIdentity(key);
   const existing = walkGroups(layout.root)
     .flatMap((group) => group.tabs)
-    .find((tab) => previewable(tab) && fileIdentity(tab.slice(tab.indexOf(':') + 1)) === identity);
+    .find(
+      (tab) =>
+        previewable(tab) &&
+        (!isHtmlFile(identity) || tab.startsWith('preview:')) &&
+        fileIdentity(tab.slice(tab.indexOf(':') + 1)) === identity,
+    );
   if (!existing) return false;
   layout.openTab(existing);
   if (layout.maximized && useWorkbenchLayout.getState().focus !== layout.maximized)

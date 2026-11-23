@@ -4,6 +4,7 @@ import {
   TEXT_PREVIEW_MAX_BYTES,
   formatByName,
   imageMimeOf,
+  isHtmlFile,
   isTextContent,
 } from '../../../core/protocol/files';
 import { readRemoteRange, statRemoteFile } from '../../../core/remote/operations';
@@ -71,7 +72,7 @@ export async function readRemoteDocument(
   if (!isTextContent(bytes, truncated)) return { title, format: 'binary', revision };
   return {
     title,
-    format: format === 'markdown' ? 'markdown' : 'text',
+    format: isHtmlFile(path) ? 'html' : format === 'markdown' ? 'markdown' : 'text',
     text: truncated ? bytes.toString('utf8').replace(/\uFFFD+$/, '') : bytes.toString('utf8'),
     readOnly: true,
     truncated: truncated || undefined,

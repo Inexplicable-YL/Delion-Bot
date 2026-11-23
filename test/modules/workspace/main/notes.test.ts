@@ -30,6 +30,7 @@ import {
   entry,
   workspaceFilePath,
 } from '../../../../src/modules/workspace/main/api';
+import { readHtmlAsset } from '../../../../src/modules/workspace/main/html-assets';
 import { registerWorkspaceSource } from '../../../../src/modules/workspace/main/sources';
 import { provideTestHostPorts } from '../../../core/host-mock';
 import {
@@ -241,6 +242,28 @@ describe('按内容判定格式（无扩展名白名单）', () => {
     expect(content).toMatchObject({ format: 'text', readOnly: true, truncated: true });
     expect(content.text).toHaveLength(1024 * 1024);
     expect(() => saveWorkspaceNote(big, 'x', content.revision!)).toThrow('只能只读查看');
+  });
+
+  it('serves HTML as document text for the preview renderer', async () => {
+    const text = '<p>Report</p>';
+    expect(await readWorkspaceEntry(write('Report.HTML', text))).toMatchObject({
+      format: 'html',
+      text,
+    });
+  });
+
+  it('loads HTML assets from the document folder and rejects paths outside it', async () => {
+    const bundle = join(workspaceRoot(), 'bundle');
+    mkdirSync(bundle, { recursive: true });
+    const document = write('bundle/index.html', '<img src="cover.png">');
+    write('bundle/cover.png', PNG);
+    write('outside.png', PNG);
+
+    expect(await readHtmlAsset(document, 'cover.png')).toEqual({
+      mime: 'image/png',
+      content: Buffer.from(PNG).toString('base64'),
+    });
+    expect(await readHtmlAsset(document, '../outside.png')).toBeNull();
   });
 
   it('保存只写用户给的文本：CRLF 与 BOM 原样保留，原地覆写不换掉文件', async () => {

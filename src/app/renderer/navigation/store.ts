@@ -22,6 +22,8 @@ type Store = {
   expanded: string[];
   expand: (id: string, open: boolean) => void;
   reveal: (chain: string[]) => void;
+  folderReveal: { id: string; key: string } | null;
+  revealFolder: (chain: string[]) => void;
   collapseAll: () => void;
   selected: string | null;
   select: (id: string | null) => void;
@@ -52,10 +54,22 @@ export const useTreeState = create<Store>((set) => ({
     set((s) => ({
       expanded: [...new Set([...s.expanded, ...chain])],
       selected: chain.at(-1) ?? null,
+      folderReveal: null,
     })),
-  collapseAll: () => set({ expanded: [] }),
+  folderReveal: null,
+  revealFolder: (chain) => {
+    const id = chain.at(-1);
+    if (!id) return;
+    set((s) => ({
+      expanded: [...new Set([...s.expanded, ...chain])],
+      selected: id,
+      query: '',
+      folderReveal: { id, key: crypto.randomUUID() },
+    }));
+  },
+  collapseAll: () => set({ expanded: [], folderReveal: null }),
   selected: null,
-  select: (selected) => set({ selected }),
+  select: (selected) => set({ selected, folderReveal: null }),
   openProjects: ['general'],
   toggleProject: (id, open) =>
     set((s) => ({

@@ -14,7 +14,10 @@ export function Reasoning({
 }) {
   return (
     <div className="my-1">
-      <TraceDisclosure head={streaming ? <Shimmer>Thinking</Shimmer> : <span>{label}</span>}>
+      <TraceDisclosure
+        defaultOpen={streaming}
+        head={streaming ? <Shimmer>Thinking</Shimmer> : <span>{label}</span>}
+      >
         <div
           data-reasoning-body
           className={cn(
