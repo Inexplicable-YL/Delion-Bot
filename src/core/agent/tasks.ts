@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { finished } from 'node:stream/promises';
 import type { ToolDefinition, getShellConfig } from '@earendil-works/pi-coding-agent';
 import type { BackgroundTaskView, TaskNoticeDetails, TaskStatus } from '../protocol/agent';
 import type { RemoteBackend } from '../remote/operations';
@@ -269,9 +270,21 @@ function startBash(
     const task = tasks.get(id);
     if (task) task.tail = (task.tail + chunk.toString()).slice(-TAIL_CHARS);
   };
+  const logClosed = finished(file, { cleanup: true });
+  const execution = (async () => {
+    try {
+      return await run(command, { signal: abort.signal, timeout, onData });
+    } finally {
+      file.end();
+    }
+  })();
   trackTask(
     { id, parent, kind: 'bash', label: command, stop: () => abort.abort(), log },
-    run(command, { signal: abort.signal, timeout, onData }).finally(() => file.end()),
+    Promise.allSettled([execution, logClosed]).then(([outcome, logResult]) => {
+      if (outcome.status === 'rejected') throw outcome.reason;
+      if (logResult.status === 'rejected') throw logResult.reason;
+      return outcome.value;
+    }),
   );
   return id;
 }
