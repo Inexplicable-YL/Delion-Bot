@@ -43,7 +43,8 @@ jobs:
       - name: Install Bubblewrap for isolation tests
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq bubblewrap
+          sudo apt-get install -y -qq bubblewrap apparmor-profiles
+          sudo apparmor_parser -r /usr/share/apparmor/extra-profiles/bwrap-userns-restrict
       - name: Test helper locally (no SSH)
         working-directory: helper
         env:
