@@ -92,7 +92,12 @@ func TestAuthorizedRootCannotBeALink(t *testing.T) {
 	if err := os.Symlink(outside, root); err != nil {
 		t.Skip(err)
 	}
-	if got := Run(context.Background(), root, Request{Action: "ls", Path: "."}); got.Error == "" {
-		t.Fatal("an alias replaced the authorized directory")
+	if err := os.Mkdir(filepath.Join(outside, "nested"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, alias := range []string{root, filepath.Join(root, "nested")} {
+		if got := Run(context.Background(), alias, Request{Action: "ls", Path: "."}); got.Error == "" {
+			t.Fatal("an alias replaced the authorized directory")
+		}
 	}
 }

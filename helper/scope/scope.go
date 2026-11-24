@@ -11,7 +11,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -40,13 +39,18 @@ func Run(ctx context.Context, directory string, input Request) Response {
 	if ctx.Err() != nil {
 		return Response{Error: "操作已取消"}
 	}
-	canonical, err := filepath.EvalSymlinks(directory)
-	if err != nil || !samePath(canonical, directory) {
+	if !filepath.IsAbs(directory) {
 		return Response{Error: "授权目录不可用"}
 	}
 	before, err := os.Lstat(directory)
 	if err != nil || !before.IsDir() {
 		return Response{Error: "授权目录不可用"}
+	}
+	for child, parent := directory, filepath.Dir(directory); child != parent; child, parent = parent, filepath.Dir(parent) {
+		info, err := os.Lstat(parent)
+		if err != nil || !info.IsDir() {
+			return Response{Error: "授权目录不可用"}
+		}
 	}
 	root, err := os.OpenRoot(directory)
 	if err != nil {
@@ -58,14 +62,6 @@ func Run(ctx context.Context, directory string, input Request) Response {
 		return Response{Error: "授权目录不可用"}
 	}
 	return execute(ctx, root, input)
-}
-
-func samePath(left, right string) bool {
-	left, right = filepath.Clean(left), filepath.Clean(right)
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(left, right)
-	}
-	return left == right
 }
 
 func execute(ctx context.Context, root *os.Root, input Request) Response {
