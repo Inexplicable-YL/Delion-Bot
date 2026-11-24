@@ -1,13 +1,14 @@
 import { spawn, spawnSync } from 'node:child_process';
 import {
+  closeSync,
   existsSync,
+  fchmodSync,
   lstatSync,
-  mkdirSync,
+  mkdtempSync,
+  openSync,
   readdirSync,
   readlinkSync,
-  writeFileSync,
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { hostPorts } from '../../ports';
 import type { SandboxRoots } from './mode';
@@ -161,12 +162,20 @@ function rootMounts(): string[] {
 let socketMask: string | undefined;
 
 function socketMaskFile(): string {
-  if (socketMask && existsSync(socketMask)) return socketMask;
-  const dir = join(tmpdir(), 'delion-socket-mask');
-  mkdirSync(dir, { recursive: true });
-  socketMask = join(dir, 'none');
-  writeFileSync(socketMask, '');
-  return socketMask;
+  if (socketMask) return socketMask;
+  const root = hostPorts().paths.userData();
+  const rootInfo = lstatSync(root);
+  if (!rootInfo.isDirectory()) throw new Error('应用数据目录不能用来放置套接字遮罩，已停止执行。');
+  const dir = mkdtempSync(join(root, 'socket-mask-'));
+  const file = join(dir, 'none');
+  const fd = openSync(file, 'wx', 0o600);
+  try {
+    fchmodSync(fd, 0o600);
+  } finally {
+    closeSync(fd);
+  }
+  socketMask = file;
+  return file;
 }
 
 function socketMaskArgs(): string[] {

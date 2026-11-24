@@ -2,13 +2,16 @@ import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import {
   existsSync,
+  lstatSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { linuxSandboxAvailability, runSandboxed } from '../../../../src/core/agent/sandbox/linux';
@@ -206,6 +209,11 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
   });
 
   it('只读目录中的套接字、抽象套接字和多余文件描述符都不可用', async () => {
+    const planted = join(tmpdir(), 'delion-socket-mask');
+    const stolen = join(root, 'stolen-mask');
+    rmSync(planted, { recursive: true, force: true });
+    mkdirSync(stolen);
+    symlinkSync(stolen, planted);
     const ipc = join(root, 'external', 'ipc.sock');
     const server = createServer();
     let accepted = false;
@@ -284,6 +292,17 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
     expect(output).not.toContain(sessionId);
     expect(accepted).toBe(false);
     expect(existsSync('/tmp/delion-abstract-hit')).toBe(false);
+    const masks = readdirSync(userData).filter((name) => name.startsWith('socket-mask-'));
+    expect(masks).toHaveLength(1);
+    const maskDir = join(userData, masks[0] ?? '');
+    expect(lstatSync(maskDir).mode & 0o777).toBe(0o700);
+    const mask = lstatSync(join(maskDir, 'none'));
+    expect(mask.isSymbolicLink()).toBe(false);
+    expect(mask.isFile()).toBe(true);
+    expect(mask.mode & 0o777).toBe(0o600);
+    expect(readdirSync(stolen)).toEqual([]);
+    expect(lstatSync(planted).isSymbolicLink()).toBe(true);
+    rmSync(planted, { recursive: true, force: true });
   });
 
   it('取消长时间命令后不留下沙箱进程', async () => {
