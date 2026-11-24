@@ -23,6 +23,7 @@ import { remoteTools } from './remote-tools';
 import { sessionTools } from './session-read';
 import { executionMode, ownerRow } from './sandbox/mode';
 import { scopedFileTools } from './sandbox/scoped-files';
+import { macosCommandTool } from './sandbox/macos-command';
 import { chatSessionDirectory, chatShareDirectory, row, workspaceRoot } from './session/store';
 
 let bridge: ReturnType<typeof startDomainBridge> | undefined;
@@ -118,6 +119,7 @@ export function agentEnvironment() {
       if (mode !== 'full') {
         const owner = ownerRow(meta);
         const tools = scopedFileTools(meta);
+        const command = tools.length ? macosCommandTool(meta) : null;
         const files =
           tools.length === 0
             ? 'Files are unavailable under the current permissions.'
@@ -144,7 +146,7 @@ export function agentEnvironment() {
           globalSkillDirs: [],
           disabledSkills: new Set(),
           disabledTools: [...readDisabledTools()],
-          customTools: tools,
+          customTools: command ? [...tools, command] : tools,
         };
       }
       const project = projectContext(projectId, cwd);

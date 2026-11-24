@@ -166,7 +166,16 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
     (restrictedRequests.at(-1)?.body as { tools?: { function: { name: string } }[] } | undefined)
       ?.tools ?? []
   ).map((tool) => tool.function.name);
-  expect(names.sort()).toEqual(['find', 'grep', 'ls', 'read', 'task', 'task_output', 'task_stop']);
+  expect(names.sort()).toEqual([
+    'find',
+    'grep',
+    'ls',
+    'read',
+    ...(process.platform === 'darwin' ? ['sandbox_command'] : []),
+    'task',
+    'task_output',
+    'task_stop',
+  ]);
   expect(JSON.stringify(restrictedRequests.at(-1)?.body)).toContain('/privacy');
   stopRestricted();
 }, 30_000);

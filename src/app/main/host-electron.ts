@@ -84,6 +84,27 @@ const clients = new Set<WebContents>();
 const windowOf = (owner: ClientHandle) => BrowserWindow.fromWebContents(owner as WebContents);
 
 const desktop: Desktop = {
+  async approveSandboxCommand({ session, command, files, signal }) {
+    const window = workspaceWindow();
+    if (!window || signal.aborted) return false;
+    const escaped = (value: unknown) =>
+      JSON.stringify(value).replace(
+        /\p{Cf}/gu,
+        (character) => `\\u{${character.codePointAt(0)!.toString(16)}}`,
+      );
+    const { response } = await dialog.showMessageBox(window, {
+      type: 'warning',
+      title: '受限命令请求',
+      message: '是否允许执行这条受限命令？',
+      detail: `会话 ${session}\n命令 ${escaped(command)}\n输入文件 ${escaped(files)}`,
+      buttons: ['拒绝', '允许本次'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      signal,
+    });
+    return response === 1 && !signal.aborted;
+  },
   async confirmFullAccess({ session, signal }) {
     const window = workspaceWindow();
     if (!window || signal.aborted) return false;

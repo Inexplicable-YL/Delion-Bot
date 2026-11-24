@@ -50,6 +50,7 @@ import {
 } from '../../../../src/core/agent/session/store';
 
 const root = mkdtempSync(join(tmpdir(), 'delion-sandbox-policy-'));
+const commandTools = process.platform === 'darwin' ? ['sandbox_command'] : [];
 let db: Database.Database;
 
 function database(
@@ -131,7 +132,7 @@ describe('受限普通对话', () => {
       sessionId: id,
     });
     const names = options.customTools.map((tool) => tool.name).sort();
-    expect(names).toEqual(['find', 'grep', 'ls', 'read']);
+    expect(names).toEqual(['find', 'grep', 'ls', 'read', ...commandTools]);
     expect(options.commandPrefix).toBeUndefined();
     const prompt = options.appendSystemPrompt.join('\n');
     expect(prompt).toContain('/privacy');
@@ -163,7 +164,13 @@ describe('受限普通对话', () => {
       sessionId: projectId,
     });
     expect(project.commandPrefix).toBeUndefined();
-    expect(project.customTools.map((tool) => tool.name)).toEqual(['read', 'ls', 'find', 'grep']);
+    expect(project.customTools.map((tool) => tool.name)).toEqual([
+      'read',
+      'ls',
+      'find',
+      'grep',
+      ...commandTools,
+    ]);
     writePermissionMode(projectId, 'project-write');
     const writable = await agentEnvironment().sessionOptions('p1', '/project', {
       askCards: false,
@@ -176,6 +183,7 @@ describe('受限普通对话', () => {
       'grep',
       'write',
       'edit',
+      ...commandTools,
     ]);
     expect(scopedDirectories(row(projectId)).map(({ name }) => name)).toEqual(['/project']);
   });
@@ -197,6 +205,30 @@ describe('受限普通对话', () => {
       {} as never,
     );
     expect(result).toMatchObject({ isError: true });
+  });
+
+  it.skipIf(process.platform !== 'darwin')('受限命令逐次审批，只接收当前会话的副本', async () => {
+    database();
+    const approveSandboxCommand = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const host = hostPorts();
+    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    const id = insertSession(null);
+    writePermissionMode(id, 'approval');
+    writeFileSync(join(chatShareDirectory(id), 'input.txt'), 'approved input');
+    const tools = (
+      await agentEnvironment().sessionOptions(null, '/privacy', {
+        askCards: false,
+        sessionId: id,
+      })
+    ).customTools;
+    const command = tools.find(({ name }) => name === 'sandbox_command')!;
+    const params = { command: 'exec /bin/cat inputs/1', files: ['/share/input.txt'] };
+    const execute = () => command.execute('call', params, undefined, undefined, {} as never);
+    expect(await execute()).toMatchObject({ isError: true });
+    expect(await execute()).toMatchObject({
+      content: [{ text: JSON.stringify({ exitCode: 0, output: 'approved input' }) }],
+    });
+    expect(approveSandboxCommand).toHaveBeenCalledTimes(2);
   });
 
   it.skipIf(

@@ -126,12 +126,13 @@ export async function readScopedReference(
   meta: SessionRow,
   input: string,
   action: 'read' | 'stat',
+  signal?: AbortSignal,
 ) {
   const { root, key } = targetPath(input, scopedDirectories(meta));
   const result = await runFileAction(
     root,
     { action, path: key, limit: MAX_IMAGE_BYTES },
-    AbortSignal.timeout(10_000),
+    signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
   );
   if (result.error) throw new Error(result.error);
   return result;

@@ -91,6 +91,12 @@ export interface SavePathOptions {
 
 export interface Desktop {
   confirmFullAccess?(request: { session: string; signal: AbortSignal }): Promise<boolean>;
+  approveSandboxCommand?(request: {
+    session: string;
+    command: string;
+    files: readonly string[];
+    signal: AbortSignal;
+  }): Promise<boolean>;
   approveFileChange?(request: {
     session: string;
     action: 'write' | 'edit';
