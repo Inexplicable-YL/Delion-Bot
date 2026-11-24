@@ -54,7 +54,8 @@ jobs:
       - name: Smoke test helper executable
         env:
           HELPER_ARCH: ${{ matrix.arch }}
-        run: ./vendor/delion-helper/delion-helper-linux-${HELPER_ARCH} --version
+        run: |
+          "./vendor/delion-helper/delion-helper-linux-${HELPER_ARCH}" --version
       - uses: actions/upload-artifact@v6
         with:
           name: helper-linux-${{ matrix.arch }}

@@ -127,8 +127,9 @@ export async function readScopedReference(
   input: string,
   action: 'read' | 'stat',
   signal?: AbortSignal,
+  directories = scopedDirectories(meta),
 ) {
-  const { root, key } = targetPath(input, scopedDirectories(meta));
+  const { root, key } = targetPath(input, directories);
   const result = await runFileAction(
     root,
     { action, path: key, limit: MAX_IMAGE_BYTES },

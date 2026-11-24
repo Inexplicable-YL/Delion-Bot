@@ -53,7 +53,8 @@ export function runWindowsCommand(
 
 export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   const mode = executionMode(meta);
-  const root = scopedDirectories(meta)[0];
+  const directories = scopedDirectories(meta);
+  const root = directories[0];
   if (mode === 'full' || !root) return null;
   const remote = root.remote;
   const windows = !remote && process.platform === 'win32';
@@ -99,7 +100,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
         const copies = [];
         for (const path of files) {
           cancellation.throwIfAborted();
-          const { data } = await readScopedReference(meta, path, 'read', cancellation);
+          const { data } = await readScopedReference(meta, path, 'read', cancellation, directories);
           const bytes = Buffer.from(data ?? '', 'base64');
           remaining -= bytes.byteLength;
           if (remaining < 0) return commandResult({ error: '命令输入文件超过 8 MiB' }, true);

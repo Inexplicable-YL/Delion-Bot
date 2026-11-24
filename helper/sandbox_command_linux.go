@@ -23,9 +23,10 @@ const (
 )
 
 type linuxCommandResult struct {
-	ExitCode *int   `json:"exitCode"`
-	Output   string `json:"output"`
-	Error    string `json:"error,omitempty"`
+	ExitCode    *int   `json:"exitCode"`
+	Output      string `json:"output"`
+	Error       string `json:"error,omitempty"`
+	launchError string
 }
 
 func (s *server) handleScopedCommand(w http.ResponseWriter, r *http.Request) {
@@ -190,11 +191,13 @@ func runLinuxSandboxCommand(ctx context.Context, command string, copies [][]byte
 		return linuxCommandResult{Error: "命令输出超过限制"}
 	}
 	if child.ProcessState == nil {
+		unavailable.launchError = err.Error()
 		return unavailable
 	}
 	if err != nil {
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) || bytes.HasPrefix(output.buffer.Bytes(), []byte("bwrap:")) {
+			unavailable.launchError = output.buffer.String()
 			return unavailable
 		}
 	}
