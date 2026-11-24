@@ -51,10 +51,7 @@ export function ChatPermissionRequest({
             {request.fields.map(({ label, value }, index) => (
               <div key={`${label}:${index}`} className="grid min-w-0 gap-1">
                 <dt className="text-ui-subhead text-ink-2">{label}</dt>
-                <dd
-                  className="whitespace-pre-wrap text-ui-callout [overflow-wrap:anywhere]"
-                  dir="auto"
-                >
+                <dd className="wrap-anywhere whitespace-pre-wrap text-ui-callout" dir="auto">
                   {value.replace(/\p{Cf}/gu, (char) => `\\u{${char.codePointAt(0)!.toString(16)}}`)}
                 </dd>
               </div>
