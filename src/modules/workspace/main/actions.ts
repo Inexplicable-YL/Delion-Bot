@@ -15,7 +15,7 @@ import { getLocalWorkspaceState, searchLocalWorkspace } from './local-tree';
 import { resourceRefSchema, workspaceContract, type WorkspaceState } from '../contract';
 import { dialog, shell } from 'electron';
 import { emit, hostPorts } from '../../../core/ports';
-import { watch, type FSWatcher } from 'node:fs';
+import { mkdirSync, watch, type FSWatcher } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 
 const watchers = new Map<string, FSWatcher>();
@@ -24,8 +24,13 @@ const changedPaths = new Set<string>();
 const REMOTE_REFERENCE_LIMIT = 3000;
 
 function watchWorkspace(state: WorkspaceState) {
+  const deliveryRoot = join(state.directory, 'chat-delivery');
+  try {
+    mkdirSync(deliveryRoot, { recursive: true });
+  } catch {}
   const roots = new Set([
     join(state.directory, 'workspace'),
+    deliveryRoot,
     ...state.entries
       .filter((item) => item.parentId === null && item.path && !item.remoteId)
       .map((item) =>
