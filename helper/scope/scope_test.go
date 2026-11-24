@@ -85,3 +85,14 @@ func TestExternalLinksStayOutsideScope(t *testing.T) {
 		t.Fatalf("external file changed: %q, %v", body, err)
 	}
 }
+
+func TestAuthorizedRootCannotBeALink(t *testing.T) {
+	parent, outside := t.TempDir(), t.TempDir()
+	root := filepath.Join(parent, "scope")
+	if err := os.Symlink(outside, root); err != nil {
+		t.Skip(err)
+	}
+	if got := Run(context.Background(), root, Request{Action: "ls", Path: "."}); got.Error == "" {
+		t.Fatal("an alias replaced the authorized directory")
+	}
+}
