@@ -255,9 +255,8 @@ async function approvalTools(meta: ReturnType<typeof row>, session: string) {
   return [
     scopedSkillTool(meta),
     ...(download ? [approveTool(download, session, '下载文件')] : []),
-    ...webTools.map((tool) =>
-      approveTool(tool, session, tool.name === 'web_search' ? '联网搜索' : '读取网页'),
-    ),
+    approveTool(webSearchTool, session, '联网搜索'),
+    webFetchTool(session),
     ...(await mcpTools(session)),
     ...(meta.project_id
       ? sessionTools(meta.project_id)
@@ -290,25 +289,26 @@ const domainTool: ToolDefinition = {
     text(await executeDomainCommand(command, input)),
 };
 
-const webTools: ToolDefinition[] = [
-  {
-    name: 'web_search',
-    label: 'web_search',
-    description:
-      'Search the web and return titles, links, and summaries. Uses the provider selected in the chat composer (Brave, Google, DeepSeek, or a custom endpoint). If none is selected, the tool returns setup instructions. The freshness filter (pd, pw, pm, py) applies only to Brave.',
-    parameters: {
-      type: 'object',
-      properties: {
-        query: { type: 'string' },
-        count: { type: 'integer', minimum: 1, maximum: 10 },
-        freshness: { type: 'string' },
-      },
-      required: ['query'],
-    } as unknown as ToolDefinition['parameters'],
-    execute: async (_id, params: { query: string; count?: number; freshness?: string }) =>
-      text(await webSearch(params.query, params.count, params.freshness)),
-  },
-  {
+const webSearchTool: ToolDefinition = {
+  name: 'web_search',
+  label: 'web_search',
+  description:
+    'Search the web and return titles, links, and summaries. Uses the provider selected in the chat composer (Brave, Google, DeepSeek, or a custom endpoint). If none is selected, the tool returns setup instructions. The freshness filter (pd, pw, pm, py) applies only to Brave.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string' },
+      count: { type: 'integer', minimum: 1, maximum: 10 },
+      freshness: { type: 'string' },
+    },
+    required: ['query'],
+  } as unknown as ToolDefinition['parameters'],
+  execute: async (_id, params: { query: string; count?: number; freshness?: string }) =>
+    text(await webSearch(params.query, params.count, params.freshness)),
+};
+
+function webFetchTool(approvalSession?: string): ToolDefinition {
+  return {
     name: 'web_fetch',
     label: 'web_fetch',
     description:
@@ -318,16 +318,37 @@ const webTools: ToolDefinition[] = [
       properties: { url: { type: 'string' }, offset: { type: 'integer', minimum: 0 } },
       required: ['url'],
     } as unknown as ToolDefinition['parameters'],
-    execute: async (_id, params: { url: string; offset?: number }) => {
+    execute: async (_id, params: { url: string; offset?: number }, signal) => {
       const config = readWebSearchConfig();
       const deepseek =
         config?.provider === 'deepseek' && config.useForFetch
           ? { apiKey: config.apiKey }
           : undefined;
-      return text(await fetchWebPage(params.url, params.offset, deepseek));
+      const cancellation = signal ?? new AbortController().signal;
+      return text(
+        await fetchWebPage(params.url, params.offset, deepseek, {
+          signal: cancellation,
+          ...(approvalSession && {
+            approve: async (url: string, service?: 'DeepSeek') =>
+              Boolean(
+                await hostPorts().desktop.approveToolAction?.({
+                  session: approvalSession,
+                  title: '读取网页',
+                  fields: [
+                    { label: '网页地址', value: url },
+                    ...(service ? [{ label: '服务', value: service }] : []),
+                  ],
+                  signal: cancellation,
+                }),
+              ),
+          }),
+        }),
+      );
     },
-  },
-];
+  };
+}
+
+const webTools = [webSearchTool, webFetchTool()];
 
 async function mcpTools(approvalSession?: string): Promise<ToolDefinition[]> {
   return (await mcpToolDefinitions()).map(({ function: definition, source, execute }) => {

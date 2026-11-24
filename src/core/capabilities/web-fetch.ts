@@ -30,6 +30,13 @@ export async function fetchWebPage(
   rawUrl: string,
   offset = 0,
   deepseek?: { apiKey: string },
+  {
+    approve,
+    signal,
+  }: {
+    approve?: (url: string, service?: 'DeepSeek') => Promise<boolean>;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<WebPageContent> {
   const fetchedAt = new Date().toISOString();
   const finish = (
@@ -59,23 +66,33 @@ export async function fetchWebPage(
     };
   };
   let url = httpUrl(rawUrl);
+  const authorize = async (target: URL, service?: 'DeepSeek') => {
+    signal?.throwIfAborted();
+    if (approve && !(await approve(target.toString(), service)))
+      throw new Error('网页读取未获批准');
+    signal?.throwIfAborted();
+  };
   if (deepseek && !looksLikePdfUrl(url)) {
+    await authorize(url, 'DeepSeek');
     try {
-      const page = await fetchDeepSeek(url.toString(), deepseek.apiKey);
+      const page = await fetchDeepSeek(url.toString(), deepseek.apiKey, signal);
       if (page.text.trim())
         return finish(url, page.title, 'text/markdown', page.text.replace(/\r\n/g, '\n'), false);
     } catch {}
   }
   let response: Response | null = null;
   for (let hop = 0; ; hop += 1) {
+    await authorize(url);
+    const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
     response = await fetch(url, {
+      credentials: 'omit',
       redirect: 'manual',
       headers: {
         'user-agent': BROWSER_UA,
         accept: 'text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.8',
         'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
       },
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
     const location =
       response.status >= 300 && response.status < 400 ? response.headers.get('location') : null;
