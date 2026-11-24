@@ -90,6 +90,7 @@ func linuxCommandFilter() []syscall.SockFilter {
 		syscall.SYS_RT_SIGACTION, syscall.SYS_RT_SIGPROCMASK, syscall.SYS_RT_SIGRETURN,
 		syscall.SYS_GETPID, syscall.SYS_GETPPID, syscall.SYS_GETUID, syscall.SYS_GETEUID,
 		syscall.SYS_GETGID, syscall.SYS_GETEGID, syscall.SYS_GETPGID, syscall.SYS_GETTID,
+		syscall.SYS_WAIT4, syscall.SYS_WAITID,
 		syscall.SYS_EXECVE, syscall.SYS_EXIT, syscall.SYS_EXIT_GROUP,
 	)
 	const (
