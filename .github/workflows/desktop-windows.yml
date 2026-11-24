@@ -69,7 +69,7 @@ jobs:
           path: out
       - name: Prepare bundled runtime
         run: |
-          (cd helper && go test -count=1 ./scope)
+          (cd helper && go test -count=1 ./scope ./scopedfs)
           pnpm build:scopedfs
           pnpm prepare:runtime
           pnpm fetch:remote-rg

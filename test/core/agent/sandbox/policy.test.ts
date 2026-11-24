@@ -50,7 +50,11 @@ import {
 } from '../../../../src/core/agent/session/store';
 
 const root = mkdtempSync(join(tmpdir(), 'delion-sandbox-policy-'));
-const commandTools = process.platform === 'darwin' ? ['sandbox_command'] : [];
+const commandTools =
+  process.platform === 'darwin' ||
+  (process.platform === 'win32' && existsSync(join('.build', 'scopedfs', 'scopedfs.exe')))
+    ? ['sandbox_command']
+    : [];
 let db: Database.Database;
 
 function database(
@@ -207,7 +211,7 @@ describe('受限普通对话', () => {
     expect(result).toMatchObject({ isError: true });
   });
 
-  it.skipIf(process.platform !== 'darwin')('受限命令逐次审批，只接收当前会话的副本', async () => {
+  it.skipIf(commandTools.length === 0)('受限命令逐次审批，只接收当前会话的副本', async () => {
     database();
     const approveSandboxCommand = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const host = hostPorts();
@@ -222,7 +226,10 @@ describe('受限普通对话', () => {
       })
     ).customTools;
     const command = tools.find(({ name }) => name === 'sandbox_command')!;
-    const params = { command: 'exec /bin/cat inputs/1', files: ['/share/input.txt'] };
+    const params = {
+      command: process.platform === 'win32' ? 'type inputs\\1' : 'exec /bin/cat inputs/1',
+      files: ['/share/input.txt'],
+    };
     const execute = () => command.execute('call', params, undefined, undefined, {} as never);
     expect(await execute()).toMatchObject({ isError: true });
     expect(await execute()).toMatchObject({

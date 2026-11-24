@@ -10,6 +10,10 @@ import (
 )
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--command" {
+		executeCommand()
+		return
+	}
 	reply := scope.Response{Error: "文件操作失败"}
 	if len(os.Args) == 2 {
 		var input scope.Request

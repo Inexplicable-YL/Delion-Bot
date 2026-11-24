@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
@@ -171,7 +171,10 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
     'grep',
     'ls',
     'read',
-    ...(process.platform === 'darwin' ? ['sandbox_command'] : []),
+    ...(process.platform === 'darwin' ||
+    (process.platform === 'win32' && existsSync(join('.build', 'scopedfs', 'scopedfs.exe')))
+      ? ['sandbox_command']
+      : []),
     'task',
     'task_output',
     'task_stop',
