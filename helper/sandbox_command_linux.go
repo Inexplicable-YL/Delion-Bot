@@ -79,7 +79,7 @@ func linuxCommandFilter() []syscall.SockFilter {
 		return nil
 	}
 	allowed := append(platformCalls,
-		syscall.SYS_READ, syscall.SYS_WRITE, syscall.SYS_CLOSE, syscall.SYS_READV, syscall.SYS_WRITEV,
+		syscall.SYS_READ, syscall.SYS_WRITE, syscall.SYS_CLOSE, syscall.SYS_PREAD64, syscall.SYS_READV, syscall.SYS_WRITEV,
 		syscall.SYS_FSTAT, syscall.SYS_LSEEK, syscall.SYS_OPENAT, syscall.SYS_FACCESSAT,
 		syscall.SYS_READLINKAT, syscall.SYS_GETDENTS64, syscall.SYS_GETCWD, syscall.SYS_CHDIR,
 		syscall.SYS_DUP3, syscall.SYS_FCNTL, syscall.SYS_PPOLL,
