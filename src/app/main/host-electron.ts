@@ -84,6 +84,22 @@ const clients = new Set<WebContents>();
 const windowOf = (owner: ClientHandle) => BrowserWindow.fromWebContents(owner as WebContents);
 
 const desktop: Desktop = {
+  async confirmFullAccess({ session, signal }) {
+    const window = workspaceWindow();
+    if (!window || signal.aborted) return false;
+    const { response } = await dialog.showMessageBox(window, {
+      type: 'warning',
+      title: '启用完全访问',
+      message: '允许此会话完全访问？',
+      detail: `Agent 可使用当前用户的文件、终端和网络权限。工具操作不再逐次确认。\n\n会话 ${session}`,
+      buttons: ['取消', '启用完全访问'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      signal,
+    });
+    return response === 1 && !signal.aborted;
+  },
   async approveFileChange({ session, action, path, signal }) {
     const window = workspaceWindow();
     if (!window || signal.aborted) return false;

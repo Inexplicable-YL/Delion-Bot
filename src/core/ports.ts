@@ -89,6 +89,7 @@ export interface SavePathOptions {
 }
 
 export interface Desktop {
+  confirmFullAccess?(request: { session: string; signal: AbortSignal }): Promise<boolean>;
   approveFileChange?(request: {
     session: string;
     action: 'write' | 'edit';

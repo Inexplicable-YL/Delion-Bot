@@ -49,11 +49,15 @@ import {
 } from '../../../../src/core/agent/session/store';
 import { runningTasks } from '../../../../src/core/agent/tasks';
 import { locateBash } from '../../../../src/modules/terminal';
+import { hostPorts } from '../../../../src/core/ports';
 import { provideTestHostPorts } from '../../host-mock';
 import { askInput as input, reply, startMockModel, stopMockModel } from '../../mock-model';
 
+const confirmFullAccess =
+  vi.fn<NonNullable<ReturnType<typeof hostPorts>['desktop']['confirmFullAccess']>>();
 provideTestHostPorts({
   database: () => state.db!,
+  desktop: { ...hostPorts().desktop, confirmFullAccess },
   paths: {
     userData: () => join(root, 'user'),
     storage: () => join(root, 'storage'),
@@ -92,6 +96,25 @@ afterAll(async () => {
   await stopMockModel({ server, db: state.db }, root);
 });
 
+it('完全访问在宿主明确确认后才生效', async () => {
+  const parent = (await newSession(null)).sessionId!;
+  confirmFullAccess.mockResolvedValueOnce(false);
+  expect((await setSessionPermissionMode(parent, 'full')).permissionMode).toBe('read-only');
+  expect(readPermissionMode(parent)).toBe('read-only');
+
+  let confirm!: (allow: boolean) => void;
+  confirmFullAccess.mockReturnValueOnce(new Promise((resolve) => (confirm = resolve)));
+  const pending = setSessionPermissionMode(parent, 'full');
+  expect(readPermissionMode(parent)).toBe('read-only');
+  confirm(true);
+  expect((await pending).permissionMode).toBe('full');
+  expect(confirmFullAccess).toHaveBeenLastCalledWith({
+    session: parent,
+    signal: expect.any(AbortSignal),
+  });
+  await setSessionPermissionMode(parent, 'read-only');
+});
+
 it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受限后不再保留', async () => {
   const parent = (await newSession(null)).sessionId!;
   writePermissionMode(parent, 'full');
@@ -99,7 +122,7 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
   server.enqueue(reply('先等着', 4000));
   const first = askSession(parent, input('第一轮'));
   await vi.waitFor(() => expect(sessionRunning(parent)).toBe(true), { timeout: 10_000 });
-  expect(() => setSessionPermissionMode(parent, 'read-only')).toThrow('请等待当前回答完成');
+  await expect(setSessionPermissionMode(parent, 'read-only')).rejects.toThrow('请等待当前回答完成');
   expect(readPermissionMode(parent)).toBe('full');
   await first;
 
@@ -116,7 +139,7 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
   expect(fullTools).toContain('session_read');
   stopFull();
 
-  const switched = setSessionPermissionMode(parent, 'read-only');
+  const switched = await setSessionPermissionMode(parent, 'read-only');
   expect(switched.permissionMode).toBe('read-only');
   expect(live.get(parent)).toBeUndefined();
   await vi.waitFor(() => expect(runningTasks(parent)).toEqual([]), { timeout: 10_000 });

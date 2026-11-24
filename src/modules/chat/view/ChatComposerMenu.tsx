@@ -203,7 +203,7 @@ export function ChatComposerMenu({
                 value={permissionMode}
                 onValueChange={(value) => {
                   const mode = permissionModeSchema.safeParse(value);
-                  if (mode.success) onPermissionMode(mode.data);
+                  if (mode.success) defer(() => onPermissionMode(mode.data));
                 }}
               >
                 <DropdownMenuRadioItem value="read-only">只读模式</DropdownMenuRadioItem>

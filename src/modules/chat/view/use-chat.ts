@@ -411,7 +411,6 @@ export function useChat(
 
   const selectPermissionMode = (mode: PermissionMode) => {
     if (!window.delionBot) return;
-    optimisticChat({ permissionMode: mode });
     void agentClient['set-permission-mode']({ sessionId, mode })
       .catch((e) =>
         showToast({ variant: 'error', title: '切换文件权限失败', description: errorMessage(e) }),
