@@ -484,7 +484,7 @@ export function ComposerEditor({
   };
   const empty = value.length === 0;
   return (
-    <div ref={syncEditor} className={cn('text-ui-body touch:text-ui-input-touch', className)}>
+    <div ref={syncEditor} className={cn('text-ui-chat touch:text-ui-input-touch', className)}>
       <div className="relative" ref={attachEditor}>
         {empty && (
           <div

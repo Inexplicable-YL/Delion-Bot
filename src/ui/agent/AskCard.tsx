@@ -11,6 +11,8 @@ export type AskCardGroup = { question: string; options: AskCardOption[] };
 
 type Choice = number | 'other' | undefined;
 
+const buttonText = 'text-ui-chat font-medium';
+
 const letter = (index: number) => String.fromCharCode(65 + index);
 
 const rowClass = cn(
@@ -198,7 +200,7 @@ export function AskCard({
   return (
     <Card asChild variant="surface">
       <section aria-label="询问" className="my-3 grid gap-3">
-        <div className="whitespace-pre-wrap text-ui-headline text-ink" id={questionId}>
+        <div className="whitespace-pre-wrap text-ui-chat font-semibold text-ink" id={questionId}>
           {group.question}
         </div>
         <div
@@ -231,22 +233,40 @@ export function AskCard({
             {groups.length > 1 && <StepDots count={groups.length} current={current} />}
             <div className="ml-auto flex items-center gap-2">
               {current > 0 && (
-                <Button disabled={sending} onClick={() => setPage(current - 1)} variant="secondary">
+                <Button
+                  className={buttonText}
+                  disabled={sending}
+                  onClick={() => setPage(current - 1)}
+                  variant="secondary"
+                >
                   返回
                 </Button>
               )}
               {readOnly ? (
                 !last && (
-                  <Button onClick={() => setPage(current + 1)} variant="secondary">
+                  <Button
+                    className={buttonText}
+                    onClick={() => setPage(current + 1)}
+                    variant="secondary"
+                  >
                     下一步
                   </Button>
                 )
               ) : (
                 <>
-                  <Button disabled={sending} onClick={() => advance(true)} variant="secondary">
+                  <Button
+                    className={buttonText}
+                    disabled={sending}
+                    onClick={() => advance(true)}
+                    variant="secondary"
+                  >
                     跳过
                   </Button>
-                  <Button disabled={sending || !pickedAt(current)} onClick={() => advance(false)}>
+                  <Button
+                    className={buttonText}
+                    disabled={sending || !pickedAt(current)}
+                    onClick={() => advance(false)}
+                  >
                     {last ? '发送' : '下一步'}
                   </Button>
                 </>
