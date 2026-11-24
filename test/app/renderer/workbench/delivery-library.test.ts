@@ -160,11 +160,38 @@ describe('资料区只跟随可见会话', () => {
       { focus: 'right' },
     );
     expect(shown.mode).toBe('grouped');
+    expect(shown.entries.map((entry) => entry.name)).toEqual(['周报', '周报']);
     expect(shown.entries.map((entry) => entry.path)).toEqual([
       `/data/Delion Bot/chat-delivery/${alpha}`,
       `/data/Delion Bot/chat-delivery/${beta}`,
     ]);
+    expect(
+      shown.entries.every((entry) => !entry.name.includes(alpha) && !entry.name.includes(beta)),
+    ).toBe(true);
     expect(shown.selectedId).toBe(file);
+    const renamed = library(
+      [
+        { id: 'left', active: `chat:${alpha}` },
+        { id: 'right', active: `preview:${file}` },
+      ],
+      { focus: 'right', names: { ...titles, [beta]: '三月周报' } },
+    );
+    expect(renamed.entries[1]).toMatchObject({ name: '三月周报', path: shown.entries[1]!.path });
+  });
+
+  it('最大化正在看交付文件的面板时，只进入该文件所属会话', () => {
+    const file = `/data/Delion Bot/chat-delivery/${beta}/报告.md`;
+    const shown = library(
+      [
+        { id: 'left', active: `chat:${alpha}` },
+        { id: 'right', active: `note:${file}` },
+      ],
+      { maximized: 'right', focus: 'right' },
+    );
+    expect(shown.mode).toBe('flat');
+    expect(shown.rootId).toBe(`/data/Delion Bot/chat-delivery/${beta}`);
+    expect(shown.selectedId).toBe(file);
+    expect(shown.entries.some((entry) => entry.path?.includes(alpha))).toBe(false);
   });
 
   it('打开 workspace 里的文件不会进入交付目录', () => {
