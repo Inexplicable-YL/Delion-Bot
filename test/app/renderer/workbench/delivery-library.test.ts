@@ -28,9 +28,9 @@ function library(
 describe('资料区只跟随可见会话', () => {
   it('标签栏有多个会话但只显示一个面板时，直接铺开当前会话的交付内容', () => {
     const shown = library([{ id: 'primary', active: `chat:${alpha}` }]);
-    expect(visibleLeafSessions([{ id: 'primary', active: `chat:${alpha}` }], null)).toEqual([
-      alpha,
-    ]);
+    expect(
+      visibleLeafSessions('/data/Delion Bot', [{ id: 'primary', active: `chat:${alpha}` }], null),
+    ).toEqual([alpha]);
     expect(shown.mode).toBe('flat');
     expect(shown.rootId).toBe(`/data/Delion Bot/chat-delivery/${alpha}`);
     expect(shown.entries.filter((entry) => entry.id !== shown.rootId)).toEqual([]);
@@ -47,6 +47,7 @@ describe('资料区只跟随可见会话', () => {
     const shown = library([{ id: 'primary', active: `note:readme` }]);
     expect(shown.mode).toBe('empty');
     const activeHidden = visibleLeafSessions(
+      '/data/Delion Bot',
       [{ id: 'primary', active: `chat:${alpha}`, tabsNote: `chat:${hidden}` } as never],
       null,
     );
@@ -134,5 +135,40 @@ describe('资料区只跟随可见会话', () => {
     expect(
       deliveryEntriesWithChildren(shown.entries, [stray, child]).map((entry) => entry.name),
     ).toEqual(['周报', '周报', '报告.md']);
+  });
+
+  it('单个可见的文件标签打开交付文件时，直接进入该目录并定位到文件', () => {
+    const file = `/data/Delion Bot/chat-delivery/${alpha}/资料/报告.md`;
+    const shown = library([{ id: 'primary', active: `note:${file}` }]);
+    expect(shown.mode).toBe('flat');
+    expect(shown.rootId).toBe(`/data/Delion Bot/chat-delivery/${alpha}`);
+    expect(shown.selectedId).toBe(file);
+    expect(shown.expandedIds).toEqual([
+      `/data/Delion Bot/chat-delivery/${alpha}`,
+      `/data/Delion Bot/chat-delivery/${alpha}/资料`,
+    ]);
+    expect(shown.rootId).not.toContain('chat:');
+  });
+
+  it('拆分里一个对话和一个交付文件同时可见时按标题分组并定位到文件', () => {
+    const file = `/data/Delion Bot/chat-delivery/${beta}/报告.md`;
+    const shown = library(
+      [
+        { id: 'left', active: `chat:${alpha}` },
+        { id: 'right', active: `preview:${file}` },
+      ],
+      { focus: 'right' },
+    );
+    expect(shown.mode).toBe('grouped');
+    expect(shown.entries.map((entry) => entry.path)).toEqual([
+      `/data/Delion Bot/chat-delivery/${alpha}`,
+      `/data/Delion Bot/chat-delivery/${beta}`,
+    ]);
+    expect(shown.selectedId).toBe(file);
+  });
+
+  it('打开 workspace 里的文件不会进入交付目录', () => {
+    const shown = library([{ id: 'primary', active: 'note:/data/Delion Bot/workspace/旧笔记.md' }]);
+    expect(shown.mode).toBe('empty');
   });
 });
