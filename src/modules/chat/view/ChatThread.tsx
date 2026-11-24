@@ -537,7 +537,7 @@ export function ChatThread({
         path,
         chat.cwd,
         remoteProject ? chat.projectId : null,
-        chat.permissionMode === 'restricted',
+        Boolean(chat.permissionMode && chat.permissionMode !== 'full'),
       );
       if (openReplyFile && fileSessionId) openReplyFile(key, fileSessionId, chat.projectId);
       else onOpenSource(key);

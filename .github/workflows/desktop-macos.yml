@@ -45,6 +45,10 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.2'
+          cache: false
       - name: Verify runner architecture
         env:
           EXPECTED_ARCH: arm64
@@ -56,6 +60,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build and test
         run: |
+          (cd helper/scopedfs && go test -count=1 ./...)
+          pnpm build:scopedfs
           pnpm build:bundle
           pnpm test
       - name: Smoke test Electron and runtime

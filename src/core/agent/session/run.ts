@@ -17,7 +17,13 @@ import { agentEnvironment } from '../environment';
 import { chatAttachmentView, releaseChatAttachments } from '../media';
 import { openPiSession } from '../pi';
 import { taskTool, type SubagentResult } from '../subagent';
-import { backgroundTools, stopAllTasks, type TaskNotice, type TaskParent } from '../tasks';
+import {
+  backgroundTools,
+  stopAllTasks,
+  taskControls,
+  type TaskNotice,
+  type TaskParent,
+} from '../tasks';
 import { live, liveSteps, liveThinking, type Live, type Run } from './live';
 import {
   encodeMeta,
@@ -35,7 +41,7 @@ import {
   THINKING_TIME,
 } from './projection';
 import { composePrompt } from './prompt';
-import { launchPlan } from '../sandbox/mode';
+import { executionMode, launchPlan } from '../sandbox/mode';
 import {
   isRemoteSession,
   readySelection,
@@ -48,9 +54,23 @@ import {
 } from './store';
 import { generateSessionTitles } from './title';
 
-export async function ensureLive(id: string): Promise<Live> {
+const openingSessions = new Map<string, Promise<Live>>();
+
+export function sessionOpening(id: string): boolean {
+  return openingSessions.has(id);
+}
+
+export function ensureLive(id: string): Promise<Live> {
   const existing = live.get(id);
-  if (existing) return existing;
+  if (existing) return Promise.resolve(existing);
+  const pending = openingSessions.get(id);
+  if (pending) return pending;
+  const opening = openLive(id).finally(() => openingSessions.delete(id));
+  openingSessions.set(id, opening);
+  return opening;
+}
+
+async function openLive(id: string): Promise<Live> {
   const meta = row(id);
   const choice = readySelection(meta);
   const { selection } = choice;
@@ -77,15 +97,16 @@ export async function ensureLive(id: string): Promise<Live> {
       ? {
           customTools: [
             ...options.customTools,
-            ...(await backgroundTools(
-              parent,
-              cwd,
-              options.shellPath,
-              plan.roots ? undefined : options.commandPrefix,
-              remote && remoteBackend(remote.target),
-              plan.roots,
-            )),
-            taskTool(parent, cwd, runSubagent),
+            ...(plan.mode === 'full'
+              ? await backgroundTools(
+                  parent,
+                  cwd,
+                  options.shellPath,
+                  options.commandPrefix,
+                  remote && remoteBackend(remote.target),
+                )
+              : taskControls(parent, true)),
+            taskTool(parent, cwd, runSubagent, plan.mode !== 'full'),
           ],
         }
       : {}),
@@ -383,10 +404,7 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
   if (entry.run) throw new Error('请等待当前回答完成');
   if (entry.session.isCompacting) throw new Error('正在压缩上下文，请稍候');
   const meta = row(id);
-  const { prompt, userText, images, attachments, comments, turnId } = composePrompt(
-    input,
-    meta.project_id,
-  );
+  const { prompt, userText, images, attachments, comments, turnId } = composePrompt(input, meta);
   if (input.replaceLastUser) {
     const branch = entry.session.sessionManager.getBranch();
     const lastUser = [...branch]
@@ -462,10 +480,11 @@ async function runTurn(
   const startedAt = new Date().toISOString();
   let before: changes.DirectorySnapshot | null = null;
   let captureError: string | undefined;
+  const scoped = executionMode(meta) !== 'full';
   try {
     if (isRemoteSession(meta)) captureError = '远程会话暂不记录目录快照';
     else if (!child)
-      run.captured = changes.captureDirectory(entry.cwd).then(
+      run.captured = changes.captureDirectory(entry.cwd, [], scoped).then(
         (snapshot) => {
           before = snapshot;
         },
@@ -499,6 +518,7 @@ async function runTurn(
           status,
           before,
           captureError,
+          scoped,
         );
     } catch (error) {
       changesError = error instanceof Error ? error.message : String(error);
@@ -545,7 +565,7 @@ async function runTurn(
 }
 
 async function steerRun(id: string, entry: Live, run: Run, input: ChatAskInput) {
-  const { prompt, images } = composePrompt(input, row(id).project_id, run.id);
+  const { prompt, images } = composePrompt(input, row(id), run.id);
   await entry.session.steer(prompt, images.length ? images : undefined);
   run.steers.push({ prompt, input });
   return snapshot(id);

@@ -4,8 +4,8 @@ import { basename, posix, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { chatMediaPath, readChatMediaBytes, stageChatMedia } from '../../../core/agent/media';
-import { executionMode, sandboxRoots } from '../../../core/agent/sandbox/mode';
-import { restrictedLocalPath } from '../../../core/agent/sandbox/paths';
+import { executionMode } from '../../../core/agent/sandbox/mode';
+import { scopedReferencePath } from '../../../core/agent/sandbox/scoped-files';
 import { row, sessionCwd } from '../../../core/agent/session/store';
 import { hostPorts } from '../../../core/ports';
 import type { ChatMediaView } from '../../../core/protocol/agent';
@@ -32,20 +32,11 @@ type ImageFile =
 function locateImage(sessionId: string, path: string): ImageFile {
   if (!imageMimeOf(path)) throw new Error('不支持的图片格式');
   const meta = row(sessionId);
+  if (executionMode(meta) !== 'full')
+    return { kind: 'local', path: scopedReferencePath(meta, path) };
   const cwd = sessionCwd(meta.project_id, meta.cwd);
   const remote = meta.project_id ? hostPorts().projects.remoteOf(meta.project_id) : null;
   if (remote) return { kind: 'remote', target: remote.target, path: posix.resolve(cwd, path) };
-  if (executionMode(meta) === 'restricted') {
-    const roots = sandboxRoots(meta.parent_id ?? meta.id);
-    return {
-      kind: 'local',
-      path: restrictedLocalPath(
-        path,
-        { privacy: roots.privacyHost, share: roots.shareHost },
-        roots.conceal,
-      ),
-    };
-  }
   return {
     kind: 'local',
     path: path.startsWith('file:') ? fileURLToPath(path) : resolve(cwd, path),
@@ -108,7 +99,10 @@ async function readReplyImage(
   sessionId: string,
   source: ReplyImageSource,
 ): Promise<{ name: string; bytes: Buffer }> {
-  if ('url' in source) return downloadImage(source.url);
+  if ('url' in source) {
+    if (executionMode(row(sessionId)) !== 'full') throw new Error('当前权限无法获取外部图片');
+    return downloadImage(source.url);
+  }
   const file = locateImage(sessionId, source.path);
   if (file.kind === 'remote')
     return {

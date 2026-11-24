@@ -292,9 +292,10 @@ function readLog(log: string, offset: number | undefined) {
   return { text: buffer.toString(), start, end: start + length, size };
 }
 
-function ownTask(parentId: string, id: string): BackgroundTask {
+function ownTask(parentId: string, id: string, restricted = false): BackgroundTask {
   const task = tasks.get(id);
-  if (task?.parent.id !== parentId) throw new Error(`没有这个后台任务：${id}`);
+  if (task?.parent.id !== parentId || (restricted && task.kind !== 'subagent'))
+    throw new Error(`没有这个后台任务：${id}`);
   return task;
 }
 
@@ -303,13 +304,14 @@ const text = (value: string) => ({
   details: undefined,
 });
 
-function taskControls(parent: TaskParent): ToolDefinition[] {
+export function taskControls(parent: TaskParent, restricted = false): ToolDefinition[] {
   return [
     {
       name: 'task_output',
       label: 'task_output',
-      description:
-        'Inspect the status and output of a background bash command or subagent. Bash returns status, exit code, and a chunk of output. Omit offset to read from the start, or the tail if the output is too long. Pass the previous nextOffset as offset to read new output. A subagent returns its status and final reply. Completion sends a notification, so polling is unnecessary.',
+      description: restricted
+        ? 'Inspect the status and final reply of a subagent in this chat.'
+        : 'Inspect the status and output of a background bash command or subagent. Bash returns status, exit code, and a chunk of output. Omit offset to read from the start, or the tail if the output is too long. Pass the previous nextOffset as offset to read new output. A subagent returns its status and final reply. Completion sends a notification, so polling is unnecessary.',
       parameters: {
         type: 'object',
         properties: {
@@ -319,7 +321,7 @@ function taskControls(parent: TaskParent): ToolDefinition[] {
         required: ['taskId'],
       } as unknown as ToolDefinition['parameters'],
       async execute(_id, params: { taskId: string; offset?: number }) {
-        const task = ownTask(parent.id, params.taskId);
+        const task = ownTask(parent.id, params.taskId, restricted);
         const status = task.outcome ? statusText(task.outcome) : '运行中';
         if (task.kind === 'subagent')
           return text(
@@ -342,15 +344,16 @@ function taskControls(parent: TaskParent): ToolDefinition[] {
     {
       name: 'task_stop',
       label: 'task_stop',
-      description:
-        "Stop a background task. This stops bash and its child processes, or aborts the subagent's current turn.",
+      description: restricted
+        ? 'Stop a background subagent in this chat.'
+        : 'Stop a background task and its running work.',
       parameters: {
         type: 'object',
         properties: { taskId: { type: 'string' } },
         required: ['taskId'],
       } as unknown as ToolDefinition['parameters'],
       async execute(_id, params: { taskId: string }) {
-        const task = ownTask(parent.id, params.taskId);
+        const task = ownTask(parent.id, params.taskId, restricted);
         if (task.status !== 'running') return text(`任务已经结束：${statusText(task.outcome!)}`);
         stopTask(task.id, 'model');
         return text('已停止。');

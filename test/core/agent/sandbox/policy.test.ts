@@ -1,31 +1,22 @@
 import Database from 'better-sqlite3';
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
-  available: true,
-  runs: [] as string[][],
   bridge: vi.fn(() => ({ url: 'http://127.0.0.1:9/', token: 'token', close() {} })),
 }));
 
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/delion-sandbox-policy' } }));
-vi.mock('../../../../src/core/agent/sandbox/linux', () => ({
-  linuxSandboxAvailability: () =>
-    state.available
-      ? { ok: true }
-      : { ok: false, reason: '受限模式无法启动，已停止执行，没有改用当前用户的本机权限。' },
-  assertLinuxSandbox: () => {
-    if (!state.available)
-      throw new Error('受限模式无法启动，已停止执行，没有改用当前用户的本机权限。');
-  },
-  runSandboxed: vi.fn(async (_roots: unknown, file: string, args: string[]) => {
-    state.runs.push([file, ...args]);
-    return { code: 0, stdout: Buffer.from('ok'), stderr: '', truncated: false };
-  }),
-}));
 vi.mock('../../../../src/core/capabilities/skills', () => ({
   builtinSkillsDirectory: () => '/tmp/skills',
   ensureBuiltinSkills: () => {},
@@ -46,15 +37,11 @@ vi.mock('../../../../src/core/capabilities/tools', () => ({
 }));
 
 import { agentEnvironment } from '../../../../src/core/agent/environment';
-import { launchPlan } from '../../../../src/core/agent/sandbox/mode';
-import {
-  sandboxPath,
-  resolveVirtualHost,
-  restrictedLocalPath,
-} from '../../../../src/core/agent/sandbox/paths';
+import { launchPlan, scopedDirectories } from '../../../../src/core/agent/sandbox/mode';
+import { sandboxPath, resolveVirtualHost } from '../../../../src/core/agent/sandbox/paths';
 import { referenceFilePath } from '../../../../src/modules/chat/main/reference-file';
-import { sandboxTools } from '../../../../src/core/agent/sandbox/tools';
 import { fileLinkKey } from '../../../../src/modules/chat/view/reference-tokens';
+import { hostPorts } from '../../../../src/core/ports';
 import { provideTestHostPorts } from '../../host-mock';
 import {
   chatShareDirectory,
@@ -66,7 +53,9 @@ import {
 const root = mkdtempSync(join(tmpdir(), 'delion-sandbox-policy-'));
 let db: Database.Database;
 
-function database() {
+function database(
+  approveFileChange?: NonNullable<ReturnType<typeof hostPorts>['desktop']['approveFileChange']>,
+) {
   db = new Database(':memory:');
   db.exec(`
     CREATE TABLE sessions (
@@ -83,6 +72,7 @@ function database() {
     );
   `);
   provideTestHostPorts({
+    desktop: { ...hostPorts().desktop, approveFileChange },
     paths: {
       userData: () => join(root, 'user'),
       storage: () => join(root, 'storage'),
@@ -100,8 +90,7 @@ function database() {
 }
 
 afterEach(() => {
-  state.available = true;
-  state.runs = [];
+  state.bridge.mockClear();
   db?.close();
 });
 
@@ -146,12 +135,11 @@ describe('受限普通对话', () => {
     ).run(child, row(id).cwd, '', id, 'x', 'x');
     const parentPlan = launchPlan(row(id));
     const childPlan = launchPlan(row(child));
-    expect(parentPlan).toMatchObject({ mode: 'restricted', piCwd: '/privacy' });
+    const parentRoots = scopedDirectories(row(id));
+    expect(parentPlan).toMatchObject({ mode: 'read-only', piCwd: '/privacy' });
     expect(childPlan.piCwd).toBe('/privacy');
-    expect(parentPlan.roots?.shareHost).toBe(share);
-    expect(childPlan.roots?.privacyHost).toBe(parentPlan.roots?.privacyHost);
-    expect(childPlan.roots?.shareHost).toBe(parentPlan.roots?.shareHost);
-    expect(parentPlan.roots?.privacyHost).not.toContain('undefined');
+    expect(parentRoots[1]?.host).toBe(share);
+    expect(scopedDirectories(row(child))).toEqual(parentRoots);
   });
 
   it('工具列表没有网络、MCP、会话读取和命令桥，提示词不含会话 id', async () => {
@@ -162,19 +150,19 @@ describe('受限普通对话', () => {
       sessionId: id,
     });
     const names = options.customTools.map((tool) => tool.name).sort();
-    expect(names).toEqual(['bash', 'edit', 'find', 'grep', 'ls', 'read', 'write']);
+    expect(names).toEqual(['ls', 'read']);
     expect(options.commandPrefix).toBeUndefined();
     const prompt = options.appendSystemPrompt.join('\n');
     expect(prompt).toContain('/privacy');
     expect(prompt).toContain('/share');
-    expect(prompt).toContain('shared directory');
+    expect(prompt).toContain('finished files in /share');
     expect(prompt).not.toContain(id);
     expect(prompt).not.toContain('DELION_COMMAND');
     expect(prompt).not.toContain(join(root, 'storage', 'chat-sessions'));
     expect(state.bridge).not.toHaveBeenCalled();
   });
 
-  it('完全权限保留命令桥，项目会话不进入受限分支', async () => {
+  it('完全访问保留命令桥，项目默认只读，项目内修改只增加项目文件写入', async () => {
     database();
     const id = insertSession(null);
     writePermissionMode(id, 'full');
@@ -187,63 +175,97 @@ describe('受限普通对话', () => {
     db.prepare(
       `INSERT INTO workspace_entries (id, name, kind, local_path, updated_at) VALUES ('p1', '课题', 'project', ?, 'x')`,
     ).run(join(root, 'project'));
+    mkdirSync(join(root, 'project'), { recursive: true });
     const projectId = insertSession('p1');
     const project = await agentEnvironment().sessionOptions('p1', join(root, 'project'), {
       askCards: false,
       sessionId: projectId,
     });
-    expect(project.commandPrefix).toContain('DELION_COMMAND_TOKEN');
-    expect(project.customTools.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(['web_fetch', 'session_read']),
-    );
+    expect(project.commandPrefix).toBeUndefined();
+    expect(project.customTools.map((tool) => tool.name)).toEqual(['read', 'ls']);
+    writePermissionMode(projectId, 'project-write');
+    const writable = await agentEnvironment().sessionOptions('p1', '/project', {
+      askCards: false,
+      sessionId: projectId,
+    });
+    expect(writable.customTools.map((tool) => tool.name)).toEqual(['read', 'ls', 'write', 'edit']);
+    expect(scopedDirectories(row(projectId)).map(({ name }) => name)).toEqual(['/project']);
   });
 
-  it('隔离后端不可用时拒绝构建工具，而不是返回宿主工具', async () => {
+  it('未获得用户批准时不写入共享目录', async () => {
     database();
     const id = insertSession(null);
-    state.available = false;
-    await expect(
-      agentEnvironment().sessionOptions(null, '/tmp', { askCards: false, sessionId: id }),
-    ).rejects.toThrow(/没有改用当前用户的本机权限/);
-    expect(state.runs).toEqual([]);
-  });
-
-  it('写入工具把目标交给沙箱路径，不直接写宿主路径', async () => {
-    database();
-    const id = insertSession(null);
-    const plan = launchPlan(row(id));
-    const write = (await sandboxTools(plan.roots!)).find((tool) => tool.name === 'write')!;
-    await write.execute(
+    writePermissionMode(id, 'approval');
+    const options = await agentEnvironment().sessionOptions(null, '/privacy', {
+      askCards: false,
+      sessionId: id,
+    });
+    const write = options.customTools.find((tool) => tool.name === 'write')!;
+    const result = await write.execute(
       '1',
-      { path: 'privacy/note.txt', content: 'hello' },
+      { path: '/share/note.txt', content: 'hello' },
       undefined,
       undefined,
       {} as never,
     );
-    expect(state.runs[0]?.[0]).toBe('/usr/bin/python3');
-    expect(state.runs[0]).toContain('/privacy/note.txt');
-    expect(state.runs[0]?.join(' ')).not.toContain(id);
+    expect(result).toMatchObject({ isError: true });
   });
 
-  it('主进程打开链接时拒绝被遮住的目录和指向那里的链接，外部文件仍可读', () => {
+  it.skipIf(
+    !existsSync(
+      join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
+    ),
+  )('每次单独批准写入，共享目录和私有目录分开', async () => {
+    const approve = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    database(approve);
+    const id = insertSession(null);
+    writePermissionMode(id, 'approval');
+    const tools = (
+      await agentEnvironment().sessionOptions(null, '/privacy', {
+        askCards: false,
+        sessionId: id,
+      })
+    ).customTools;
+    const write = tools.find(({ name }) => name === 'write')!;
+    const read = tools.find(({ name }) => name === 'read')!;
+    const run = (tool: typeof write, params: object) =>
+      tool.execute('call', params, undefined, undefined, {} as never);
+    expect(await run(write, { path: '/share/deliverable.txt', content: 'approved' })).toMatchObject(
+      { content: [{ text: '/share/deliverable.txt' }] },
+    );
+    expect(
+      await run(write, { path: '/share/deliverable.txt', content: 'overwrite' }),
+    ).toMatchObject({ isError: true });
+    expect(await run(write, { path: '/share/../other.txt', content: 'outside' })).toMatchObject({
+      isError: true,
+    });
+    expect(await run(read, { path: '/share/deliverable.txt' })).toMatchObject({
+      content: [{ text: 'approved' }],
+    });
+    expect(await run(read, { path: '/privacy/deliverable.txt' })).toMatchObject({ isError: true });
+    expect(approve).toHaveBeenCalledTimes(2);
+    expect(readFileSync(join(chatShareDirectory(id), 'deliverable.txt'), 'utf8')).toBe('approved');
+  });
+
+  it('主进程只能打开聊天目录内的链接目标', () => {
     database();
     const id = insertSession(null);
     mkdirSync(join(root, 'user'), { recursive: true });
     mkdirSync(join(root, 'home'), { recursive: true });
     const secret = join(root, 'user', 'delion.db');
     writeFileSync(secret, 'secret');
-    const link = join(root, 'home', 'alias.db');
-    symlinkSync(secret, link);
+    const link = join(chatShareDirectory(id), 'outside');
+    symlinkSync(join(root, 'user'), link, process.platform === 'win32' ? 'junction' : 'dir');
     const note = join(root, 'home', 'note.txt');
     writeFileSync(note, 'ext');
-    expect(() => referenceFilePath(id, secret)).toThrow('路径超出会话目录');
-    expect(() => referenceFilePath(id, link)).toThrow('路径超出会话目录');
-    expect(() => referenceFilePath(id, '/privacy/../../etc/passwd')).toThrow('路径超出会话目录');
-    expect(referenceFilePath(id, note)).toBe(resolve(note));
-    expect(() =>
-      restrictedLocalPath(link, { privacy: join(root, 'p'), share: join(root, 'd') }, [
-        join(root, 'user'),
-      ]),
-    ).toThrow('路径超出会话目录');
+    expect(() => referenceFilePath(id, secret)).toThrow('路径超出聊天授权目录');
+    expect(() => referenceFilePath(id, '/share/outside/delion.db')).toThrow('链接超出聊天授权目录');
+    expect(() => referenceFilePath(id, '/privacy/../../etc/passwd')).toThrow(
+      '路径超出聊天授权目录',
+    );
+    expect(() => referenceFilePath(id, note)).toThrow('路径超出聊天授权目录');
+    const shared = join(chatShareDirectory(id), 'shared.txt');
+    writeFileSync(shared, 'shared');
+    expect(referenceFilePath(id, '/share/shared.txt')).toBe(shared);
   });
 });

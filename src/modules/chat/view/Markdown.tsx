@@ -1,7 +1,7 @@
 import 'katex/dist/katex.min.css';
 
 import { createContext, use, type ComponentProps, type ReactElement, type ReactNode } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { FolderIcon } from '@heroicons/react/24/outline';
 import { code } from '@streamdown/code';
 import { createMathPlugin } from '@streamdown/math';
@@ -101,7 +101,10 @@ function ChatTable({
   );
 }
 
-const chatComponents = { table: ChatTable };
+const chatComponents = {
+  table: ChatTable,
+  img: ({ alt }: ComponentProps<'img'>) => alt || null,
+};
 
 type MarkdownNode = {
   type: string;
@@ -171,6 +174,15 @@ function groupReplyImages(children: MarkdownNode[]): MarkdownNode[] {
     gaps = [];
   };
   for (const child of children) {
+    if (child.type === 'image' && child.url && webImageUrl.test(child.url)) {
+      flush();
+      grouped.push({
+        type: 'link',
+        url: child.url,
+        children: [{ type: 'text', value: child.alt || '打开图片链接' }],
+      });
+      continue;
+    }
     const item = replyImageItem(child);
     if (item) {
       gaps = [];
@@ -368,7 +380,6 @@ function ReplyReference({
   children: (open: () => void, kind: 'file' | 'folder' | 'workspace') => ReactElement;
 }) {
   const { revealWorkspaceFolder } = useChatTabSource();
-  const queryClient = useQueryClient();
   const file = { sessionId, path };
   const options = {
     queryKey: ['chat', 'reference-file-info', sessionId, path],
@@ -378,12 +389,12 @@ function ReplyReference({
   const { data: info } = useQuery(options);
   const directory = info?.directory ?? false;
   const open = async () => {
-    const current = await queryClient.fetchQuery(options);
-    if (!current?.directory) {
-      onOpenFile(current?.path ?? path);
-      return;
-    }
     try {
+      const current = await chatClient.referenceFileInfo(file);
+      if (!current.directory) {
+        onOpenFile(current.path);
+        return;
+      }
       if (current.workspaceFolder) await revealWorkspaceFolder?.(current.path, sessionId);
       else await chatClient.openReferenceDirectory(file);
     } catch (cause) {

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
@@ -43,7 +43,6 @@ import { live, sessionRunning } from '../../../../src/core/agent/session/live';
 import { setSessionPermissionMode, newSession } from '../../../../src/core/agent/session/commands';
 import { askSession, shutdownSessions } from '../../../../src/core/agent/session/run';
 import {
-  chatShareDirectory,
   preloadPi,
   readPermissionMode,
   writePermissionMode,
@@ -100,7 +99,7 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
   server.enqueue(reply('先等着', 4000));
   const first = askSession(parent, input('第一轮'));
   await vi.waitFor(() => expect(sessionRunning(parent)).toBe(true), { timeout: 10_000 });
-  expect(() => setSessionPermissionMode(parent, 'restricted')).toThrow('请等待当前回答完成');
+  expect(() => setSessionPermissionMode(parent, 'read-only')).toThrow('请等待当前回答完成');
   expect(readPermissionMode(parent)).toBe('full');
   await first;
 
@@ -117,8 +116,8 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
   expect(fullTools).toContain('session_read');
   stopFull();
 
-  const switched = setSessionPermissionMode(parent, 'restricted');
-  expect(switched.permissionMode).toBe('restricted');
+  const switched = setSessionPermissionMode(parent, 'read-only');
+  expect(switched.permissionMode).toBe('read-only');
   expect(live.get(parent)).toBeUndefined();
   await vi.waitFor(() => expect(runningTasks(parent)).toEqual([]), { timeout: 10_000 });
   if (process.platform !== 'win32') {
@@ -127,37 +126,15 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
     expect(ps.stdout).not.toContain(marker);
   }
 
-  if (process.platform === 'linux') {
-    const restrictedRequests: RecordedRequest[] = [];
-    const stopRestricted = server.onRequest((request) => restrictedRequests.push(request));
-    server.enqueue({
-      kind: 'sse' as const,
-      frames: [
-        mockFrames.toolCallDelta({
-          index: 0,
-          id: 'call-env',
-          name: 'bash',
-          arguments: JSON.stringify({
-            command: 'printf %s "${DELION_COMMAND_TOKEN-NO_TOKEN}" > /share/token.txt',
-          }),
-        }),
-        mockFrames.finishFrame('tool_calls'),
-      ],
-    });
-    server.enqueue(reply('受限'));
-    await askSession(parent, input('再问'));
-    const names = (
-      (restrictedRequests.at(-1)?.body as { tools?: { function: { name: string } }[] } | undefined)
-        ?.tools ?? []
-    ).map((tool) => tool.function.name);
-    expect(names).not.toContain('web_fetch');
-    expect(names).not.toContain('session_read');
-    expect(names).not.toContain('session_search');
-    expect(names).toContain('bash');
-    expect(JSON.stringify(restrictedRequests.at(-1)?.body)).toContain('/privacy');
-    expect(readFileSync(join(chatShareDirectory(parent), 'token.txt'), 'utf8')).toBe('NO_TOKEN');
-    stopRestricted();
-    return;
-  }
-  await expect(askSession(parent, input('再问'))).rejects.toThrow(/没有改用本机权限/);
+  const restrictedRequests: RecordedRequest[] = [];
+  const stopRestricted = server.onRequest((request) => restrictedRequests.push(request));
+  server.enqueue(reply('只读'));
+  await askSession(parent, input('再问'));
+  const names = (
+    (restrictedRequests.at(-1)?.body as { tools?: { function: { name: string } }[] } | undefined)
+      ?.tools ?? []
+  ).map((tool) => tool.function.name);
+  expect(names.sort()).toEqual(['ls', 'read', 'task', 'task_output', 'task_stop']);
+  expect(JSON.stringify(restrictedRequests.at(-1)?.body)).toContain('/privacy');
+  stopRestricted();
 }, 30_000);

@@ -419,8 +419,7 @@ export function snapshot(id: string): WorkspaceChat {
   } catch {}
   let permissionMode: WorkspaceChat['permissionMode'] = null;
   try {
-    const mode = executionMode(meta);
-    permissionMode = mode === 'project' ? null : mode;
+    permissionMode = executionMode(meta);
   } catch {}
   return {
     sessionId: id,

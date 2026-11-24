@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import type { WorkspaceChat, MainSessionCommand } from '../../protocol/agent';
+import type { WorkspaceChat, MainSessionCommand, PermissionMode } from '../../protocol/agent';
 import { hostPorts } from '../../ports';
 import * as changes from '../changes';
 import { forkSessionFile, loadPi, resolveModel } from '../pi';
@@ -8,7 +8,7 @@ import { closeSidechat, sidechatBusy } from '../sidechat';
 import { stopSessionTasks } from '../tasks';
 import { live, sessionBranch, type Live } from './live';
 import { COMPACTION_DETAILS, publish, snapshot } from './projection';
-import { disposeLive, ensureLive } from './run';
+import { disposeLive, ensureLive, sessionOpening } from './run';
 import {
   adoptSessionFile,
   archiveProject,
@@ -31,26 +31,31 @@ import {
   storeVisibility,
 } from './store';
 
-export function setSessionPermissionMode(id: string, mode: 'restricted' | 'full'): WorkspaceChat {
+export function setSessionPermissionMode(id: string, mode: PermissionMode): WorkspaceChat {
   const meta = row(id);
-  if (meta.project_id || meta.parent_id) throw new Error('只有普通对话可以切换文件权限');
-  if (live.get(id)?.run || live.get(id)?.session.isCompacting || sidechatBusy(id))
-    throw new Error('请等待当前回答完成');
-  for (const child of childSessionIds(id)) {
-    const entry = live.get(child);
-    if (entry?.run || entry?.session.isCompacting) throw new Error('请等待当前回答完成');
-  }
+  if (meta.parent_id) throw new Error('请在主会话切换权限');
+  if (mode === 'project-write' && !meta.project_id) throw new Error('请选择项目会话');
+  closeSessionExecution(id);
   writePermissionMode(id, mode);
-  stopSessionTasks(id);
-  for (const child of childSessionIds(id)) stopSessionTasks(child);
-  void closeSidechat(id);
-  for (const child of childSessionIds(id)) {
-    const entry = live.get(child);
-    if (entry) disposeLive(child, entry);
-  }
-  const entry = live.get(id);
-  if (entry) disposeLive(id, entry);
   return snapshot(id);
+}
+
+function closeSessionExecution(id: string) {
+  const ids = [id, ...childSessionIds(id)];
+  if (
+    sidechatBusy(id) ||
+    ids.some((sessionId) => {
+      const entry = live.get(sessionId);
+      return sessionOpening(sessionId) || entry?.run || entry?.session.isCompacting;
+    })
+  )
+    throw new Error('请等待当前回答完成');
+  void closeSidechat(id);
+  for (const sessionId of ids) {
+    stopSessionTasks(sessionId);
+    const entry = live.get(sessionId);
+    if (entry) disposeLive(sessionId, entry);
+  }
 }
 
 export async function newSession(projectId: string | null): Promise<WorkspaceChat> {
@@ -101,10 +106,8 @@ export function moveSession(id: string, projectId: string | null) {
   const meta = row(id);
   if (meta.project_id === projectId) return;
   if (projectId !== null) sessionCwd(projectId, null);
-  const entry = live.get(id);
-  if (entry?.run || entry?.session.isCompacting) throw new Error('请等待当前回答完成后再移动');
-  if (entry) disposeLive(id, entry);
-  void closeSidechat(id);
+  if (meta.parent_id) throw new Error('请移动主会话');
+  closeSessionExecution(id);
   storeProject(id, projectId);
   publish(id);
 }

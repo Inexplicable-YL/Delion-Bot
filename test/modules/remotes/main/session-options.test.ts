@@ -54,7 +54,18 @@ import { provideTestHostPorts } from '../../../core/host-mock';
 
 provideTestHostPorts({
   paths: { bash: () => 'C:\\Git\\bash.exe' },
-  database: () => ({ prepare: () => ({ get: () => undefined, all: () => [] }) }) as never,
+  database: () =>
+    ({
+      prepare: (sql: string) => ({
+        get: (id: string) =>
+          sql.includes('FROM sessions')
+            ? { id, parent_id: null, project_id: id === 'remote-chat' ? 'p-remote' : 'p-local' }
+            : id?.startsWith('session-permission:')
+              ? { value: 'full' }
+              : undefined,
+        all: () => [],
+      }),
+    }) as never,
   projects: {
     find: () => ({ name: '课题', path: null }),
     local: () => [],

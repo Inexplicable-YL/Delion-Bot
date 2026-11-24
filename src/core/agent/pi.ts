@@ -185,6 +185,7 @@ export interface OpenSessionInput {
   selection: SessionModel;
   appendSystemPrompt: string[];
   customTools: ToolDefinition[];
+  restricted?: boolean;
   shellPath: string;
   commandPrefix?: string;
   skillPaths: string[];
@@ -215,6 +216,8 @@ export async function openPiSession(input: OpenSessionInput): Promise<AgentSessi
     noExtensions: true,
     noPromptTemplates: true,
     noThemes: true,
+    noSkills: input.restricted,
+    noContextFiles: input.restricted,
     extensionFactories: input.beforeTool
       ? [(api) => void api.on('tool_call', async () => void (await input.beforeTool!()))]
       : [],
@@ -252,6 +255,9 @@ export async function openPiSession(input: OpenSessionInput): Promise<AgentSessi
     resourceLoader,
     sessionManager,
     customTools: input.customTools,
+    ...(input.restricted
+      ? { noTools: 'builtin', tools: input.customTools.map(({ name }) => name) }
+      : {}),
     excludeTools: input.disabledTools,
   });
   return session;

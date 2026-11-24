@@ -54,18 +54,20 @@ function targetOf(args: unknown): string {
 const DESCRIPTION = `Delegate an independent task to a subagent and return its final reply.
 The subagent shares your working directory and tools, except that it cannot delegate. It cannot see your conversation history. Give it the background, goal, expected result, and files it may edit. Assign distinct files to parallel subagents to avoid overwriting their changes.
 Multiple task calls in one reply run in parallel. Reuse the returned taskId to follow up with the same subagent and retain its conversation history.
-Set background to true to return taskId immediately. Completion delivers the final reply automatically. Use task_output to inspect progress or task_stop to stop the task.
-To summarize or analyze another session, ask a subagent to read it with session_read and report back. This keeps the full transcript out of your context.`;
+Set background to true to return taskId immediately. Completion delivers the final reply automatically. Use task_output to inspect progress or task_stop to stop the task.`;
 
 export function taskTool(
   parent: TaskParent,
   cwd: string,
   runSubagent: RunSubagent,
+  restricted: boolean,
 ): ToolDefinition {
   return {
     name: 'task',
     label: 'task',
-    description: DESCRIPTION,
+    description: restricted
+      ? DESCRIPTION
+      : `${DESCRIPTION}\nTo summarize or analyze another session, ask a subagent to read it with session_read and report back.`,
     parameters: {
       type: 'object',
       properties: {

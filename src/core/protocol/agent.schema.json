@@ -476,7 +476,9 @@
                 "mode": {
                   "type": "string",
                   "enum": [
-                    "restricted",
+                    "read-only",
+                    "approval",
+                    "project-write",
                     "full"
                   ]
                 }
@@ -1235,7 +1237,9 @@
             {
               "type": "string",
               "enum": [
-                "restricted",
+                "read-only",
+                "approval",
+                "project-write",
                 "full"
               ]
             },

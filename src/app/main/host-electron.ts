@@ -76,6 +76,7 @@ const bundledInRepo: Record<BundledResource, string> = {
   'delion-helper': join('vendor', 'delion-helper'),
   'remote-rg': join('.build', 'remote-rg'),
   openssh: join('vendor', 'openssh'),
+  scopedfs: join('.build', 'scopedfs'),
 };
 
 const clients = new Set<WebContents>();
@@ -83,6 +84,22 @@ const clients = new Set<WebContents>();
 const windowOf = (owner: ClientHandle) => BrowserWindow.fromWebContents(owner as WebContents);
 
 const desktop: Desktop = {
+  async approveFileChange({ session, action, path, signal }) {
+    const window = workspaceWindow();
+    if (!window || signal.aborted) return false;
+    const { response } = await dialog.showMessageBox(window, {
+      type: 'warning',
+      title: '文件修改请求',
+      message: action === 'edit' ? '是否允许本次编辑文件？' : '是否允许本次写入文件？',
+      detail: `会话 ${session}\n文件 ${path}`,
+      buttons: ['拒绝', '允许本次'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+      signal,
+    });
+    return response === 1 && !signal.aborted;
+  },
   async pickFiles(owner) {
     const window = windowOf(owner);
     if (!window) return [];

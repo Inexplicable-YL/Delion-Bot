@@ -4,6 +4,7 @@ import type {
   ChatComment,
   ChatMediaView,
   ChatQueuedDraft,
+  PermissionMode,
   SessionCommandName,
   WorkspaceChat,
 } from '../../../core/protocol/agent';
@@ -408,7 +409,7 @@ export function useChat(
       .finally(refresh);
   };
 
-  const selectPermissionMode = (mode: 'restricted' | 'full') => {
+  const selectPermissionMode = (mode: PermissionMode) => {
     if (!window.delionBot) return;
     optimisticChat({ permissionMode: mode });
     void agentClient['set-permission-mode']({ sessionId, mode })

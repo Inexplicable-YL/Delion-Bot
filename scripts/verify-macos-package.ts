@@ -95,6 +95,7 @@ for (const name of [...licenses, 'README.md']) {
     readFileSync(join(root, 'vendor/bin', name)),
   );
 }
+assert.ok(statSync(join(resources, 'scopedfs', 'scopedfs')).mode & 0o111);
 for (const arch of ['amd64', 'arm64']) {
   const name = `delion-helper-linux-${arch}`;
   assert.deepEqual(

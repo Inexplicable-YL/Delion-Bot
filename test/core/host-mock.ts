@@ -10,6 +10,7 @@ const bundledInRepo: Record<BundledResource, string> = {
   'delion-helper': 'vendor/delion-helper',
   'remote-rg': '.build/remote-rg',
   openssh: 'vendor/openssh',
+  scopedfs: '.build/scopedfs',
 };
 
 const testPorts: HostPorts = {

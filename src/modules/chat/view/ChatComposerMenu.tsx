@@ -30,6 +30,7 @@ import {
 import { IconButton } from '../../../ui/IconButton';
 import { Input } from '../../../ui/Input';
 import type { WebSearchEntrySummary } from '../../../core/protocol/capabilities';
+import { permissionModeSchema, type PermissionMode } from '../../../core/protocol/agent';
 import { ConnectorAppIcon, type ConnectorApp } from '../../connectors/view';
 import { useWorkspaceStore } from '../../workspace/view';
 import { useChatTabSource } from './ChatSource';
@@ -73,8 +74,8 @@ export function ChatComposerMenu({
   searchSelectedId: string | null;
   onRefreshSearch: () => void;
   onSelectSearch?: (id: string | null) => void;
-  permissionMode?: 'restricted' | 'full' | null;
-  onPermissionMode?: (mode: 'restricted' | 'full') => void;
+  permissionMode?: PermissionMode | null;
+  onPermissionMode?: (mode: PermissionMode) => void;
 }) {
   const { navigate, onCreateProject } = useChatTabSource();
   const entries = useWorkspaceStore((state) => state.workspace.entries);
@@ -201,17 +202,25 @@ export function ChatComposerMenu({
               <DropdownMenuRadioGroup
                 value={permissionMode}
                 onValueChange={(value) => {
-                  if (value === 'restricted' || value === 'full') onPermissionMode(value);
+                  const mode = permissionModeSchema.safeParse(value);
+                  if (mode.success) onPermissionMode(mode.data);
                 }}
               >
-                <DropdownMenuRadioItem value="restricted">受限</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="full">完全权限</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="read-only">只读模式</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="approval">请求批准</DropdownMenuRadioItem>
+                {projectId && (
+                  <DropdownMenuRadioItem value="project-write">项目内修改</DropdownMenuRadioItem>
+                )}
+                <DropdownMenuRadioItem value="full">完全访问</DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
               <p className="px-2 py-2 text-ui-callout text-ink-2">
-                受限只允许写入 /privacy 和
-                /share，其他可见文件只读，工具不能联网。读到的内容仍会进入对话，并发送给你配置的模型。目前只有
-                Linux 加 bubblewrap 能运行；Windows 和 macOS
-                尚未提供，发送会失败，不会改用本机权限。完全权限沿用原来的本机权限。
+                {permissionMode === 'full'
+                  ? '工具可使用当前用户的文件、终端和网络权限。'
+                  : permissionMode === 'approval'
+                    ? '读取限于当前聊天的目录。每次修改需要你确认。'
+                    : permissionMode === 'project-write'
+                      ? '可直接读取和修改当前项目内的文件。'
+                      : '只能读取当前聊天的目录。'}
               </p>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

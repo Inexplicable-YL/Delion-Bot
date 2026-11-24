@@ -74,7 +74,8 @@ it('从中间一条回复分支：新会话只含到那里为止的历史，原�
 
   const forked = await forkSession(source, firstReply!.entryId!);
   expect(forked.messages.map((message) => message.content)).toEqual(['第一问', 'first answer']);
-  expect(forked).toMatchObject({ providerId: 'p1', model: 'mock-model', cwd: sourceRow.cwd });
+  expect(forked).toMatchObject({ providerId: 'p1', model: 'mock-model' });
+  expect(forked.cwd).toBe(join(sourceRow.cwd, '..', forked.sessionId!));
   expect(
     state.db!.prepare('SELECT title, message_count FROM sessions WHERE id=?').get(forked.sessionId),
   ).toEqual({

@@ -78,6 +78,8 @@ Delion Bot Harness 基于 Pi 构建，可以作为一款通用 agent 产品使�
 
 推荐使用 [`.node-version`](.node-version) 指定的 Node.js 与 [`package.json`](package.json) 的 `packageManager` 指定的 pnpm，兼容范围见 `engines`（本机可用 `. ./scripts/use-local-tools.ps1` 启用仓库内固定版本）：
 
+本地开发及打包需要 Go 1.25 或更高版本来构建文件隔离程序。
+
 ```sh
 pnpm install
 pnpm dev

@@ -1,7 +1,7 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
-import { executionMode, sandboxRoots } from '../../../core/agent/sandbox/mode';
-import { restrictedLocalPath } from '../../../core/agent/sandbox/paths';
+import { executionMode } from '../../../core/agent/sandbox/mode';
+import { scopedReferencePath } from '../../../core/agent/sandbox/scoped-files';
 import { locateSessionFile } from '../../../core/agent/session/files';
 import { row, sessionCwd } from '../../../core/agent/session/store';
 import { hostPorts } from '../../../core/ports';
@@ -13,20 +13,11 @@ import { hiddenWorkspaceNames } from '../../workspace/contract';
 
 function referenceFile(sessionId: string, path: string) {
   const meta = row(sessionId);
+  if (executionMode(meta) !== 'full')
+    return { path: scopedReferencePath(meta, path), target: null };
   const cwd = sessionCwd(meta.project_id, meta.cwd);
   const remote = meta.project_id ? hostPorts().projects.remoteOf(meta.project_id) : null;
   if (remote) return { path: posix.resolve(cwd, path), target: remote.target };
-  if (executionMode(meta) === 'restricted') {
-    const roots = sandboxRoots(meta.parent_id ?? meta.id);
-    return {
-      path: restrictedLocalPath(
-        path,
-        { privacy: roots.privacyHost, share: roots.shareHost },
-        roots.conceal,
-      ),
-      target: null,
-    };
-  }
   return { path: resolve(cwd, path), target: null };
 }
 

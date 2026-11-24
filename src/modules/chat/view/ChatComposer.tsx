@@ -54,6 +54,7 @@ import type {
   ChatComment,
   ChatMediaView,
   ContextUsageView,
+  PermissionMode,
 } from '../../../core/protocol/agent';
 import type { LlmProviderView } from '../../../core/protocol/llm';
 import { SESSION_COMMANDS, type SessionCommandName } from '../../../core/protocol/agent';
@@ -275,8 +276,8 @@ export function ChatComposer({
   onWithdrawQueued?: () => void;
   tasks?: BackgroundTaskView[];
   onStopTask?: (taskId: string) => void;
-  permissionMode?: 'restricted' | 'full' | null;
-  onPermissionMode?: (mode: 'restricted' | 'full') => void;
+  permissionMode?: PermissionMode | null;
+  onPermissionMode?: (mode: PermissionMode) => void;
   sidechat?: boolean;
   context?: ComposerContext | null;
   onSelectProject?: (projectId: string | null) => void;

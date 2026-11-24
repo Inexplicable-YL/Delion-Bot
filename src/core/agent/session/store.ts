@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import type { ChatSessionSummary } from '../../protocol/agent';
+import type { ChatSessionSummary, PermissionMode } from '../../protocol/agent';
 import { llmModelSettings } from '../../protocol/llm-models';
 import type { StoredLlmProvider } from '../llm-config';
 import { hostPorts } from '../../ports';
@@ -54,11 +54,12 @@ function setting(key: string): string | undefined {
   )?.value;
 }
 
-export function readPermissionMode(id: string): 'restricted' | 'full' {
-  return setting(permissionKey(id)) === 'full' ? 'full' : 'restricted';
+export function readPermissionMode(id: string): PermissionMode {
+  const mode = setting(permissionKey(id));
+  return mode === 'full' || mode === 'approval' || mode === 'project-write' ? mode : 'read-only';
 }
 
-export function writePermissionMode(id: string, mode: 'restricted' | 'full') {
+export function writePermissionMode(id: string, mode: PermissionMode) {
   hostPorts()
     .database()
     .prepare('INSERT OR REPLACE INTO workspace_settings VALUES (?, ?)')
@@ -223,8 +224,11 @@ export function storeVisibility(id: string, patch: { archived?: boolean; pinned?
 export function storeProject(id: string, projectId: string | null) {
   const db = hostPorts().database();
   const cwd = projectId === null ? chatSessionDirectory(id) : null;
-  db.prepare('UPDATE sessions SET project_id=?, cwd=? WHERE id=?').run(projectId, cwd, id);
-  db.prepare('UPDATE sessions SET project_id=? WHERE parent_id=?').run(projectId, id);
+  db.transaction(() => {
+    db.prepare('UPDATE sessions SET project_id=?, cwd=? WHERE id=?').run(projectId, cwd, id);
+    db.prepare('UPDATE sessions SET project_id=?, cwd=NULL WHERE parent_id=?').run(projectId, id);
+    db.prepare('DELETE FROM workspace_settings WHERE key=?').run(permissionKey(id));
+  })();
 }
 
 export function modelAutoCompaction(providerId: string, modelId: string): number | undefined {
@@ -390,7 +394,7 @@ export function adoptSessionFile(meta: SessionRow, file: string, titlePrefix: st
     .run(
       id,
       meta.project_id,
-      meta.cwd,
+      meta.project_id === null ? ensurePrivateSession(id) : null,
       file,
       `${titlePrefix}${meta.title}`.slice(0, 60),
       userMessages,
