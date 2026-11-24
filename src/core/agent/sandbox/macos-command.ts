@@ -23,17 +23,22 @@ const programs = [
 ];
 const executablePaths = programs.map((path) => `(literal "${path}")`).join(' ');
 const profile = `(version 1)
-(deny default)
+(deny default (with message "delion-command"))
 (allow process-exec ${executablePaths})
 (allow file-map-executable (subpath "/usr/lib") (subpath "/System/Library") ${executablePaths})
+(allow file-read* file-map-executable
+  (subpath "/System/Cryptexes/OS") (subpath "/System/Volumes/Preboot/Cryptexes/OS"))
 (allow file-read* (subpath (param "INPUTS")) (subpath "/usr/lib") (subpath "/System/Library")
   (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom")
   ${executablePaths})
 (allow file-read-metadata file-test-existence (path-ancestors (param "INPUTS")))
+(allow process-info-pidinfo (target self))
+(allow signal (target self))
 (allow file-write-data (literal "/dev/null"))
 (allow sysctl-read (sysctl-name-prefix "hw.optional.arm") (sysctl-name "kern.osvariant_status")
   (sysctl-name "hw.pagesize") (sysctl-name "hw.cpufamily") (sysctl-name "hw.cputype"))
 (allow system-mac-syscall (require-all (mac-policy-name "Sandbox") (mac-syscall-number 67)))
+(allow system-mac-syscall (mac-policy-name "vnguard"))
 `;
 
 export function runMacosCommand(directory: string, command: string, signal: AbortSignal) {

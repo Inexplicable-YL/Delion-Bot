@@ -64,6 +64,22 @@ jobs:
           pnpm build:scopedfs
           pnpm build:bundle
           pnpm test
+      - name: Report sandbox launch failures
+        if: failure()
+        run: |
+          /usr/bin/log show --last 6m --style compact --predicate 'eventMessage CONTAINS "delion-command"' 2>/dev/null | tail -n 30 || true
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          reports = Path.home() / "Library" / "Logs" / "DiagnosticReports"
+          for path in sorted(reports.glob("bash-*.ips"), key=lambda p: p.stat().st_mtime)[-2:]:
+              try:
+                  report = json.loads(path.read_text().split("\n", 1)[1])
+              except (OSError, ValueError, IndexError):
+                  continue
+              print({key: report[key] for key in ("exception", "termination") if key in report})
+          PY
       - name: Smoke test Electron and runtime
         run: |
           node scripts/ci-smoke.ts "Electron and native dependencies" pnpm smoke
