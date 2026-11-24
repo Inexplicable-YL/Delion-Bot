@@ -83,8 +83,7 @@ export function trackTask(
         error: error instanceof Error ? error.message : String(error),
       }))
       .then((outcome) => {
-        if (entry.stoppedBy && outcome.status !== 'completed')
-          outcome = { ...outcome, status: 'stopped' };
+        if (entry.stoppedBy) outcome = { ...outcome, status: 'stopped' };
         Object.assign(entry, { status: outcome.status, outcome, finishedAt: Date.now() });
         if (entry.stoppedBy === 'session') return;
         entry.parent.publish();
@@ -209,6 +208,7 @@ function localBash(
       child.stdin?.end(script);
     }
     let timedOut = false;
+    let aborted = false;
     let finished = false;
     const forward = (chunk: Buffer) => {
       if (!finished) onData(chunk);
@@ -216,7 +216,11 @@ function localBash(
     child.stdout?.on('data', forward);
     child.stderr?.on('data', forward);
     const stop = () => child.pid && killTree(child.pid);
-    signal.addEventListener('abort', stop, { once: true });
+    const onAbort = () => {
+      aborted = true;
+      stop();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
     const timer = timeout
       ? setTimeout(() => ((timedOut = true), stop()), timeout * 1000)
       : undefined;
@@ -228,11 +232,12 @@ function localBash(
         finished = true;
         clearTimeout(timer);
         clearTimeout(idle);
-        signal.removeEventListener('abort', stop);
+        signal.removeEventListener('abort', onAbort);
         child.stdout?.destroy();
         child.stderr?.destroy();
         if (outcome) resolve(outcome);
         else if (timedOut) resolve({ status: 'failed', error: `超时（${timeout} 秒）` });
+        else if (aborted) resolve({ status: 'stopped', exitCode });
         else resolve({ status: exitCode === 0 ? 'completed' : 'failed', exitCode });
       };
       const settle = () => {
