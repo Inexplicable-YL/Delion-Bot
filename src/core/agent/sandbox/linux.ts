@@ -1,6 +1,14 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, readdirSync, readlinkSync } from 'node:fs';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readlinkSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { hostPorts } from '../../ports';
 import type { SandboxRoots } from './mode';
 
@@ -150,6 +158,54 @@ function rootMounts(): string[] {
   return args;
 }
 
+let socketMask: string | undefined;
+
+function socketMaskFile(): string {
+  if (socketMask && existsSync(socketMask)) return socketMask;
+  const dir = join(tmpdir(), 'delion-socket-mask');
+  mkdirSync(dir, { recursive: true });
+  socketMask = join(dir, 'none');
+  writeFileSync(socketMask, '');
+  return socketMask;
+}
+
+function socketMaskArgs(): string[] {
+  const found = spawnSync(
+    'find',
+    [
+      '/',
+      '-xdev',
+      '(',
+      '-path',
+      '/proc',
+      '-o',
+      '-path',
+      '/sys',
+      '-o',
+      '-path',
+      '/dev',
+      ')',
+      '-prune',
+      '-o',
+      '-xtype',
+      's',
+      '-print0',
+    ],
+    { timeout: 8000, maxBuffer: 8 * 1024 * 1024 },
+  );
+  if (found.error || (found.status !== 0 && found.status !== 1))
+    throw new Error('无法枚举宿主套接字，已停止执行，没有改用当前用户的本机权限。');
+  const covered = [...FRESH_MOUNTS, ...hiddenDirectories()];
+  const dummy = socketMaskFile();
+  const args: string[] = [];
+  for (const path of found.stdout.toString('utf8').split('\0')) {
+    if (!path.startsWith('/')) continue;
+    if (covered.some((parent) => under(parent, path))) continue;
+    args.push('--ro-bind-try', dummy, path);
+  }
+  return args;
+}
+
 function sandboxArgs(roots: SandboxRoots, cwd: string, file: string, args: string[]): string[] {
   return [
     '--die-with-parent',
@@ -185,6 +241,7 @@ function sandboxArgs(roots: SandboxRoots, cwd: string, file: string, args: strin
     '--tmpfs',
     '/var/tmp',
     ...hiddenDirectories().flatMap((path) => ['--tmpfs', path]),
+    ...socketMaskArgs(),
     '--bind',
     roots.privacyHost,
     '/privacy',

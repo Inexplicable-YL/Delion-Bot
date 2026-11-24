@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { chatMediaPath, readChatMediaBytes, stageChatMedia } from '../../../core/agent/media';
 import { executionMode, sandboxRoots } from '../../../core/agent/sandbox/mode';
-import { resolveVirtualHost } from '../../../core/agent/sandbox/paths';
+import { restrictedLocalPath } from '../../../core/agent/sandbox/paths';
 import { row, sessionCwd } from '../../../core/agent/session/store';
 import { hostPorts } from '../../../core/ports';
 import type { ChatMediaView } from '../../../core/protocol/agent';
@@ -37,12 +37,14 @@ function locateImage(sessionId: string, path: string): ImageFile {
   if (remote) return { kind: 'remote', target: remote.target, path: posix.resolve(cwd, path) };
   if (executionMode(meta) === 'restricted') {
     const roots = sandboxRoots(meta.parent_id ?? meta.id);
-    const virtual = resolveVirtualHost(path, {
-      privacy: roots.privacyHost,
-      delivery: roots.deliveryHost,
-    });
-    if (virtual.kind === 'denied') throw new Error('路径超出会话目录');
-    if (virtual.kind === 'host') return { kind: 'local', path: virtual.path };
+    return {
+      kind: 'local',
+      path: restrictedLocalPath(
+        path,
+        { privacy: roots.privacyHost, delivery: roots.deliveryHost },
+        roots.conceal,
+      ),
+    };
   }
   return {
     kind: 'local',

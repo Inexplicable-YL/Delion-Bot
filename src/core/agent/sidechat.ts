@@ -216,6 +216,10 @@ export function cancelSidechat(parentId: string) {
   void side?.session.abort();
 }
 
+export function sidechatBusy(parentId: string): boolean {
+  return Boolean(sides.get(parentId)?.run || opening.has(parentId));
+}
+
 export async function closeSidechat(parentId: string): Promise<void> {
   const side = sides.get(parentId) ?? (await opening.get(parentId)?.catch(() => undefined));
   if (!side) return;

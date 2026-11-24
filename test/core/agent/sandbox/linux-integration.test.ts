@@ -1,6 +1,14 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { linuxSandboxAvailability, runSandboxed } from '../../../../src/core/agent/sandbox/linux';
@@ -157,7 +165,7 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
     await background.execute(
       '2',
       {
-        command: `echo no >> ${JSON.stringify(external)} || true; env | grep -q DELION_COMMAND_TOKEN && echo LEAK > /delivery/bg.txt || echo NO_TOKEN > /delivery/bg.txt`,
+        command: `echo no >> ${JSON.stringify(external)} || true; echo ${sessionId}; env | grep -q DELION_COMMAND_TOKEN && echo LEAK > /delivery/bg.txt || echo NO_TOKEN > /delivery/bg.txt`,
         background: true,
       },
       undefined,
@@ -166,6 +174,18 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
     );
     await expect.poll(() => readFileSync(join(deliveryHost, 'bg.txt'), 'utf8')).toBe('NO_TOKEN\n');
     expect(readFileSync(external, 'utf8')).toBe('ext');
+    const logs = join(userData, 'background-tasks');
+    await expect
+      .poll(() =>
+        readdirSync(logs)
+          .map((name) => readFileSync(join(logs, name), 'utf8'))
+          .join('\n'),
+      )
+      .toContain('[hidden]');
+    const logged = readdirSync(logs)
+      .map((name) => readFileSync(join(logs, name), 'utf8'))
+      .join('\n');
+    expect(logged).not.toContain(sessionId);
   });
 
   it('经父目录别名写外部文件失败，挂载表和命令回显不含会话 id', async () => {
@@ -183,6 +203,87 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
     expect(`${result.stdout.toString('utf8')}${result.stderr}`).not.toContain(sessionId);
     const echoed = await sandboxBash(roots(), `echo ${sessionId}`);
     expect(echoed.text).not.toContain(sessionId);
+  });
+
+  it('只读目录中的套接字、抽象套接字和多余文件描述符都不可用', async () => {
+    const ipc = join(root, 'external', 'ipc.sock');
+    const server = createServer();
+    let accepted = false;
+    server.on('connection', () => {
+      accepted = true;
+    });
+    await new Promise<void>((resolve) => server.listen(ipc, () => resolve()));
+    const abstract = spawn('python3', [
+      '-c',
+      [
+        'import socket',
+        'server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)',
+        'server.bind("\\0delion-bwrap-abstract")',
+        'server.listen(1)',
+        'server.settimeout(8)',
+        'import pathlib',
+        'try:',
+        '    conn, _ = server.accept()',
+        '    pathlib.Path("/tmp/delion-abstract-hit").write_text("yes")',
+        '    conn.close()',
+        'except Exception:',
+        '    pass',
+      ].join('\n'),
+    ]);
+    const probes = [
+      [ipc, 'IPC'],
+      ['/run/dbus/system_bus_socket', 'DBUS'],
+      ['/var/run/docker.sock', 'DOCKER'],
+      ['/run/host-services/ssh-auth.sock', 'SSH'],
+    ];
+    const script = [
+      'import os, socket',
+      'leaked = []',
+      'for fd in range(3, 256):',
+      '    try:',
+      '        os.fstat(fd)',
+      '        leaked.append(fd)',
+      '    except OSError:',
+      '        pass',
+      'print("FDS", leaked)',
+      'def probe(path, label):',
+      '    client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)',
+      '    client.settimeout(1)',
+      '    try:',
+      '        client.connect(path)',
+      '        print(label + "_OK")',
+      '    except Exception:',
+      '        print(label + "_FAIL")',
+      '    finally:',
+      '        client.close()',
+      'probe("\\0delion-bwrap-abstract", "ABS")',
+      ...probes.map(([path, label]) => `probe(${JSON.stringify(path)}, ${JSON.stringify(label)})`),
+      'print("PTS", os.listdir("/dev/pts") if os.path.isdir("/dev/pts") else "NONE")',
+      'print("SSH", os.environ.get("SSH_AUTH_SOCK"))',
+      'print("WAYLAND", os.environ.get("WAYLAND_DISPLAY"))',
+      'print("DBUS_ENV", os.environ.get("DBUS_SESSION_BUS_ADDRESS"))',
+      'print("DISPLAY", os.environ.get("DISPLAY"))',
+    ].join('\n');
+    const result = await runSandboxed(roots(), '/usr/bin/python3', ['-c', script], {
+      cwd: '/privacy',
+    });
+    abstract.kill();
+    server.close();
+    const output = result.stdout.toString('utf8') + result.stderr;
+    expect(output).toContain('FDS []');
+    expect(output).toContain('IPC_FAIL');
+    expect(output).toContain('ABS_FAIL');
+    expect(output).toContain('DBUS_FAIL');
+    expect(output).toContain('DOCKER_FAIL');
+    expect(output).toContain('SSH_FAIL');
+    expect(output).toContain("PTS ['ptmx']");
+    expect(output).toContain('SSH None');
+    expect(output).toContain('WAYLAND None');
+    expect(output).toContain('DBUS_ENV None');
+    expect(output).toContain('DISPLAY None');
+    expect(output).not.toContain(sessionId);
+    expect(accepted).toBe(false);
+    expect(existsSync('/tmp/delion-abstract-hit')).toBe(false);
   });
 
   it('取消长时间命令后不留下沙箱进程', async () => {

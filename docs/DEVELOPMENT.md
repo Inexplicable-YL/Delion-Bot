@@ -157,11 +157,11 @@ Windows 与 macOS 共用一套：`electron-updater` + `electron-builder` 的 NSI
 
 ## 6. 安全边界
 
-诚实而非表演：给了 bash 就不设业务级守卫、无沙箱、无越权校验；skill 启停是引导层。
+诚实而非表演：skill 启停是引导层。完全权限、项目会话和远端项目里的 bash 与文件工具仍是本机权限，没有额外沙箱。
 
 - 数据保存在本机 SQLite，凭据经 Electron `safeStorage` 加密。
 - renderer 不接触文件系统、数据库与凭据，一切经受控 IPC 通信。
-- Agent 的 bash 与文件工具即本机权限，不设沙箱。这是已知取舍，不是待修复的漏洞，也不要描述成安全隔离。
+- 普通对话默认受限。目前只有 Linux 且 bubblewrap 可用时执行：可写目录只有 `/privacy` 和 `/delivery`，其余可见文件只读，应用私有目录被遮住，沙箱内的套接字会被空文件盖住，工具不能联网。读到的文件内容仍会进入模型上下文，并可能发给用户配置的模型服务。Windows 和 macOS 没有这个后端，受限模式会拒绝运行，不会改用本机权限。完全权限要在对话菜单里显式打开。
 - Pi 的 auth / models / sessions / skills 放在 `userData/pi`，与用户的 `~/.pi` 隔离（bin 例外，见 §2.1）。模型密钥只在主进程内注册给 Pi 运行时，不写入 `auth.json`。
 - 应用启动**不读取仓库 `.env`**，凭据只能在应用内配置。
 
@@ -179,7 +179,7 @@ SQLite 在独立的应用数据目录中保存数据。Schema 2 为会话增加�
 
 node-pty + xterm.js。本地终端跟随用户自己的 shell：Windows 优先 PowerShell 7（PATH 上或默认安装目录），没有时用系统自带的 Windows PowerShell 5.1；macOS 以登录模式启动用户的默认 shell（通常是 zsh），加载用户自己的配置。终端不注入 delion 命令桥。
 
-Agent 的 bash 工具与终端分开：固定用 bash，每条命令前拼上 delion 命令桥（`commandPrefix`）。macOS 用 `/bin/bash`，不执行登录 shell 来取环境；下面的 Git Bash 规则只用于 Windows 上的 Agent。
+Agent 的 bash 工具与终端分开。终端只属于一个项目，创建时必须带项目 id，不会给普通对话开一个宿主 PTY。完全权限和项目会话的 Agent bash 固定用 bash，每条命令前拼上 delion 命令桥（`commandPrefix`）。受限普通对话不使用命令桥，bash 跑在 bubblewrap 里。macOS 的 Agent bash 用 `/bin/bash`，Linux 用 `/usr/bin/bash` 或 `/bin/bash`，都不执行登录 shell 来取环境；下面的 Git Bash 规则只用于 Windows 上的 Agent。
 
 - **Git Bash 探测顺序：系统 Git for Windows → 随包 MinGit**，都缺失说明安装包被破坏，Agent 报错提示安装 Git for Windows 后重启，**不回退 PowerShell**。
 - 随包 MinGit 由打包前脚本 `prepare-runtime.ts` 按写死的版本与 SHA256 下载校验，仓库不提交这份约 40MB 的产物。MinGit 只以 `sh.exe` 名义带 bash 本体，脚本要复制出 `bash.exe`——**argv[0] 决定 bash 是否走完整模式**。

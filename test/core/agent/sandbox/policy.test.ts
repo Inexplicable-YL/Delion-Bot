@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -47,7 +47,12 @@ vi.mock('../../../../src/core/capabilities/tools', () => ({
 
 import { agentEnvironment } from '../../../../src/core/agent/environment';
 import { launchPlan } from '../../../../src/core/agent/sandbox/mode';
-import { sandboxPath, resolveVirtualHost } from '../../../../src/core/agent/sandbox/paths';
+import {
+  sandboxPath,
+  resolveVirtualHost,
+  restrictedLocalPath,
+} from '../../../../src/core/agent/sandbox/paths';
+import { referenceFilePath } from '../../../../src/modules/chat/main/reference-file';
 import { sandboxTools } from '../../../../src/core/agent/sandbox/tools';
 import { fileLinkKey } from '../../../../src/modules/chat/view/reference-tokens';
 import { provideTestHostPorts } from '../../host-mock';
@@ -215,5 +220,27 @@ describe('受限普通对话', () => {
     expect(state.runs[0]?.[0]).toBe('/usr/bin/python3');
     expect(state.runs[0]).toContain('/privacy/note.txt');
     expect(state.runs[0]?.join(' ')).not.toContain(id);
+  });
+
+  it('主进程打开链接时拒绝被遮住的目录和指向那里的链接，外部文件仍可读', () => {
+    database();
+    const id = insertSession(null);
+    mkdirSync(join(root, 'user'), { recursive: true });
+    mkdirSync(join(root, 'home'), { recursive: true });
+    const secret = join(root, 'user', 'delion.db');
+    writeFileSync(secret, 'secret');
+    const link = join(root, 'home', 'alias.db');
+    symlinkSync(secret, link);
+    const note = join(root, 'home', 'note.txt');
+    writeFileSync(note, 'ext');
+    expect(() => referenceFilePath(id, secret)).toThrow('路径超出会话目录');
+    expect(() => referenceFilePath(id, link)).toThrow('路径超出会话目录');
+    expect(() => referenceFilePath(id, '/privacy/../../etc/passwd')).toThrow('路径超出会话目录');
+    expect(referenceFilePath(id, note)).toBe(resolve(note));
+    expect(() =>
+      restrictedLocalPath(link, { privacy: join(root, 'p'), delivery: join(root, 'd') }, [
+        join(root, 'user'),
+      ]),
+    ).toThrow('路径超出会话目录');
   });
 });

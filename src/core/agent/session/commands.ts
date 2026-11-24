@@ -4,7 +4,7 @@ import { hostPorts } from '../../ports';
 import * as changes from '../changes';
 import { forkSessionFile, loadPi, resolveModel } from '../pi';
 import { usableLlmProviders } from '../providers';
-import { closeSidechat } from '../sidechat';
+import { closeSidechat, sidechatBusy } from '../sidechat';
 import { stopSessionTasks } from '../tasks';
 import { live, sessionBranch, type Live } from './live';
 import { COMPACTION_DETAILS, publish, snapshot } from './projection';
@@ -34,13 +34,16 @@ import {
 export function setSessionPermissionMode(id: string, mode: 'restricted' | 'full'): WorkspaceChat {
   const meta = row(id);
   if (meta.project_id || meta.parent_id) throw new Error('只有普通对话可以切换文件权限');
-  if (live.get(id)?.run || live.get(id)?.session.isCompacting)
+  if (live.get(id)?.run || live.get(id)?.session.isCompacting || sidechatBusy(id))
     throw new Error('请等待当前回答完成');
   for (const child of childSessionIds(id)) {
     const entry = live.get(child);
     if (entry?.run || entry?.session.isCompacting) throw new Error('请等待当前回答完成');
   }
   writePermissionMode(id, mode);
+  stopSessionTasks(id);
+  for (const child of childSessionIds(id)) stopSessionTasks(child);
+  void closeSidechat(id);
   for (const child of childSessionIds(id)) {
     const entry = live.get(child);
     if (entry) disposeLive(child, entry);

@@ -1,7 +1,7 @@
 import { hostPorts } from '../../ports';
 import * as changes from '../changes';
 import { executionMode, sandboxRoots } from '../sandbox/mode';
-import { resolveVirtualHost } from '../sandbox/paths';
+import { restrictedLocalPath } from '../sandbox/paths';
 import { resolveSessionFile } from '../session-path';
 import { isRemoteSession, row, sessionCwd } from './store';
 
@@ -10,12 +10,11 @@ function sessionFilePath(sessionId: string, rawPath: string): string {
   if (isRemoteSession(meta)) throw new Error('远程项目的文件不在本机，请用远端方式打开');
   if (executionMode(meta) === 'restricted') {
     const roots = sandboxRoots(meta.parent_id ?? meta.id);
-    const virtual = resolveVirtualHost(rawPath, {
-      privacy: roots.privacyHost,
-      delivery: roots.deliveryHost,
-    });
-    if (virtual.kind === 'denied') throw new Error('路径超出会话目录');
-    if (virtual.kind === 'host') return resolveSessionFile(virtual.path, '.');
+    return restrictedLocalPath(
+      rawPath,
+      { privacy: roots.privacyHost, delivery: roots.deliveryHost },
+      roots.conceal,
+    );
   }
   return resolveSessionFile(sessionCwd(meta.project_id, meta.cwd), rawPath);
 }

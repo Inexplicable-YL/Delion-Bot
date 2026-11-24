@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
 const VIRTUAL = ['privacy', 'delivery'] as const;
@@ -49,4 +50,35 @@ export function resolveVirtualHost(
     return { kind: 'denied' };
   }
   return { kind: 'passthrough' };
+}
+
+function covers(parent: string, child: string): boolean {
+  const rel = relative(parent, child);
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+}
+
+function concealedPath(path: string, concealed: readonly string[]): boolean {
+  return concealed.some(
+    (secret) => (secret.startsWith('/') || /^[A-Za-z]:[\\/]/.test(secret)) && covers(secret, path),
+  );
+}
+
+export function restrictedLocalPath(
+  input: string,
+  roots: { privacy: string; delivery: string },
+  concealed: readonly string[],
+): string {
+  const virtual = resolveVirtualHost(input, roots);
+  if (virtual.kind === 'denied') throw new Error('路径超出会话目录');
+  if (virtual.kind === 'host') return virtual.path;
+  const lexical = resolve(input);
+  let real = lexical;
+  try {
+    real = realpathSync(lexical);
+  } catch {
+    real = lexical;
+  }
+  if (concealedPath(lexical, concealed) || concealedPath(real, concealed))
+    throw new Error('路径超出会话目录');
+  return lexical;
 }

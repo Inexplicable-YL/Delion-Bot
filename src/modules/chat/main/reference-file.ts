@@ -1,7 +1,7 @@
 import { readFile, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { executionMode, sandboxRoots } from '../../../core/agent/sandbox/mode';
-import { resolveVirtualHost } from '../../../core/agent/sandbox/paths';
+import { restrictedLocalPath } from '../../../core/agent/sandbox/paths';
 import { locateSessionFile } from '../../../core/agent/session/files';
 import { row, sessionCwd } from '../../../core/agent/session/store';
 import { hostPorts } from '../../../core/ports';
@@ -18,12 +18,14 @@ function referenceFile(sessionId: string, path: string) {
   if (remote) return { path: posix.resolve(cwd, path), target: remote.target };
   if (executionMode(meta) === 'restricted') {
     const roots = sandboxRoots(meta.parent_id ?? meta.id);
-    const virtual = resolveVirtualHost(path, {
-      privacy: roots.privacyHost,
-      delivery: roots.deliveryHost,
-    });
-    if (virtual.kind === 'denied') throw new Error('路径超出会话目录');
-    if (virtual.kind === 'host') return { path: virtual.path, target: null };
+    return {
+      path: restrictedLocalPath(
+        path,
+        { privacy: roots.privacyHost, delivery: roots.deliveryHost },
+        roots.conceal,
+      ),
+      target: null,
+    };
   }
   return { path: resolve(cwd, path), target: null };
 }
