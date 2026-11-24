@@ -110,8 +110,8 @@ const desktop: Desktop = {
         kind: 'operation',
         title: '运行受限命令',
         fields: [
-          { label: '执行位置', value: remote ?? '本机' },
           { label: '命令', value: command },
+          { label: '执行位置', value: remote ?? '本机' },
           ...(files.length ? [{ label: '输入文件', value: files.join('\n') }] : []),
         ],
         grant,
