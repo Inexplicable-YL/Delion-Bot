@@ -111,6 +111,8 @@ describe('路径契约', () => {
     expect(sandboxPath('/delivery')).toBe('/delivery');
     expect(sandboxPath('notes/a.txt')).toBe('/privacy/notes/a.txt');
     expect(sandboxPath('/etc/hosts')).toBe('/etc/hosts');
+    expect(sandboxPath('C:/secret/db')).toBe('C:/secret/db');
+    expect(sandboxPath('\\\\server\\share\\a')).toBe('//server/share/a');
     expect(sandboxPath('~/cache')).toBe('/privacy/.home/cache');
   });
 

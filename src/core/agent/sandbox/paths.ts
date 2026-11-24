@@ -7,6 +7,7 @@ export type VirtualRoot = (typeof VIRTUAL)[number];
 export function sandboxPath(input: string): string {
   const normalized = input.trim().replaceAll('\\', '/');
   if (!normalized || normalized === '.') return '/privacy';
+  if (/^[A-Za-z]:\//.test(normalized) || normalized.startsWith('//')) return normalized;
   const home = normalized.startsWith('~/')
     ? `/privacy/.home/${normalized.slice(2)}`
     : normalized === '~'
@@ -58,9 +59,15 @@ function covers(parent: string, child: string): boolean {
 }
 
 function concealedPath(path: string, concealed: readonly string[]): boolean {
-  return concealed.some(
-    (secret) => (secret.startsWith('/') || /^[A-Za-z]:[\\/]/.test(secret)) && covers(secret, path),
-  );
+  return concealed.some((secret) => {
+    if (!(secret.startsWith('/') || /^[A-Za-z]:[\\/]/.test(secret))) return false;
+    if (covers(secret, path)) return true;
+    try {
+      return covers(realpathSync(secret), path);
+    } catch {
+      return false;
+    }
+  });
 }
 
 export function restrictedLocalPath(
