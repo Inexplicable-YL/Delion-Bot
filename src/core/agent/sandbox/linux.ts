@@ -28,11 +28,14 @@ type Availability = { ok: true } | { ok: false; reason: string };
 let availability: Availability | undefined;
 let bwrapBinary: string | undefined;
 
+export function sandboxUnavailableReason(platform: NodeJS.Platform, detail: string): string {
+  if (platform !== 'linux')
+    return `${platform} 尚未提供经过验证的受限沙箱。普通对话不能以受限模式运行，也没有改用本机权限。Windows 和 macOS 都在此列。可在对话菜单把文件权限改为「完全权限」。${detail}`;
+  return `受限模式无法启动，已停止执行，没有改用当前用户的本机权限。${detail}可在对话菜单的「文件权限」中显式改为完全权限。`;
+}
+
 function fail(reason: string): Availability {
-  return {
-    ok: false,
-    reason: `受限模式无法启动，已停止执行，没有改用当前用户的本机权限。${reason}可在对话菜单的「文件权限」中显式改为完全权限。`,
-  };
+  return { ok: false, reason: sandboxUnavailableReason(process.platform, reason) };
 }
 
 function findBwrap(): string | null {
@@ -229,8 +232,10 @@ export function runSandboxed(
   return new Promise((resolvePromise, reject) => {
     const child = spawn(binary, sandboxArgs(roots, cwd, file, args), {
       stdio: ['pipe', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
       windowsHide: true,
     });
+    child.stdin?.on('error', () => {});
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let size = 0;
@@ -249,6 +254,15 @@ export function runSandboxed(
       });
     };
     const stop = () => {
+      if (child.pid && process.platform !== 'win32') {
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+          return;
+        } catch {
+          child.kill('SIGKILL');
+          return;
+        }
+      }
       child.kill('SIGKILL');
     };
     const timer = options.timeoutMs

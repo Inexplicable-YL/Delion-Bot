@@ -31,7 +31,7 @@ import {
   useAfterMenuClose,
 } from '../../../ui/DropdownMenu';
 import { ProjectFileTree, type EntryAction } from '../navigation/ProjectFileTree';
-import { useSessions } from '../../../modules/chat/view/sessions';
+import { useSessions } from '../../../modules/chat/view';
 import { deliveryLibrary } from './delivery-library';
 import { walkGroups } from './layout-schema';
 import { useWorkbenchLayout } from './layout-store';

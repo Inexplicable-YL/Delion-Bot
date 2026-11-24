@@ -1,10 +1,11 @@
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { linuxSandboxAvailability, runSandboxed } from '../../../../src/core/agent/sandbox/linux';
 import type { SandboxRoots } from '../../../../src/core/agent/sandbox/mode';
-import { sandboxTools } from '../../../../src/core/agent/sandbox/tools';
+import { sandboxBash, sandboxTools } from '../../../../src/core/agent/sandbox/tools';
 import { provideTestHostPorts } from '../../host-mock';
 
 const root = mkdtempSync(join('/home/ubuntu', 'delion-bwrap-'));
@@ -163,6 +164,38 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
     await expect.poll(() => readFileSync(join(deliveryHost, 'bg.txt'), 'utf8')).toBe('NO_TOKEN\n');
     expect(readFileSync(external, 'utf8')).toBe('ext');
   });
+
+  it('经父目录别名写外部文件失败，挂载表和命令回显不含会话 id', async () => {
+    const viaParent = `/privacy/../..${external}`;
+    const result = await runSandboxed(
+      roots(),
+      '/usr/bin/bash',
+      [
+        '-c',
+        `echo pwned >> ${JSON.stringify(viaParent)} || true; readlink /etc/mtab || true; cat /etc/mtab || true`,
+      ],
+      { cwd: '/privacy' },
+    );
+    expect(readFileSync(external, 'utf8')).toBe('ext');
+    expect(`${result.stdout.toString('utf8')}${result.stderr}`).not.toContain(sessionId);
+    const echoed = await sandboxBash(roots(), `echo ${sessionId}`);
+    expect(echoed.text).not.toContain(sessionId);
+  });
+
+  it('取消长时间命令后不留下沙箱进程', async () => {
+    const controller = new AbortController();
+    const pending = runSandboxed(roots(), '/usr/bin/bash', ['-c', 'sleep 30'], {
+      signal: controller.signal,
+      cwd: '/privacy',
+    });
+    setTimeout(() => controller.abort(), 200);
+    const started = Date.now();
+    await pending;
+    expect(Date.now() - started).toBeLessThan(5000);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const ps = spawnSync('ps', ['-eo', 'args='], { encoding: 'utf8' });
+    expect(ps.stdout).not.toContain('sleep 30');
+  });
 });
 
 describe('平台不可用', () => {
@@ -173,6 +206,9 @@ describe('平台不可用', () => {
     }
     const result = linuxSandboxAvailability();
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.reason).toContain('没有改用当前用户的本机权限');
+    if (!result.ok) {
+      expect(result.reason).toContain('尚未提供');
+      expect(result.reason).toContain('没有改用本机权限');
+    }
   });
 });

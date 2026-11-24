@@ -65,8 +65,10 @@ export async function sandboxBash(
   const result = await runSandboxed(roots, '/usr/bin/bash', ['-c', wrapped], {
     ...options,
     cwd: '/privacy',
+    onData: undefined,
   });
   const text = visible(roots, `${result.stdout.toString('utf8')}${result.stderr}`);
+  options.onData?.(Buffer.from(text));
   const status =
     result.code === 0
       ? text || '(no output)'
