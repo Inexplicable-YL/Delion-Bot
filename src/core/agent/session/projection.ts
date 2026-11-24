@@ -11,6 +11,7 @@ import type {
 } from '../../protocol/agent';
 import { emit } from '../../ports';
 import { agentContract } from '../../protocol/agent';
+import { executionMode } from '../sandbox/mode';
 import { runningTasks } from '../tasks';
 import { live, liveSteps, liveThinking, type Live, type ThinkingTime } from './live';
 import { modelChoice, requirePiSync, row, sessionCwd, type ModelChoice } from './store';
@@ -416,10 +417,16 @@ export function snapshot(id: string): WorkspaceChat {
   try {
     cwd ??= sessionCwd(meta.project_id, meta.cwd);
   } catch {}
+  let permissionMode: WorkspaceChat['permissionMode'] = null;
+  try {
+    const mode = executionMode(meta);
+    permissionMode = mode === 'project' ? null : mode;
+  } catch {}
   return {
     sessionId: id,
     projectId: meta.project_id,
     cwd,
+    permissionMode,
     ...modelView(choice),
     contextUsage: usageOf(entry),
     messages: entry

@@ -462,6 +462,39 @@
             "output"
           ]
         },
+        "set-permission-mode": {
+          "type": "object",
+          "properties": {
+            "input": {
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "restricted",
+                    "full"
+                  ]
+                }
+              },
+              "required": [
+                "sessionId",
+                "mode"
+              ]
+            },
+            "output": {
+              "$ref": "#/$defs/WorkspaceChat"
+            }
+          },
+          "required": [
+            "input",
+            "output"
+          ]
+        },
         "list-commands": {
           "type": "object",
           "properties": {
@@ -1021,6 +1054,7 @@
         "list-models",
         "set-model",
         "set-effort",
+        "set-permission-mode",
         "list-commands",
         "run-command",
         "open-sidechat",
@@ -1194,6 +1228,20 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "permissionMode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "restricted",
+                "full"
+              ]
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "running": {

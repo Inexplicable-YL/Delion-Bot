@@ -268,11 +268,15 @@ export function ChatComposer({
   onWithdrawQueued,
   tasks = [],
   onStopTask,
+  permissionMode = null,
+  onPermissionMode,
 }: {
   queued?: string[];
   onWithdrawQueued?: () => void;
   tasks?: BackgroundTaskView[];
   onStopTask?: (taskId: string) => void;
+  permissionMode?: 'restricted' | 'full' | null;
+  onPermissionMode?: (mode: 'restricted' | 'full') => void;
   sidechat?: boolean;
   context?: ComposerContext | null;
   onSelectProject?: (projectId: string | null) => void;
@@ -766,6 +770,8 @@ export function ChatComposer({
           searchSelectedId={searchSelectedId}
           onRefreshSearch={() => void refreshSearch()}
           onSelectSearch={sidechat ? undefined : (id) => void selectSearchEntry(id)}
+          permissionMode={permissionMode}
+          onPermissionMode={onPermissionMode}
         />
         <PromptInputToolbar className="ml-auto min-w-0 shrink-0 justify-end">
           {tasks.length > 0 && onStopTask && (

@@ -158,6 +158,8 @@ function ChatComposerArea({
         onWithdrawQueued={chatState.withdrawQueued}
         tasks={chat?.tasks}
         onStopTask={chatState.stopTask}
+        permissionMode={chat?.subagent ? null : (chat?.permissionMode ?? null)}
+        onPermissionMode={chatState.selectPermissionMode}
         referenceOptions={referenceOptions}
         notice={error}
         onDismissNotice={chatState.clearError}

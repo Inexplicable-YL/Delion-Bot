@@ -15,6 +15,8 @@ import type { BackgroundTaskView, TaskNoticeDetails, TaskStatus } from '../proto
 import type { RemoteBackend } from '../remote/operations';
 import { loadPi } from './pi';
 import { hostPorts } from '../ports';
+import type { SandboxRoots } from './sandbox/mode';
+import { sandboxBash, sandboxBashTool } from './sandbox/tools';
 
 export interface TaskNotice {
   text: string;
@@ -296,47 +298,8 @@ const text = (value: string) => ({
   details: undefined,
 });
 
-export async function backgroundTools(
-  parent: TaskParent,
-  cwd: string,
-  shellPath: string,
-  commandPrefix: string | undefined,
-  remote: RemoteBackend | null,
-): Promise<ToolDefinition[]> {
-  const pi = await loadPi();
-  const bash = remote
-    ? pi.createBashToolDefinition(cwd, { operations: remote.bash })
-    : pi.createBashToolDefinition(cwd, { shellPath, commandPrefix });
-  const schema = bash.parameters as unknown as { properties: Record<string, unknown> };
+function taskControls(parent: TaskParent): ToolDefinition[] {
   return [
-    {
-      ...bash,
-      parameters: {
-        ...schema,
-        properties: {
-          ...schema.properties,
-          background: {
-            type: 'boolean',
-            description:
-              'Set to true to run in the background and return taskId immediately. Use this for commands you do not need to wait for, such as development servers or long builds. Completion sends a notification. Use task_output to inspect output or task_stop to stop the task.',
-          },
-        },
-      } as unknown as ToolDefinition['parameters'],
-      async execute(
-        toolCallId,
-        params: { command: string; timeout?: number; background?: boolean },
-        signal,
-        onUpdate,
-        ctx,
-      ) {
-        if (!params.background) return bash.execute(toolCallId, params, signal, onUpdate, ctx);
-        const run: BashRunner = remote
-          ? (command, options) => remote.runInBackground(command, cwd, options)
-          : localBash(cwd, pi.getShellConfig(shellPath), commandPrefix);
-        const id = startBash(parent, params.command, params.timeout, run);
-        return text(`已在后台运行（taskId: ${id}）。结束时会自动通知你，不需要轮询。`);
-      },
-    } as ToolDefinition,
     {
       name: 'task_output',
       label: 'task_output',
@@ -388,5 +351,80 @@ export async function backgroundTools(
         return text('已停止。');
       },
     },
+  ];
+}
+
+export async function backgroundTools(
+  parent: TaskParent,
+  cwd: string,
+  shellPath: string,
+  commandPrefix: string | undefined,
+  remote: RemoteBackend | null,
+  sandbox: SandboxRoots | null = null,
+): Promise<ToolDefinition[]> {
+  if (sandbox) {
+    const run: BashRunner = (command, { signal, timeout, onData }) =>
+      sandboxBash(sandbox, command, {
+        signal,
+        timeoutMs: timeout ? timeout * 1000 : undefined,
+        onData,
+      }).then((result) => ({
+        status: result.code === 0 ? 'completed' : 'failed',
+        exitCode: result.code,
+      }));
+    const bash = await sandboxBashTool(sandbox, true);
+    return [
+      {
+        ...bash,
+        async execute(
+          toolCallId,
+          params: { command: string; timeout?: number; background?: boolean },
+          signal,
+          onUpdate,
+          ctx,
+        ) {
+          if (!params.background) return bash.execute(toolCallId, params, signal, onUpdate, ctx);
+          const id = startBash(parent, params.command, params.timeout, run);
+          return text(`已在后台运行（taskId: ${id}）。结束时会自动通知你，不需要轮询。`);
+        },
+      } as ToolDefinition,
+      ...taskControls(parent),
+    ];
+  }
+  const pi = await loadPi();
+  const bash = remote
+    ? pi.createBashToolDefinition(cwd, { operations: remote.bash })
+    : pi.createBashToolDefinition(cwd, { shellPath, commandPrefix });
+  const schema = bash.parameters as unknown as { properties: Record<string, unknown> };
+  return [
+    {
+      ...bash,
+      parameters: {
+        ...schema,
+        properties: {
+          ...schema.properties,
+          background: {
+            type: 'boolean',
+            description:
+              'Set to true to run in the background and return taskId immediately. Use this for commands you do not need to wait for, such as development servers or long builds. Completion sends a notification. Use task_output to inspect output or task_stop to stop the task.',
+          },
+        },
+      } as unknown as ToolDefinition['parameters'],
+      async execute(
+        toolCallId,
+        params: { command: string; timeout?: number; background?: boolean },
+        signal,
+        onUpdate,
+        ctx,
+      ) {
+        if (!params.background) return bash.execute(toolCallId, params, signal, onUpdate, ctx);
+        const run: BashRunner = remote
+          ? (command, options) => remote.runInBackground(command, cwd, options)
+          : localBash(cwd, pi.getShellConfig(shellPath), commandPrefix);
+        const id = startBash(parent, params.command, params.timeout, run);
+        return text(`已在后台运行（taskId: ${id}）。结束时会自动通知你，不需要轮询。`);
+      },
+    } as ToolDefinition,
+    ...taskControls(parent),
   ];
 }

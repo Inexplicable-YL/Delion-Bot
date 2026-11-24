@@ -10,6 +10,7 @@ import {
   runSessionCommand,
   setSessionEffort,
   setSessionModel,
+  setSessionPermissionMode,
 } from './session/commands';
 import {
   listSessionTurnChanges,
@@ -40,6 +41,7 @@ export const agentProtocol = implement(agentContract, {
   'list-models': () => usableLlmProviders().map(({ id, name, models }) => ({ id, name, models })),
   'set-model': ({ sessionId, providerId, model }) => setSessionModel(sessionId, providerId, model),
   'set-effort': ({ sessionId, level }) => setSessionEffort(sessionId, level),
+  'set-permission-mode': ({ sessionId, mode }) => setSessionPermissionMode(sessionId, mode),
   'list-commands': () => listChatCommands(),
   'run-command': ({ sessionId, name, args }) => runSessionCommand(sessionId, name, args),
   'open-sidechat': ({ parentId }) => openSidechat(parentId),

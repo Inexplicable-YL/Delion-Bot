@@ -31,6 +31,10 @@ import {
   useAfterMenuClose,
 } from '../../../ui/DropdownMenu';
 import { ProjectFileTree, type EntryAction } from '../navigation/ProjectFileTree';
+import { useSessions } from '../../../modules/chat/view/sessions';
+import { deliveryLibrary } from './delivery-library';
+import { walkGroups } from './layout-schema';
+import { useWorkbenchLayout } from './layout-store';
 import type { ExplorerPending } from '../../../modules/workspace/view';
 import { useRemoteActivity } from '../navigation/remote-activity';
 import { RemoteConnectionTip } from '../navigation/RemoteConnectionTip';
@@ -107,7 +111,31 @@ export function WorkbenchExplorer({
   onCreated: (entry: WorkspaceEntry) => void;
 }) {
   const entries = useWorkspaceStore((s) => s.workspace.entries);
-  const libraryRoot = useWorkspaceStore((s) => `${s.workspace.directory}/workspace`);
+  const storageDirectory = useWorkspaceStore((s) => s.workspace.directory);
+  const libraryRoot = storageDirectory ? `${storageDirectory}/workspace` : undefined;
+  const layoutRoot = useWorkbenchLayout((s) => s.root);
+  const maximizedGroupId = useWorkbenchLayout((s) => s.maximized);
+  const focusedGroupId = useWorkbenchLayout((s) => s.focus);
+  const sessionTitles = useSessions((s) => s.lists.general);
+  const delivery =
+    projectId !== null
+      ? null
+      : storageDirectory
+        ? deliveryLibrary({
+            directory: storageDirectory,
+            groups: walkGroups(layoutRoot),
+            maximizedGroupId,
+            focusedGroupId,
+            titles: Object.fromEntries((sessionTitles ?? []).map((item) => [item.id, item.title])),
+            loaded: entries,
+          })
+        : {
+            mode: 'empty' as const,
+            rootId: null,
+            selectedId: null,
+            expandedIds: [],
+            entries: [],
+          };
   const rootId = entries.some((entry) => entry.id === projectId) ? projectId : null;
   const root = entries.find((e) => e.id === rootId);
   const remoteRoot = Boolean(root?.remoteId);
@@ -139,7 +167,17 @@ export function WorkbenchExplorer({
   };
 
   const expand = (id: string, open: boolean) => useTreeState.getState().expand(id, open);
-  const container = () => currentContainerOf(selected ?? activeDocKey, rootId);
+  const container = () => {
+    if (delivery?.mode === 'flat') return delivery.rootId;
+    if (delivery?.mode === 'grouped') {
+      const key = selected ?? activeDocKey ?? delivery.selectedId;
+      const hit = delivery.entries.find((entry) => entry.id === key);
+      if (hit?.kind === 'folder' || hit?.kind === 'project') return hit.id;
+      if (hit?.parentId) return hit.parentId;
+      return delivery.selectedId;
+    }
+    return currentContainerOf(selected ?? activeDocKey, rootId);
+  };
 
   const selectEntry = (id: string) => {
     const item = useWorkspaceStore.getState().workspace.entries.find((entry) => entry.id === id);
@@ -477,62 +515,75 @@ export function WorkbenchExplorer({
                 {visible && (
                   <ProjectFileTree
                     canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}
-                    entries={entries}
-                    expanded={expanded}
-                    folderReveal={projectId === null ? folderReveal : null}
+                    entries={delivery ? delivery.entries : entries}
+                    expanded={
+                      delivery ? [...new Set([...expanded, ...delivery.expandedIds])] : expanded
+                    }
+                    folderReveal={delivery ? null : projectId === null ? folderReveal : null}
                     pending={pending}
                     onAction={treeAction}
                     onExpand={expand}
-                    onImportFiles={rootId ? importDroppedAnywhere : undefined}
+                    onImportFiles={delivery || rootId ? importDroppedAnywhere : undefined}
                     onMove={remoteRoot ? undefined : move}
                     onOpenProject={openProject}
                     onOpenToSide={openToSide}
                     onActivate={keepDocument}
-                    libraryRoot={projectId === null ? libraryRoot : undefined}
+                    libraryRoot={
+                      delivery ? undefined : projectId === null ? libraryRoot : undefined
+                    }
                     onRemoteAction={remoteAction}
                     onSelect={selectEntry}
                     query={query}
-                    rootId={rootId}
-                    selected={(projectId === null && folderReveal?.id) || activeDocKey || selected}
+                    rootId={delivery ? delivery.rootId : rootId}
+                    selected={
+                      delivery
+                        ? activeDocKey &&
+                          delivery.entries.some((entry) => entry.id === activeDocKey)
+                          ? activeDocKey
+                          : delivery.selectedId
+                        : (projectId === null && folderReveal?.id) || activeDocKey || selected
+                    }
                   />
                 )}
               </div>
-              <div className="shrink-0 border-t border-line">
-                <button
-                  aria-expanded={archiveOpen || Boolean(query.trim())}
-                  className={cn(
-                    sectionClass,
-                    'w-full transition-colors duration-base hover:text-ink-2',
-                  )}
-                  onClick={() => setArchiveOpen((value) => !value)}
-                  type="button"
-                >
-                  <CollapseChevron open={archiveOpen || Boolean(query.trim())} />
-                  <Archive className="size-4" />
-                  归档
-                </button>
-                {(archiveOpen || query.trim()) && (
-                  <div className="max-h-56 overflow-y-auto pb-1">
-                    {visible && (
-                      <ProjectFileTree
-                        archived
-                        canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}
-                        entries={entries}
-                        expanded={expanded}
-                        onAction={treeAction}
-                        onExpand={expand}
-                        onMove={move}
-                        onOpenProject={openProject}
-                        onOpenToSide={openToSide}
-                        onSelect={selectEntry}
-                        query={query}
-                        rootId={workspaceArchiveId}
-                        selected={activeDocKey ?? selected}
-                      />
+              {!delivery && (
+                <div className="shrink-0 border-t border-line">
+                  <button
+                    aria-expanded={archiveOpen || Boolean(query.trim())}
+                    className={cn(
+                      sectionClass,
+                      'w-full transition-colors duration-base hover:text-ink-2',
                     )}
-                  </div>
-                )}
-              </div>
+                    onClick={() => setArchiveOpen((value) => !value)}
+                    type="button"
+                  >
+                    <CollapseChevron open={archiveOpen || Boolean(query.trim())} />
+                    <Archive className="size-4" />
+                    归档
+                  </button>
+                  {(archiveOpen || query.trim()) && (
+                    <div className="max-h-56 overflow-y-auto pb-1">
+                      {visible && (
+                        <ProjectFileTree
+                          archived
+                          canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}
+                          entries={entries}
+                          expanded={expanded}
+                          onAction={treeAction}
+                          onExpand={expand}
+                          onMove={move}
+                          onOpenProject={openProject}
+                          onOpenToSide={openToSide}
+                          onSelect={selectEntry}
+                          query={query}
+                          rootId={workspaceArchiveId}
+                          selected={activeDocKey ?? selected}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -408,6 +408,16 @@ export function useChat(
       .finally(refresh);
   };
 
+  const selectPermissionMode = (mode: 'restricted' | 'full') => {
+    if (!window.delionBot) return;
+    optimisticChat({ permissionMode: mode });
+    void agentClient['set-permission-mode']({ sessionId, mode })
+      .catch((e) =>
+        showToast({ variant: 'error', title: '切换文件权限失败', description: errorMessage(e) }),
+      )
+      .finally(refresh);
+  };
+
   const selectEffort = (level: string) => {
     if (!window.delionBot) return;
     optimisticChat({ effort: level });
@@ -459,6 +469,7 @@ export function useChat(
       askAbout,
       selectModel,
       selectEffort,
+      selectPermissionMode,
       fork,
       refresh,
     },

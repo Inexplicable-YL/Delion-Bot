@@ -129,10 +129,13 @@ export const chatMessageSchema = z.object({
   task: taskNoticeDetailsSchema.optional(),
 });
 
+export const permissionModeSchema = z.enum(['restricted', 'full']);
+
 export const workspaceChatSchema = z.object({
   sessionId: z.string().nullable(),
   projectId: z.string().nullable(),
   cwd: z.string().nullable(),
+  permissionMode: permissionModeSchema.nullable().optional(),
   running: z.boolean().optional(),
   activeTool: z.string().optional(),
   compacting: z.boolean().optional(),
@@ -328,6 +331,10 @@ export const agentContract = defineContract(
     },
     'set-effort': {
       input: z.object({ sessionId, level: z.string().min(1).max(16) }),
+      output: workspaceChatSchema,
+    },
+    'set-permission-mode': {
+      input: z.object({ sessionId, mode: permissionModeSchema }),
       output: workspaceChatSchema,
     },
     'list-commands': { input: empty, output: z.array(chatCommandViewSchema) },

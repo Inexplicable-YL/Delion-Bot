@@ -53,6 +53,8 @@ export function ChatComposerMenu({
   searchSelectedId,
   onRefreshSearch,
   onSelectSearch,
+  permissionMode = null,
+  onPermissionMode,
 }: {
   className?: string;
   allowProjectSwitch: boolean;
@@ -71,6 +73,8 @@ export function ChatComposerMenu({
   searchSelectedId: string | null;
   onRefreshSearch: () => void;
   onSelectSearch?: (id: string | null) => void;
+  permissionMode?: 'restricted' | 'full' | null;
+  onPermissionMode?: (mode: 'restricted' | 'full') => void;
 }) {
   const { navigate, onCreateProject } = useChatTabSource();
   const entries = useWorkspaceStore((state) => state.workspace.entries);
@@ -185,6 +189,28 @@ export function ChatComposerMenu({
                   </DropdownMenuItem>
                 </>
               )}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        {permissionMode && onPermissionMode && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <AdjustmentsHorizontalIcon /> 文件权限
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-64">
+              <DropdownMenuRadioGroup
+                value={permissionMode}
+                onValueChange={(value) => {
+                  if (value === 'restricted' || value === 'full') onPermissionMode(value);
+                }}
+              >
+                <DropdownMenuRadioItem value="restricted">受限</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="full">完全权限</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              <p className="px-2 py-2 text-ui-callout text-ink-2">
+                受限只允许写入 privacy 和
+                delivery，外部文件只读，且没有网络。完全权限沿用原来的本机权限。
+              </p>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}

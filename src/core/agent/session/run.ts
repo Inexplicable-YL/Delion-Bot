@@ -35,12 +35,12 @@ import {
   THINKING_TIME,
 } from './projection';
 import { composePrompt } from './prompt';
+import { launchPlan } from '../sandbox/mode';
 import {
   isRemoteSession,
   readySelection,
   row,
   modelAutoCompaction,
-  sessionCwd,
   storeActivity,
   storeModel,
   storeSessionFile,
@@ -55,8 +55,9 @@ export async function ensureLive(id: string): Promise<Live> {
   const choice = readySelection(meta);
   const { selection } = choice;
   if (!choice.stored) storeModel(id, selection.provider.id, selection.model, selection.effort);
-  const cwd = sessionCwd(meta.project_id, meta.cwd);
-  const options = await agentEnvironment().sessionOptions(meta.project_id, cwd, {
+  const plan = launchPlan(meta);
+  const cwd = plan.hostCwd;
+  const options = await agentEnvironment().sessionOptions(meta.project_id, plan.piCwd, {
     askCards: !meta.parent_id,
     sessionId: id,
   });
@@ -68,7 +69,7 @@ export async function ensureLive(id: string): Promise<Live> {
     deliver: (notice, wake) => deliverTaskNotice(id, notice, wake),
   };
   const session = await openPiSession({
-    cwd,
+    cwd: plan.piCwd,
     file: existsSync(meta.file) ? meta.file : undefined,
     selection,
     ...options,
@@ -80,8 +81,9 @@ export async function ensureLive(id: string): Promise<Live> {
               parent,
               cwd,
               options.shellPath,
-              options.commandPrefix,
+              plan.roots ? undefined : options.commandPrefix,
               remote && remoteBackend(remote.target),
+              plan.roots,
             )),
             taskTool(parent, cwd, runSubagent),
           ],

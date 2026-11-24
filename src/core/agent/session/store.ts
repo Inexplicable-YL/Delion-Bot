@@ -45,6 +45,44 @@ export function chatSessionDirectory(id: string) {
   return dir;
 }
 
+const permissionKey = (id: string) => `session-permission:${id}`;
+
+function setting(key: string): string | undefined {
+  return (
+    hostPorts().database().prepare('SELECT value FROM workspace_settings WHERE key=?').get(key) as
+      { value: string } | undefined
+  )?.value;
+}
+
+export function readPermissionMode(id: string): 'restricted' | 'full' {
+  return setting(permissionKey(id)) === 'full' ? 'full' : 'restricted';
+}
+
+export function writePermissionMode(id: string, mode: 'restricted' | 'full') {
+  hostPorts()
+    .database()
+    .prepare('INSERT OR REPLACE INTO workspace_settings VALUES (?, ?)')
+    .run(permissionKey(id), mode);
+}
+
+export function chatDeliveryDirectory(id: string) {
+  const dir = join(hostPorts().paths.storage(), 'chat-delivery', id);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+export function ensurePrivateSession(id: string): string {
+  const dir = chatSessionDirectory(id);
+  mkdirSync(join(dir, '.home'), { recursive: true });
+  mkdirSync(join(dir, '.cache'), { recursive: true });
+  hostPorts()
+    .database()
+    .prepare('UPDATE sessions SET cwd=? WHERE id=? AND (cwd IS NULL OR cwd<>?)')
+    .run(dir, id, dir);
+  chatDeliveryDirectory(id);
+  return dir;
+}
+
 export function sessionCwd(projectId: string | null, stored: string | null): string {
   if (stored) return stored;
   const path = projectId === null ? workspaceRoot() : hostPorts().projects.find(projectId)?.path;
@@ -255,9 +293,10 @@ export function removeSession(id: string) {
   const db = hostPorts().database();
   db.transaction(() => {
     db.prepare('DELETE FROM sessions WHERE id=?').run(id);
-    db.prepare('DELETE FROM workspace_settings WHERE key IN (?, ?)').run(
+    db.prepare('DELETE FROM workspace_settings WHERE key IN (?, ?, ?)').run(
       `session-commands:${id}`,
       `session-autocompact:${id}`,
+      permissionKey(id),
     );
   })();
 }
@@ -324,7 +363,7 @@ export function emptySessionId(projectId: string | null): string | undefined {
 
 export function insertSession(projectId: string | null): string {
   const id = randomUUID();
-  const cwd = projectId !== null ? null : chatSessionDirectory(id);
+  const cwd = projectId !== null ? null : ensurePrivateSession(id);
   const now = new Date().toISOString();
   hostPorts()
     .database()

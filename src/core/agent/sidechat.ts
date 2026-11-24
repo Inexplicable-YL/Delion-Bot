@@ -21,7 +21,8 @@ import {
   withoutToolImages,
 } from './session/projection';
 import { composePrompt } from './session/prompt';
-import { adoptSessionFile, readySelection, row, sessionCwd } from './session/store';
+import { launchPlan } from './sandbox/mode';
+import { adoptSessionFile, readySelection, row } from './session/store';
 import { emit } from '../ports';
 
 interface Side {
@@ -135,23 +136,23 @@ async function sidechatSource(id: string) {
       )
     : -1;
   if (asking >= 0) branch = branch.slice(0, asking);
-  const cwd = entry?.cwd ?? sessionCwd(meta.project_id, meta.cwd);
-  return { meta, cwd, selection, branch };
+  const plan = launchPlan(meta);
+  return { meta, cwd: plan.hostCwd, piCwd: plan.piCwd, selection, branch };
 }
 
 async function createSide(parentId: string): Promise<Side> {
-  const { meta, cwd, selection, branch } = await sidechatSource(parentId);
+  const { meta, piCwd, selection, branch } = await sidechatSource(parentId);
   const pi = await loadPi();
   const inMemory = pi.SessionManager.inMemory(
-    cwd,
+    piCwd,
     meta.file ? { parentSession: meta.file } : undefined,
     branch,
   );
   const session = await openPiSession({
-    cwd,
+    cwd: piCwd,
     inMemory,
     selection,
-    ...(await agentEnvironment().sessionOptions(meta.project_id, cwd, {
+    ...(await agentEnvironment().sessionOptions(meta.project_id, piCwd, {
       askCards: false,
       sessionId: parentId,
     })),

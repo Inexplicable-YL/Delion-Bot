@@ -22,6 +22,7 @@ import {
   removeSession,
   row,
   sessionCwd,
+  writePermissionMode,
   storeModel,
   storeProject,
   storeModelAutoCompaction,
@@ -29,6 +30,25 @@ import {
   storeTitle,
   storeVisibility,
 } from './store';
+
+export function setSessionPermissionMode(id: string, mode: 'restricted' | 'full'): WorkspaceChat {
+  const meta = row(id);
+  if (meta.project_id || meta.parent_id) throw new Error('只有普通对话可以切换文件权限');
+  if (live.get(id)?.run || live.get(id)?.session.isCompacting)
+    throw new Error('请等待当前回答完成');
+  for (const child of childSessionIds(id)) {
+    const entry = live.get(child);
+    if (entry?.run || entry?.session.isCompacting) throw new Error('请等待当前回答完成');
+  }
+  writePermissionMode(id, mode);
+  for (const child of childSessionIds(id)) {
+    const entry = live.get(child);
+    if (entry) disposeLive(child, entry);
+  }
+  const entry = live.get(id);
+  if (entry) disposeLive(id, entry);
+  return snapshot(id);
+}
 
 export async function newSession(projectId: string | null): Promise<WorkspaceChat> {
   if (projectId !== null) sessionCwd(projectId, null);
