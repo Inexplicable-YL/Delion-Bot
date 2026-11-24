@@ -25,7 +25,7 @@ export function UserMessage({ children }: { children: ReactNode }) {
 
 export function UserBubble({ children }: { children: ReactNode }) {
   return (
-    <div className="max-w-message rounded-card bg-field px-3.5 py-2 text-ui-body text-ink shadow-hairline wrap-anywhere">
+    <div className="max-w-message rounded-card bg-field px-3.5 py-2 text-ui-chat text-ink shadow-hairline wrap-anywhere">
       {children}
     </div>
   );
@@ -107,7 +107,7 @@ export function UserMessageEditor({
     <div className="mb-5 flex flex-col items-end">
       <textarea
         autoFocus
-        className="max-h-64 w-full max-w-message resize-none rounded-card border border-line border-line-strong bg-surface px-3.5 py-2 text-ui-body text-ink shadow-card outline-none [field-sizing:content]"
+        className="max-h-64 w-full max-w-message resize-none rounded-card border border-line border-line-strong bg-surface px-3.5 py-2 text-ui-chat text-ink shadow-card outline-none [field-sizing:content]"
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing) return;
@@ -143,7 +143,7 @@ export function UserMessageEditor({
 export function AssistantMessage({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
-      className={cn('group/message mb-8 min-w-0 text-ui-body wrap-anywhere', className)}
+      className={cn('group/message mb-8 min-w-0 text-ui-chat wrap-anywhere', className)}
       {...props}
     />
   );
@@ -189,7 +189,7 @@ export function ErrorCard({ reason, onRetry }: { reason: string; onRetry?: () =>
   return (
     <div
       role="alert"
-      className="my-3 flex items-start gap-2 rounded-card bg-danger-tint px-3 py-2 text-ui-body text-ink"
+      className="my-3 flex items-start gap-2 rounded-card bg-danger-tint px-3 py-2 text-ui-chat text-ink"
     >
       <CircleAlert aria-hidden className="mt-1 size-4 shrink-0 text-danger" />
       <p className="min-w-0 flex-1 break-words">{reason}</p>
@@ -265,7 +265,7 @@ export function CompactionDivider({
       >
         {divider}
       </summary>
-      {expanded && <div className="mt-3 rounded-card bg-inset p-4">{children}</div>}
+      {expanded && <div className="mt-3 rounded-card bg-field p-4 shadow-hairline">{children}</div>}
     </details>
   ) : (
     <div className={cn('my-6', dividerClass)} role="status">

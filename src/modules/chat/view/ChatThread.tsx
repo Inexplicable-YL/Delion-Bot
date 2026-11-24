@@ -421,7 +421,7 @@ function AssistantMessage({
         />
       )}
       {reason && <ErrorCard onRetry={onRetry} reason={reason} />}
-      {message.stopped && !live && <p className="my-2 text-ui-body text-ink-2">已停止</p>}
+      {message.stopped && !live && <p className="my-2 text-ui-chat text-ink-2">已停止</p>}
       {showChanges && <TurnChangesCard sessionId={sessionId} turnId={showChanges} />}
       {!live && (content || Boolean(toolResults?.length)) && (
         <MessageActions className="mt-1 opacity-100">
@@ -487,7 +487,7 @@ function TaskNoticeMessage({ content, task }: { content: string; task: TaskNotic
         task.exitCode !== undefined && task.status === 'failed' ? `（退出码 ${task.exitCode}）` : ''
       }`}
     >
-      <ChatMarkdown className="pt-1.5 text-ui-body" mode="static">
+      <ChatMarkdown className="pt-1.5" mode="static">
         {content}
       </ChatMarkdown>
     </TaskNotice>
@@ -689,9 +689,7 @@ export function ChatThread({
                   releasedTokens={message.compaction?.releasedTokens}
                 >
                   {message.entryId && message.content && (
-                    <ChatMarkdown className="text-ui-body" mode="static">
-                      {message.content}
-                    </ChatMarkdown>
+                    <ChatMarkdown mode="static">{message.content}</ChatMarkdown>
                   )}
                 </CompactionDivider>
               ) : message.task ? (
@@ -705,9 +703,7 @@ export function ChatThread({
                   customType={message.extension.customType}
                   key={`${chat.sessionId}:${index}`}
                 >
-                  <ChatMarkdown className="text-ui-body" mode="static">
-                    {message.content}
-                  </ChatMarkdown>
+                  <ChatMarkdown mode="static">{message.content}</ChatMarkdown>
                 </ExtensionMessage>
               ) : message.role === 'user' ? (
                 <UserMessage

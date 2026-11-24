@@ -36,7 +36,7 @@ export function CommentInput({
     <div className="flex items-end gap-1">
       <textarea
         aria-label="评论"
-        className="max-h-32 min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-ui-body text-ink outline-none [field-sizing:content] placeholder:text-ink-2"
+        className="max-h-32 min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-ui-chat text-ink outline-none [field-sizing:content] placeholder:text-ink-2"
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
           if (event.nativeEvent.isComposing) return;

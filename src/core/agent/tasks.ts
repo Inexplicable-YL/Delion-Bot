@@ -81,8 +81,7 @@ export function trackTask(
         error: error instanceof Error ? error.message : String(error),
       }))
       .then((outcome) => {
-        if (entry.stoppedBy && outcome.status !== 'completed')
-          outcome = { ...outcome, status: 'stopped' };
+        if (entry.stoppedBy) outcome = { ...outcome, status: 'stopped' };
         Object.assign(entry, { status: outcome.status, outcome, finishedAt: Date.now() });
         if (entry.stoppedBy === 'session') return;
         entry.parent.publish();

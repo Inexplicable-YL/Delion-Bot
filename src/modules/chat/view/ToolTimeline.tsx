@@ -264,7 +264,7 @@ export function ReplyTrace({
     const blockLive = live && index === lastIndex;
     if (part.type === 'text')
       return (
-        <div data-assistant-body className="my-3 min-w-0 text-ui-body text-ink first:mt-0">
+        <div data-assistant-body className="my-3 min-w-0 text-ui-chat text-ink first:mt-0">
           {renderText ? (
             renderText(part.text)
           ) : (

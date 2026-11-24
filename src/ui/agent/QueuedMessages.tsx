@@ -12,7 +12,7 @@ export function QueuedMessages({
   return (
     <div
       aria-label="待送达的消息"
-      className="mb-2 flex items-start gap-2 rounded-card bg-surface px-3 py-1.5 text-ui-body shadow-hairline"
+      className="mb-2 flex items-start gap-2 rounded-card bg-surface px-3 py-1.5 text-ui-chat shadow-hairline"
       role="status"
       style={{ animation: 'pop-in 180ms cubic-bezier(0.23,1,0.32,1) both' }}
     >
