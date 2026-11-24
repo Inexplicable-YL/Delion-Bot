@@ -16,6 +16,7 @@ export type ExecutionMode = PermissionMode;
 export interface ScopedDirectory {
   name: '/privacy' | '/share' | '/project';
   host: string;
+  alias?: string;
   remote?: RemoteTarget;
 }
 
@@ -80,9 +81,10 @@ export function scopedDirectories(meta: SessionRow): ScopedDirectory[] {
     ...(process.platform === 'darwin' ? ['/dev', '/System'] : []),
   ].map(resolvedPath);
   if (owner.project_id) {
-    const host = realpathSync(sessionCwd(owner.project_id, null));
+    const path = sessionCwd(owner.project_id, null);
+    const host = realpathSync(path);
     if (blocked.some((path) => covers(path, host) || covers(host, path))) return [];
-    return [{ name: '/project', host }];
+    return [{ name: '/project', host, ...(host !== path && { alias: path }) }];
   }
   return [
     { name: '/privacy' as const, path: chatSessionDirectory(owner.id), directory: 'chat-sessions' },
@@ -96,6 +98,6 @@ export function scopedDirectories(meta: SessionRow): ScopedDirectory[] {
       covers(host, application)
     )
       throw new Error('聊天文件目录不可用');
-    return { name, host };
+    return { name, host, ...(host !== path && { alias: path }) };
   });
 }

@@ -3,13 +3,18 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { ScopedDirectory } from './mode';
 
 export function virtualizeModelPaths(directories: ScopedDirectory[]) {
-  const paths = directories.flatMap(({ host, name, remote }) => {
-    const slash = host.replaceAll('\\', '/');
-    const aliases = new Set([host, host.replaceAll('\\', '\\\\'), slash]);
-    if (!remote) aliases.add(pathToFileURL(host).href);
-    if (!remote && process.platform === 'win32') {
-      aliases.add(slash.replace(/^([a-z]):\//i, '/$1/'));
-      aliases.add(host.replace(/^([a-z]:\\)/i, '\\\\?\\$1'));
+  const paths = directories.flatMap(({ host, alias, name, remote }) => {
+    const aliases = new Set<string>();
+    for (const path of alias ? [host, alias] : [host]) {
+      const slash = path.replaceAll('\\', '/');
+      aliases.add(path);
+      aliases.add(path.replaceAll('\\', '\\\\'));
+      aliases.add(slash);
+      if (!remote) aliases.add(pathToFileURL(path).href);
+      if (!remote && process.platform === 'win32') {
+        aliases.add(slash.replace(/^([a-z]):\//i, '/$1/'));
+        aliases.add(path.replace(/^([a-z]:\\)/i, '\\\\?\\$1'));
+      }
     }
     return [...aliases].map((path) => ({
       path,
