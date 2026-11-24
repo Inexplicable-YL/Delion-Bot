@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { SkillOrigin, SkillView } from '../protocol/capabilities';
@@ -77,7 +85,12 @@ function globalSkills(): SkillView[] {
     if (!existsSync(directory)) continue;
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name, SKILL_ENTRY_FILE);
-      if (!entry.isDirectory() || seen.has(entry.name) || !existsSync(path)) continue;
+      if (
+        !entry.isDirectory() ||
+        seen.has(entry.name) ||
+        !lstatSync(path, { throwIfNoEntry: false })?.isFile()
+      )
+        continue;
       seen.add(entry.name);
       const origin: SkillOrigin =
         directory === builtinSkillsDirectory() && builtin.has(entry.name) ? 'builtin' : 'user';
@@ -97,8 +110,13 @@ function globalSkills(): SkillView[] {
   return skills;
 }
 
-async function projectSkills(disabledPaths: Set<string>): Promise<SkillView[]> {
-  const projects = hostPorts().projects.local();
+async function projectSkills(
+  disabledPaths: Set<string>,
+  projectId?: string | null,
+): Promise<SkillView[]> {
+  const projects = hostPorts()
+    .projects.local()
+    .filter(({ id }) => projectId === undefined || id === projectId);
   const lists = await Promise.all(
     projects
       .filter((project) => existsSync(project.path))
@@ -117,9 +135,9 @@ async function projectSkills(disabledPaths: Set<string>): Promise<SkillView[]> {
   return lists.flat();
 }
 
-export async function listSkills(): Promise<SkillView[]> {
+export async function listSkills(projectId?: string | null): Promise<SkillView[]> {
   ensureBuiltinSkills();
-  return [...globalSkills(), ...(await projectSkills(readDisabledSkillPaths()))];
+  return [...globalSkills(), ...(await projectSkills(readDisabledSkillPaths(), projectId))];
 }
 
 export async function setGlobalSkillEnabled(name: string, enabled: boolean): Promise<void> {

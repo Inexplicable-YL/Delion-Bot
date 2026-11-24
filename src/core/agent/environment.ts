@@ -30,6 +30,7 @@ import { virtualizeModelPaths } from './sandbox/model-paths';
 import { approveTool } from './sandbox/approve-tool';
 import { downloadTool, scopedFileTools } from './sandbox/scoped-files';
 import { sandboxCommandTool } from './sandbox/local-command';
+import { scopedSkillTool } from './sandbox/skill-tool';
 import { chatSessionDirectory, chatShareDirectory, row, workspaceRoot } from './session/store';
 
 let bridge: ReturnType<typeof startDomainBridge> | undefined;
@@ -137,7 +138,7 @@ export function agentEnvironment() {
           mode === 'read-only'
             ? 'Mode: read-only.'
             : mode === 'approval'
-              ? 'Mode: request approval. The app asks the user to approve writes, commands, external requests, and tool calls whose effects may change data. Use download_file to save an original binary to an allowed directory. Use the delion tool for Delion app commands when it is available.'
+              ? 'Mode: request approval. The app asks the user to approve writes, commands, external requests, and tool calls whose effects may change data. Use download_file to save an original binary to an allowed directory. Use read_skill to load an enabled skill. Use the delion tool for Delion app commands when it is available.'
               : 'Mode: project write. You can write and edit files in /project.';
         return {
           appendSystemPrompt: [
@@ -252,6 +253,7 @@ async function approvalTools(meta: ReturnType<typeof row>, session: string) {
   const remote = meta.project_id ? hostPorts().projects.remoteOf(meta.project_id) : null;
   const download = downloadTool(meta);
   return [
+    scopedSkillTool(meta),
     ...(download ? [approveTool(download, session, '下载文件')] : []),
     ...webTools.map((tool) =>
       approveTool(tool, session, tool.name === 'web_search' ? '联网搜索' : '读取网页'),
