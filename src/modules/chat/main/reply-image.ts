@@ -41,7 +41,7 @@ function locateImage(sessionId: string, path: string): ImageFile {
       kind: 'local',
       path: restrictedLocalPath(
         path,
-        { privacy: roots.privacyHost, delivery: roots.deliveryHost },
+        { privacy: roots.privacyHost, share: roots.shareHost },
         roots.conceal,
       ),
     };

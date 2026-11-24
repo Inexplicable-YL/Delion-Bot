@@ -32,7 +32,7 @@ import {
 } from '../../../ui/DropdownMenu';
 import { ProjectFileTree, type EntryAction } from '../navigation/ProjectFileTree';
 import { useSessions } from '../../../modules/chat/view';
-import { deliveryLibrary } from './delivery-library';
+import { shareLibrary } from './share-library';
 import { walkGroups } from './layout-schema';
 import { useWorkbenchLayout } from './layout-store';
 import type { ExplorerPending } from '../../../modules/workspace/view';
@@ -117,11 +117,11 @@ export function WorkbenchExplorer({
   const maximizedGroupId = useWorkbenchLayout((s) => s.maximized);
   const focusedGroupId = useWorkbenchLayout((s) => s.focus);
   const sessionTitles = useSessions((s) => s.lists.general);
-  const delivery =
+  const share =
     projectId !== null
       ? null
       : storageDirectory
-        ? deliveryLibrary({
+        ? shareLibrary({
             directory: storageDirectory,
             groups: walkGroups(layoutRoot),
             maximizedGroupId,
@@ -169,13 +169,13 @@ export function WorkbenchExplorer({
 
   const expand = (id: string, open: boolean) => useTreeState.getState().expand(id, open);
   const container = () => {
-    if (delivery?.mode === 'flat') return delivery.rootId;
-    if (delivery?.mode === 'grouped') {
-      const key = selected ?? activeDocKey ?? delivery.selectedId;
-      const hit = delivery.entries.find((entry) => entry.id === key);
+    if (share?.mode === 'flat') return share.rootId;
+    if (share?.mode === 'grouped') {
+      const key = selected ?? activeDocKey ?? share.selectedId;
+      const hit = share.entries.find((entry) => entry.id === key);
       if (hit?.kind === 'folder' || hit?.kind === 'project') return hit.id;
       if (hit?.parentId) return hit.parentId;
-      return delivery.selectedId;
+      return share.selectedId;
     }
     return currentContainerOf(selected ?? activeDocKey, rootId);
   };
@@ -513,45 +513,40 @@ export function WorkbenchExplorer({
                 }}
               >
                 <div className={eyebrowClass}>
-                  {delivery?.mode === 'flat' && delivery.sectionTitle
-                    ? `文件 > ${delivery.sectionTitle}`
+                  {share?.mode === 'flat' && share.sectionTitle
+                    ? `文件 > ${share.sectionTitle}`
                     : '文件'}
                 </div>
                 {visible && (
                   <ProjectFileTree
                     canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}
-                    entries={delivery ? delivery.entries : entries}
-                    expanded={
-                      delivery ? [...new Set([...expanded, ...delivery.expandedIds])] : expanded
-                    }
-                    folderReveal={delivery ? null : projectId === null ? folderReveal : null}
+                    entries={share ? share.entries : entries}
+                    expanded={share ? [...new Set([...expanded, ...share.expandedIds])] : expanded}
+                    folderReveal={share ? null : projectId === null ? folderReveal : null}
                     pending={pending}
                     onAction={treeAction}
                     onExpand={expand}
-                    onImportFiles={delivery || rootId ? importDroppedAnywhere : undefined}
+                    onImportFiles={share || rootId ? importDroppedAnywhere : undefined}
                     onMove={remoteRoot ? undefined : move}
                     onOpenProject={openProject}
                     onOpenToSide={openToSide}
                     onActivate={keepDocument}
-                    libraryRoot={
-                      delivery ? undefined : projectId === null ? libraryRoot : undefined
-                    }
+                    libraryRoot={share ? undefined : projectId === null ? libraryRoot : undefined}
                     onRemoteAction={remoteAction}
                     onSelect={selectEntry}
                     query={query}
-                    rootId={delivery ? delivery.rootId : rootId}
+                    rootId={share ? share.rootId : rootId}
                     selected={
-                      delivery
-                        ? activeDocKey &&
-                          delivery.entries.some((entry) => entry.id === activeDocKey)
+                      share
+                        ? activeDocKey && share.entries.some((entry) => entry.id === activeDocKey)
                           ? activeDocKey
-                          : delivery.selectedId
+                          : share.selectedId
                         : (projectId === null && folderReveal?.id) || activeDocKey || selected
                     }
                   />
                 )}
               </div>
-              {!delivery && (
+              {!share && (
                 <div className="shrink-0 border-t border-line">
                   <button
                     aria-expanded={archiveOpen || Boolean(query.trim())}

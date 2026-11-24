@@ -10,11 +10,11 @@ export function storageJoin(directory: string, ...parts: string[]): string {
   return [directory.replace(/[\\/]+$/, ''), ...parts].join(separator);
 }
 
-export function chatDeliveryPath(directory: string, sessionId: string): string {
-  return storageJoin(directory, 'chat-delivery', sessionId);
+export function chatSharePath(directory: string, sessionId: string): string {
+  return storageJoin(directory, 'chat-share', sessionId);
 }
 
-export function deliveryTarget(
+export function shareTarget(
   directory: string,
   tab: string | null,
 ): { sessionId: string; file: string | null } | null {
@@ -25,7 +25,7 @@ export function deliveryTarget(
   }
   const payload = /^(?:note|preview|review):/.test(tab) ? tab.slice(tab.indexOf(':') + 1) : tab;
   if (!/^(?:[a-z]:[\\/]|\\\\|\/)/i.test(payload)) return null;
-  const root = storageJoin(directory, 'chat-delivery').replaceAll('\\', '/').replace(/\/$/, '');
+  const root = storageJoin(directory, 'chat-share').replaceAll('\\', '/').replace(/\/$/, '');
   const path = payload.replaceAll('\\', '/');
   const comparable = (value: string) => (/^[a-z]:/i.test(value) ? value.toLowerCase() : value);
   const base = comparable(root);
@@ -47,14 +47,14 @@ export function visibleLeafSessions(
   const leaves = maximized.length ? maximized : groups;
   const ids: string[] = [];
   for (const leaf of leaves) {
-    const id = deliveryTarget(directory, leaf.active)?.sessionId;
+    const id = shareTarget(directory, leaf.active)?.sessionId;
     if (id && !ids.includes(id)) ids.push(id);
   }
   return ids;
 }
 
-function expandedDeliveryIds(directory: string, sessionId: string, file: string | null): string[] {
-  const root = chatDeliveryPath(directory, sessionId);
+function expandedShareIds(directory: string, sessionId: string, file: string | null): string[] {
+  const root = chatSharePath(directory, sessionId);
   const ids = [root];
   if (!file) return ids;
   const normalizedRoot = root.replaceAll('\\', '/');
@@ -72,7 +72,7 @@ function expandedDeliveryIds(directory: string, sessionId: string, file: string 
 }
 
 function folder(directory: string, session: { id: string; title: string }): WorkspaceEntry {
-  const path = chatDeliveryPath(directory, session.id);
+  const path = chatSharePath(directory, session.id);
   return {
     id: path,
     parentId: null,
@@ -84,7 +84,7 @@ function folder(directory: string, session: { id: string; title: string }): Work
   };
 }
 
-export function deliveryEntriesWithChildren(
+export function shareEntriesWithChildren(
   roots: readonly WorkspaceEntry[],
   loaded: readonly WorkspaceEntry[],
 ): WorkspaceEntry[] {
@@ -101,7 +101,7 @@ export function deliveryEntriesWithChildren(
   return [...kept.values()];
 }
 
-export interface DeliveryLibrary {
+export interface ShareLibrary {
   mode: 'empty' | 'flat' | 'grouped';
   rootId: string | null;
   selectedId: string | null;
@@ -110,14 +110,14 @@ export interface DeliveryLibrary {
   sectionTitle: string | null;
 }
 
-export function deliveryLibrary(input: {
+export function shareLibrary(input: {
   directory: string;
   groups: readonly VisibleLeaf[];
   maximizedGroupId: string | null;
   focusedGroupId: string | null;
   titles: Readonly<Record<string, string>>;
   loaded: readonly WorkspaceEntry[];
-}): DeliveryLibrary {
+}): ShareLibrary {
   const ids = visibleLeafSessions(input.directory, input.groups, input.maximizedGroupId);
   const sessions = ids.map((id) => ({ id, title: input.titles[id] || '新对话' }));
   if (sessions.length === 0)
@@ -134,13 +134,13 @@ export function deliveryLibrary(input: {
     : input.groups;
   const focused =
     visibleGroups.find((group) => group.id === input.focusedGroupId) ?? visibleGroups[0];
-  const focusedTarget = deliveryTarget(input.directory, focused?.active ?? null);
+  const focusedTarget = shareTarget(input.directory, focused?.active ?? null);
   const focusedFile =
     focusedTarget && ids.includes(focusedTarget.sessionId) ? focusedTarget.file : null;
   const expandedIds = [
     ...new Set(
       sessions.flatMap((session) =>
-        expandedDeliveryIds(
+        expandedShareIds(
           input.directory,
           session.id,
           focusedTarget?.sessionId === session.id ? focusedFile : null,
@@ -155,7 +155,7 @@ export function deliveryLibrary(input: {
       rootId: root.id,
       selectedId: focusedFile,
       expandedIds,
-      entries: deliveryEntriesWithChildren([root], input.loaded),
+      entries: shareEntriesWithChildren([root], input.loaded),
       sectionTitle: sessions[0]!.title,
     };
   }
@@ -163,14 +163,14 @@ export function deliveryLibrary(input: {
   const selectedFolder = roots.find(
     (entry) =>
       focusedTarget !== null &&
-      entry.path === chatDeliveryPath(input.directory, focusedTarget.sessionId),
+      entry.path === chatSharePath(input.directory, focusedTarget.sessionId),
   );
   return {
     mode: 'grouped',
     rootId: null,
     selectedId: focusedFile ?? selectedFolder?.id ?? roots[0]!.id,
     expandedIds,
-    entries: deliveryEntriesWithChildren(roots, input.loaded),
+    entries: shareEntriesWithChildren(roots, input.loaded),
     sectionTitle: null,
   };
 }

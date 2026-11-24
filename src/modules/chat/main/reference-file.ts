@@ -21,7 +21,7 @@ function referenceFile(sessionId: string, path: string) {
     return {
       path: restrictedLocalPath(
         path,
-        { privacy: roots.privacyHost, delivery: roots.deliveryHost },
+        { privacy: roots.privacyHost, share: roots.shareHost },
         roots.conceal,
       ),
       target: null,

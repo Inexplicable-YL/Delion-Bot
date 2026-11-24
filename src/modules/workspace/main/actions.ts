@@ -24,13 +24,13 @@ const changedPaths = new Set<string>();
 const REMOTE_REFERENCE_LIMIT = 3000;
 
 function watchWorkspace(state: WorkspaceState) {
-  const deliveryRoot = join(state.directory, 'chat-delivery');
+  const shareRoot = join(state.directory, 'chat-share');
   try {
-    mkdirSync(deliveryRoot, { recursive: true });
+    mkdirSync(shareRoot, { recursive: true });
   } catch {}
   const roots = new Set([
     join(state.directory, 'workspace'),
-    deliveryRoot,
+    shareRoot,
     ...state.entries
       .filter((item) => item.parentId === null && item.path && !item.remoteId)
       .map((item) =>

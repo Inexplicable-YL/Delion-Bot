@@ -82,14 +82,14 @@ describe('workspace store mirror', () => {
     ).toBe(prior);
   });
 
-  it('keeps files listed in a delivery directory that is not a workspace entry', async () => {
-    const delivery = 'C:/delion/chat-delivery/11111111-1111-4111-8111-111111111111';
+  it('keeps files listed in a share directory that is not a workspace entry', async () => {
+    const share = 'C:/delion/chat-share/11111111-1111-4111-8111-111111111111';
     const report: WorkspaceEntry = {
-      id: `${delivery}/报告.md`,
-      parentId: delivery,
+      id: `${share}/报告.md`,
+      parentId: share,
       kind: 'file',
       name: '报告.md',
-      path: `${delivery}/报告.md`,
+      path: `${share}/报告.md`,
       sourceId: null,
       updatedAt: '',
     };
@@ -100,7 +100,7 @@ describe('workspace store mirror', () => {
       overview: workspaceState,
       directories: {},
     });
-    await useWorkspaceStore.getState().ensureDirectory(delivery);
+    await useWorkspaceStore.getState().ensureDirectory(share);
     expect(useWorkspaceStore.getState().workspace.entries.map((entry) => entry.name)).toContain(
       '报告.md',
     );

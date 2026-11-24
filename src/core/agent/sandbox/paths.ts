@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 
-const VIRTUAL = ['privacy', 'delivery'] as const;
+const VIRTUAL = ['privacy', 'share'] as const;
 export type VirtualRoot = (typeof VIRTUAL)[number];
 
 export function sandboxPath(input: string): string {
@@ -36,14 +36,14 @@ export type VirtualResolution =
 
 export function resolveVirtualHost(
   input: string,
-  roots: { privacy: string; delivery: string },
+  roots: { privacy: string; share: string },
 ): VirtualResolution {
   const sandbox = sandboxPath(input);
   for (const name of VIRTUAL) {
     const prefix = `/${name}`;
     if (sandbox !== prefix && !sandbox.startsWith(`${prefix}/`)) continue;
     const rest = sandbox.slice(prefix.length).replace(/^\/+/, '');
-    const root = name === 'privacy' ? roots.privacy : roots.delivery;
+    const root = name === 'privacy' ? roots.privacy : roots.share;
     const target = resolve(root, ...rest.split('/').filter(Boolean));
     const rel = relative(root, target);
     if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel) && !rel.split(sep).includes('..')))
@@ -72,7 +72,7 @@ function concealedPath(path: string, concealed: readonly string[]): boolean {
 
 export function restrictedLocalPath(
   input: string,
-  roots: { privacy: string; delivery: string },
+  roots: { privacy: string; share: string },
   concealed: readonly string[],
 ): string {
   const virtual = resolveVirtualHost(input, roots);

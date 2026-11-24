@@ -57,7 +57,7 @@ import { sandboxTools } from '../../../../src/core/agent/sandbox/tools';
 import { fileLinkKey } from '../../../../src/modules/chat/view/reference-tokens';
 import { provideTestHostPorts } from '../../host-mock';
 import {
-  chatDeliveryDirectory,
+  chatShareDirectory,
   insertSession,
   row,
   writePermissionMode,
@@ -106,9 +106,9 @@ afterEach(() => {
 });
 
 describe('路径契约', () => {
-  it('把 privacy 和 delivery 映射进沙箱，不把它们解析到宿主目录', () => {
+  it('把 privacy 和 share 映射进沙箱，不把它们解析到宿主目录', () => {
     expect(sandboxPath('privacy/a.txt')).toBe('/privacy/a.txt');
-    expect(sandboxPath('/delivery')).toBe('/delivery');
+    expect(sandboxPath('/share')).toBe('/share');
     expect(sandboxPath('notes/a.txt')).toBe('/privacy/notes/a.txt');
     expect(sandboxPath('/etc/hosts')).toBe('/etc/hosts');
     expect(sandboxPath('C:/secret/db')).toBe('C:/secret/db');
@@ -117,13 +117,13 @@ describe('路径契约', () => {
   });
 
   it('虚拟链接不能通过 .. 离开两个根', () => {
-    const roots = { privacy: '/data/privacy', delivery: '/data/delivery' };
+    const roots = { privacy: '/data/privacy', share: '/data/share' };
     expect(resolveVirtualHost('/privacy/a.txt', roots)).toEqual({
       kind: 'host',
       path: resolve(roots.privacy, 'a.txt'),
     });
     expect(resolveVirtualHost('/privacy/../../etc/passwd', roots)).toEqual({ kind: 'denied' });
-    expect(resolveVirtualHost('/delivery/../secret', roots)).toEqual({ kind: 'denied' });
+    expect(resolveVirtualHost('/share/../secret', roots)).toEqual({ kind: 'denied' });
     expect(resolveVirtualHost('/etc/hosts', roots)).toEqual({ kind: 'passthrough' });
     expect(fileLinkKey('/privacy/a.txt', '/data/chat-sessions/uuid', null, true)).toBe(
       '/privacy/a.txt',
@@ -135,11 +135,11 @@ describe('路径契约', () => {
 });
 
 describe('受限普通对话', () => {
-  it('默认受限，交付目录名不是会话 id，子会话共用父目录', async () => {
+  it('默认受限，共享目录名不是会话 id，子会话共用父目录', async () => {
     database();
     const id = insertSession(null);
-    const delivery = chatDeliveryDirectory(id);
-    expect(delivery.replaceAll('\\', '/')).toMatch(new RegExp(`/chat-delivery/${id}$`));
+    const share = chatShareDirectory(id);
+    expect(share.replaceAll('\\', '/')).toMatch(new RegExp(`/chat-share/${id}$`));
     const child = '22222222-2222-4222-8222-222222222222';
     db.prepare(
       'INSERT INTO sessions (id, cwd, file, parent_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -148,9 +148,9 @@ describe('受限普通对话', () => {
     const childPlan = launchPlan(row(child));
     expect(parentPlan).toMatchObject({ mode: 'restricted', piCwd: '/privacy' });
     expect(childPlan.piCwd).toBe('/privacy');
-    expect(parentPlan.roots?.deliveryHost).toBe(delivery);
+    expect(parentPlan.roots?.shareHost).toBe(share);
     expect(childPlan.roots?.privacyHost).toBe(parentPlan.roots?.privacyHost);
-    expect(childPlan.roots?.deliveryHost).toBe(parentPlan.roots?.deliveryHost);
+    expect(childPlan.roots?.shareHost).toBe(parentPlan.roots?.shareHost);
     expect(parentPlan.roots?.privacyHost).not.toContain('undefined');
   });
 
@@ -166,7 +166,8 @@ describe('受限普通对话', () => {
     expect(options.commandPrefix).toBeUndefined();
     const prompt = options.appendSystemPrompt.join('\n');
     expect(prompt).toContain('/privacy');
-    expect(prompt).toContain('/delivery');
+    expect(prompt).toContain('/share');
+    expect(prompt).toContain('shared directory');
     expect(prompt).not.toContain(id);
     expect(prompt).not.toContain('DELION_COMMAND');
     expect(prompt).not.toContain(join(root, 'storage', 'chat-sessions'));
@@ -240,7 +241,7 @@ describe('受限普通对话', () => {
     expect(() => referenceFilePath(id, '/privacy/../../etc/passwd')).toThrow('路径超出会话目录');
     expect(referenceFilePath(id, note)).toBe(resolve(note));
     expect(() =>
-      restrictedLocalPath(link, { privacy: join(root, 'p'), delivery: join(root, 'd') }, [
+      restrictedLocalPath(link, { privacy: join(root, 'p'), share: join(root, 'd') }, [
         join(root, 'user'),
       ]),
     ).toThrow('路径超出会话目录');

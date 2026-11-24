@@ -65,8 +65,8 @@ export function writePermissionMode(id: string, mode: 'restricted' | 'full') {
     .run(permissionKey(id), mode);
 }
 
-export function chatDeliveryDirectory(id: string) {
-  const dir = join(hostPorts().paths.storage(), 'chat-delivery', id);
+export function chatShareDirectory(id: string) {
+  const dir = join(hostPorts().paths.storage(), 'chat-share', id);
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -79,7 +79,7 @@ export function ensurePrivateSession(id: string): string {
     .database()
     .prepare('UPDATE sessions SET cwd=? WHERE id=? AND (cwd IS NULL OR cwd<>?)')
     .run(dir, id, dir);
-  chatDeliveryDirectory(id);
+  chatShareDirectory(id);
   return dir;
 }
 

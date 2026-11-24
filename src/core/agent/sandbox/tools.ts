@@ -86,7 +86,7 @@ export async function sandboxBashTool(
   return {
     ...bash,
     description:
-      'Run a command in the sandbox. The working directory is /privacy. /privacy and /delivery are writable. Other visible files are read-only. Network and host services are unavailable.',
+      'Run a command in the sandbox. The working directory is /privacy. /privacy and /share are writable. Other visible files are read-only. Network and host services are unavailable.',
     parameters: {
       ...schema,
       properties: {
@@ -122,7 +122,7 @@ export async function sandboxTools(roots: SandboxRoots): Promise<ToolDefinition[
     name: 'read',
     label: 'read',
     description:
-      'Read a file. Use /privacy and /delivery for this session. Other files must be real absolute paths and are read-only.',
+      'Read a file. Use /privacy and /share for this session. Other files must be real absolute paths and are read-only.',
     parameters: parameters(
       {
         path: { type: 'string' },
@@ -160,7 +160,7 @@ export async function sandboxTools(roots: SandboxRoots): Promise<ToolDefinition[
     name: 'write',
     label: 'write',
     description:
-      'Write a file under /privacy or /delivery. Writes outside those directories are rejected by the sandbox.',
+      'Write a file under /privacy or /share. Writes outside those directories are rejected by the sandbox.',
     parameters: parameters({ path: { type: 'string' }, content: { type: 'string' } }, [
       'path',
       'content',
@@ -177,7 +177,7 @@ export async function sandboxTools(roots: SandboxRoots): Promise<ToolDefinition[
   const edit: ToolDefinition = {
     name: 'edit',
     label: 'edit',
-    description: 'Replace one exact occurrence of text in a file under /privacy or /delivery.',
+    description: 'Replace one exact occurrence of text in a file under /privacy or /share.',
     parameters: parameters(
       { path: { type: 'string' }, oldText: { type: 'string' }, newText: { type: 'string' } },
       ['path', 'oldText', 'newText'],

@@ -15,7 +15,7 @@ import type { SandboxRoots } from './mode';
 
 const OUTPUT_LIMIT = 1024 * 1024;
 const FRESH_MOUNTS = ['/tmp', '/var/tmp', '/run', '/dev/shm'];
-const SKIP_ROOTS = new Set(['proc', 'sys', 'dev', 'run', 'tmp', 'privacy', 'delivery']);
+const SKIP_ROOTS = new Set(['proc', 'sys', 'dev', 'run', 'tmp', 'privacy', 'share']);
 
 export interface SandboxResult {
   code: number;
@@ -126,7 +126,7 @@ function hiddenDirectories(): string[] {
   const candidates = [
     hostPorts().paths.userData(),
     resolve(hostPorts().paths.storage(), 'chat-sessions'),
-    resolve(hostPorts().paths.storage(), 'chat-delivery'),
+    resolve(hostPorts().paths.storage(), 'chat-share'),
     resolve(hostPorts().paths.home(), '.delion-bot'),
     resolve(hostPorts().paths.temp(), 'delion-document-reading'),
   ]
@@ -232,7 +232,7 @@ function sandboxArgs(roots: SandboxRoots, cwd: string, file: string, args: strin
     '--dir',
     '/privacy',
     '--dir',
-    '/delivery',
+    '/share',
     '--dir',
     '/tmp',
     '--dir',
@@ -255,8 +255,8 @@ function sandboxArgs(roots: SandboxRoots, cwd: string, file: string, args: strin
     roots.privacyHost,
     '/privacy',
     '--bind',
-    roots.deliveryHost,
-    '/delivery',
+    roots.shareHost,
+    '/share',
     '--dev',
     '/dev',
     '--chdir',

@@ -161,7 +161,7 @@ Windows 与 macOS 共用一套：`electron-updater` + `electron-builder` 的 NSI
 
 - 数据保存在本机 SQLite，凭据经 Electron `safeStorage` 加密。
 - renderer 不接触文件系统、数据库与凭据，一切经受控 IPC 通信。
-- 普通对话默认受限。目前只有 Linux 且 bubblewrap 可用时执行：可写目录只有 `/privacy` 和 `/delivery`，其余可见文件只读，应用私有目录被遮住，沙箱内的套接字会被空文件盖住，工具不能联网。读到的文件内容仍会进入模型上下文，并可能发给用户配置的模型服务。Windows 和 macOS 没有这个后端，受限模式会拒绝运行，不会改用本机权限。完全权限要在对话菜单里显式打开。
+- 普通对话默认受限。目前只有 Linux 且 bubblewrap 可用时执行：可写目录只有 `/privacy` 和 `/share`，其余可见文件只读，应用私有目录被遮住，沙箱内的套接字会被空文件盖住，工具不能联网。读到的文件内容仍会进入模型上下文，并可能发给用户配置的模型服务。Windows 和 macOS 没有这个后端，受限模式会拒绝运行，不会改用本机权限。完全权限要在对话菜单里显式打开。
 - Pi 的 auth / models / sessions / skills 放在 `userData/pi`，与用户的 `~/.pi` 隔离（bin 例外，见 §2.1）。模型密钥只在主进程内注册给 Pi 运行时，不写入 `auth.json`。
 - 应用启动**不读取仓库 `.env`**，凭据只能在应用内配置。
 

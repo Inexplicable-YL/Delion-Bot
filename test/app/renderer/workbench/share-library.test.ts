@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  deliveryEntriesWithChildren,
-  deliveryLibrary,
+  shareEntriesWithChildren,
+  shareLibrary,
   visibleLeafSessions,
-} from '../../../../src/app/renderer/workbench/delivery-library';
+} from '../../../../src/app/renderer/workbench/share-library';
 
 const alpha = '11111111-1111-4111-8111-111111111111';
 const beta = '22222222-2222-4222-8222-222222222222';
@@ -15,7 +15,7 @@ function library(
   groups: { id: string; active: string | null }[],
   options?: { maximized?: string | null; focus?: string | null; names?: Record<string, string> },
 ) {
-  return deliveryLibrary({
+  return shareLibrary({
     directory: '/data/Delion Bot',
     groups,
     maximizedGroupId: options?.maximized ?? null,
@@ -26,7 +26,7 @@ function library(
 }
 
 describe('资料区只跟随可见会话', () => {
-  it('标签栏有多个会话但只显示一个面板时，直接铺开当前会话的交付内容', () => {
+  it('标签栏有多个会话但只显示一个面板时，直接铺开当前会话的共享内容', () => {
     const shown = library([{ id: 'primary', active: `chat:${alpha}` }]);
     expect(
       visibleLeafSessions('/data/Delion Bot', [{ id: 'primary', active: `chat:${alpha}` }], null),
@@ -34,7 +34,7 @@ describe('资料区只跟随可见会话', () => {
     expect(shown.mode).toBe('flat');
     expect(shown.sectionTitle).toBe('周报');
     expect(shown.sectionTitle).not.toContain(alpha);
-    expect(shown.rootId).toBe(`/data/Delion Bot/chat-delivery/${alpha}`);
+    expect(shown.rootId).toBe(`/data/Delion Bot/chat-share/${alpha}`);
     expect(shown.entries.filter((entry) => entry.id !== shown.rootId)).toEqual([]);
     const withHiddenTab = library([
       {
@@ -69,8 +69,8 @@ describe('资料区只跟随可见会话', () => {
     expect(shown.sectionTitle).toBeNull();
     expect(shown.entries.map((entry) => entry.name)).toEqual(['周报', '周报']);
     expect(shown.entries.map((entry) => entry.path)).toEqual([
-      `/data/Delion Bot/chat-delivery/${alpha}`,
-      `/data/Delion Bot/chat-delivery/${beta}`,
+      `/data/Delion Bot/chat-share/${alpha}`,
+      `/data/Delion Bot/chat-share/${beta}`,
     ]);
     expect(shown.selectedId).toBe(shown.entries[1]!.id);
   });
@@ -94,7 +94,7 @@ describe('资料区只跟随可见会话', () => {
     expect(shown.rootId).toContain(alpha);
   });
 
-  it('会话重命名只改分组显示名，不改交付路径', () => {
+  it('会话重命名只改分组显示名，不改共享路径', () => {
     const before = library(
       [
         { id: 'left', active: `chat:${alpha}` },
@@ -113,7 +113,7 @@ describe('资料区只跟随可见会话', () => {
     expect(after.entries[0]!.name).not.toContain(alpha);
   });
 
-  it('已加载的文件挂在交付根下，不带出 workspace', () => {
+  it('已加载的文件挂在共享根下，不带出 workspace', () => {
     const shown = library([
       { id: 'left', active: `chat:${alpha}` },
       { id: 'right', active: `chat:${beta}` },
@@ -136,27 +136,27 @@ describe('资料区只跟随可见会话', () => {
       updatedAt: '',
     };
     expect(
-      deliveryEntriesWithChildren(shown.entries, [stray, child]).map((entry) => entry.name),
+      shareEntriesWithChildren(shown.entries, [stray, child]).map((entry) => entry.name),
     ).toEqual(['周报', '周报', '报告.md']);
   });
 
-  it('单个可见的文件标签打开交付文件时，直接进入该目录并定位到文件', () => {
-    const file = `/data/Delion Bot/chat-delivery/${alpha}/资料/报告.md`;
+  it('单个可见的文件标签打开共享文件时，直接进入该目录并定位到文件', () => {
+    const file = `/data/Delion Bot/chat-share/${alpha}/资料/报告.md`;
     const shown = library([{ id: 'primary', active: `note:${file}` }]);
     expect(shown.mode).toBe('flat');
     expect(shown.sectionTitle).toBe('周报');
     expect(shown.sectionTitle).not.toContain(alpha);
-    expect(shown.rootId).toBe(`/data/Delion Bot/chat-delivery/${alpha}`);
+    expect(shown.rootId).toBe(`/data/Delion Bot/chat-share/${alpha}`);
     expect(shown.selectedId).toBe(file);
     expect(shown.expandedIds).toEqual([
-      `/data/Delion Bot/chat-delivery/${alpha}`,
-      `/data/Delion Bot/chat-delivery/${alpha}/资料`,
+      `/data/Delion Bot/chat-share/${alpha}`,
+      `/data/Delion Bot/chat-share/${alpha}/资料`,
     ]);
     expect(shown.rootId).not.toContain('chat:');
   });
 
-  it('拆分里一个对话和一个交付文件同时可见时按标题分组并定位到文件', () => {
-    const file = `/data/Delion Bot/chat-delivery/${beta}/报告.md`;
+  it('拆分里一个对话和一个共享文件同时可见时按标题分组并定位到文件', () => {
+    const file = `/data/Delion Bot/chat-share/${beta}/报告.md`;
     const shown = library(
       [
         { id: 'left', active: `chat:${alpha}` },
@@ -168,8 +168,8 @@ describe('资料区只跟随可见会话', () => {
     expect(shown.sectionTitle).toBeNull();
     expect(shown.entries.map((entry) => entry.name)).toEqual(['周报', '周报']);
     expect(shown.entries.map((entry) => entry.path)).toEqual([
-      `/data/Delion Bot/chat-delivery/${alpha}`,
-      `/data/Delion Bot/chat-delivery/${beta}`,
+      `/data/Delion Bot/chat-share/${alpha}`,
+      `/data/Delion Bot/chat-share/${beta}`,
     ]);
     expect(
       shown.entries.every((entry) => !entry.name.includes(alpha) && !entry.name.includes(beta)),
@@ -185,8 +185,8 @@ describe('资料区只跟随可见会话', () => {
     expect(renamed.entries[1]).toMatchObject({ name: '三月周报', path: shown.entries[1]!.path });
   });
 
-  it('最大化正在看交付文件的面板时，只进入该文件所属会话', () => {
-    const file = `/data/Delion Bot/chat-delivery/${beta}/报告.md`;
+  it('最大化正在看共享文件的面板时，只进入该文件所属会话', () => {
+    const file = `/data/Delion Bot/chat-share/${beta}/报告.md`;
     const shown = library(
       [
         { id: 'left', active: `chat:${alpha}` },
@@ -195,12 +195,12 @@ describe('资料区只跟随可见会话', () => {
       { maximized: 'right', focus: 'right' },
     );
     expect(shown.mode).toBe('flat');
-    expect(shown.rootId).toBe(`/data/Delion Bot/chat-delivery/${beta}`);
+    expect(shown.rootId).toBe(`/data/Delion Bot/chat-share/${beta}`);
     expect(shown.selectedId).toBe(file);
     expect(shown.entries.some((entry) => entry.path?.includes(alpha))).toBe(false);
   });
 
-  it('打开 workspace 里的文件不会进入交付目录', () => {
+  it('打开 workspace 里的文件不会进入共享目录', () => {
     const shown = library([{ id: 'primary', active: 'note:/data/Delion Bot/workspace/旧笔记.md' }]);
     expect(shown.mode).toBe('empty');
   });

@@ -95,7 +95,7 @@ export function sourceReferences(sources: { key: string }[]): ChatReference[] {
 
 function virtualLink(path: string): string | null {
   const normalized = path.replaceAll('\\', '/').replace(/^\.\//, '');
-  const name = ['privacy', 'delivery'].find(
+  const name = ['privacy', 'share'].find(
     (root) =>
       normalized === root ||
       normalized === `/${root}` ||

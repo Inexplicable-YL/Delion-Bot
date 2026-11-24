@@ -25,7 +25,7 @@ const root =
     : join('/home/ubuntu', 'delion-bwrap-skipped');
 const sessionId = '11111111-1111-4111-8111-111111111111';
 const privacyHost = join(root, 'storage', 'chat-sessions', sessionId);
-const deliveryHost = join(root, 'storage', 'chat-delivery', sessionId);
+const shareHost = join(root, 'storage', 'chat-share', sessionId);
 const userData = join(root, 'userdata');
 const external = join(root, 'external', 'readme.txt');
 const secret = join(userData, 'delion.db');
@@ -43,8 +43,8 @@ function roots(): SandboxRoots {
   return {
     ownerId: sessionId,
     privacyHost,
-    deliveryHost,
-    conceal: [sessionId, privacyHost, userData, deliveryHost],
+    shareHost,
+    conceal: [sessionId, privacyHost, userData, shareHost],
   };
 }
 
@@ -53,7 +53,7 @@ beforeAll(() => {
   mkdirSync(privacyHost, { recursive: true });
   mkdirSync(join(privacyHost, '.home'), { recursive: true });
   mkdirSync(join(privacyHost, '.cache'), { recursive: true });
-  mkdirSync(deliveryHost, { recursive: true });
+  mkdirSync(shareHost, { recursive: true });
   mkdirSync(userData, { recursive: true });
   mkdirSync(join(external, '..'), { recursive: true });
   writeFileSync(join(privacyHost, 'scratch.txt'), 'scratch');
@@ -95,7 +95,7 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
       'echo x >> ' + JSON.stringify(external) + ' && echo WRITE_EXT_OK || echo WRITE_EXT_FAIL',
       'rm ' + JSON.stringify(external) + ' && echo DEL_EXT_OK || echo DEL_EXT_FAIL',
       'echo hi > /privacy/new.txt && echo WRITE_PRIV_OK',
-      'echo d > /delivery/new.txt && echo WRITE_DEL_OK',
+      'echo d > /share/new.txt && echo WRITE_SHARE_OK',
       'cat ' + JSON.stringify(secret) + ' >/dev/null 2>&1 && echo READ_DB_OK || echo READ_DB_FAIL',
       'cat ' +
         JSON.stringify(other) +
@@ -129,7 +129,7 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
     expect(output).toContain('WRITE_EXT_FAIL');
     expect(output).toContain('DEL_EXT_FAIL');
     expect(output).toContain('WRITE_PRIV_OK');
-    expect(output).toContain('WRITE_DEL_OK');
+    expect(output).toContain('WRITE_SHARE_OK');
     expect(output).toContain('READ_DB_FAIL');
     expect(output).toContain('READ_OTHER_FAIL');
     expect(output).toContain('HARDLINK_FAIL');
@@ -141,7 +141,7 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
     expect(output).not.toContain(sessionId);
     expect(readFileSync(external, 'utf8')).toBe('ext');
     expect(readFileSync(join(privacyHost, 'new.txt'), 'utf8')).toBe('hi\n');
-    expect(readFileSync(join(deliveryHost, 'new.txt'), 'utf8')).toBe('d\n');
+    expect(readFileSync(join(shareHost, 'new.txt'), 'utf8')).toBe('d\n');
     expect(await accepted).toBe(false);
   });
 
@@ -168,14 +168,14 @@ describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
     await background.execute(
       '2',
       {
-        command: `echo no >> ${JSON.stringify(external)} || true; echo ${sessionId}; env | grep -q DELION_COMMAND_TOKEN && echo LEAK > /delivery/bg.txt || echo NO_TOKEN > /delivery/bg.txt`,
+        command: `echo no >> ${JSON.stringify(external)} || true; echo ${sessionId}; env | grep -q DELION_COMMAND_TOKEN && echo LEAK > /share/bg.txt || echo NO_TOKEN > /share/bg.txt`,
         background: true,
       },
       undefined,
       undefined,
       {} as never,
     );
-    await expect.poll(() => readFileSync(join(deliveryHost, 'bg.txt'), 'utf8')).toBe('NO_TOKEN\n');
+    await expect.poll(() => readFileSync(join(shareHost, 'bg.txt'), 'utf8')).toBe('NO_TOKEN\n');
     expect(readFileSync(external, 'utf8')).toBe('ext');
     const logs = join(userData, 'background-tasks');
     await expect

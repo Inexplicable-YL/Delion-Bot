@@ -43,7 +43,7 @@ import { live, sessionRunning } from '../../../../src/core/agent/session/live';
 import { setSessionPermissionMode, newSession } from '../../../../src/core/agent/session/commands';
 import { askSession, shutdownSessions } from '../../../../src/core/agent/session/run';
 import {
-  chatDeliveryDirectory,
+  chatShareDirectory,
   preloadPi,
   readPermissionMode,
   writePermissionMode,
@@ -138,7 +138,7 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
           id: 'call-env',
           name: 'bash',
           arguments: JSON.stringify({
-            command: 'printf %s "${DELION_COMMAND_TOKEN-NO_TOKEN}" > /delivery/token.txt',
+            command: 'printf %s "${DELION_COMMAND_TOKEN-NO_TOKEN}" > /share/token.txt',
           }),
         }),
         mockFrames.finishFrame('tool_calls'),
@@ -155,7 +155,7 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
     expect(names).not.toContain('session_search');
     expect(names).toContain('bash');
     expect(JSON.stringify(restrictedRequests.at(-1)?.body)).toContain('/privacy');
-    expect(readFileSync(join(chatDeliveryDirectory(parent), 'token.txt'), 'utf8')).toBe('NO_TOKEN');
+    expect(readFileSync(join(chatShareDirectory(parent), 'token.txt'), 'utf8')).toBe('NO_TOKEN');
     stopRestricted();
     return;
   }

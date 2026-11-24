@@ -209,7 +209,7 @@ export function ChatComposerMenu({
               </DropdownMenuRadioGroup>
               <p className="px-2 py-2 text-ui-callout text-ink-2">
                 受限只允许写入 /privacy 和
-                /delivery，其他可见文件只读，工具不能联网。读到的内容仍会进入对话，并发送给你配置的模型。目前只有
+                /share，其他可见文件只读，工具不能联网。读到的内容仍会进入对话，并发送给你配置的模型。目前只有
                 Linux 加 bubblewrap 能运行；Windows 和 macOS
                 尚未提供，发送会失败，不会改用本机权限。完全权限沿用原来的本机权限。
               </p>

@@ -12,7 +12,7 @@ function sessionFilePath(sessionId: string, rawPath: string): string {
     const roots = sandboxRoots(meta.parent_id ?? meta.id);
     return restrictedLocalPath(
       rawPath,
-      { privacy: roots.privacyHost, delivery: roots.deliveryHost },
+      { privacy: roots.privacyHost, share: roots.shareHost },
       roots.conceal,
     );
   }

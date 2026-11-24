@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { hostPorts } from '../../ports';
 import {
-  chatDeliveryDirectory,
+  chatShareDirectory,
   ensurePrivateSession,
   readPermissionMode,
   row,
@@ -13,7 +13,7 @@ export type ExecutionMode = 'project' | 'restricted' | 'full';
 export interface SandboxRoots {
   ownerId: string;
   privacyHost: string;
-  deliveryHost: string;
+  shareHost: string;
   conceal: readonly string[];
 }
 
@@ -36,18 +36,18 @@ export function executionMode(meta: SessionRow): ExecutionMode {
 
 export function sandboxRoots(ownerId: string): SandboxRoots {
   const privacyHost = ensurePrivateSession(ownerId);
-  const deliveryHost = chatDeliveryDirectory(ownerId);
+  const shareHost = chatShareDirectory(ownerId);
   return {
     ownerId,
     privacyHost,
-    deliveryHost,
+    shareHost,
     conceal: [
       ownerId,
       privacyHost,
-      deliveryHost,
+      shareHost,
       hostPorts().paths.userData(),
       join(hostPorts().paths.storage(), 'chat-sessions'),
-      join(hostPorts().paths.storage(), 'chat-delivery'),
+      join(hostPorts().paths.storage(), 'chat-share'),
     ],
   };
 }
