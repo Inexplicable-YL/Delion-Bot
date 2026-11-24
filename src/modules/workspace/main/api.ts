@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { hostPorts, type Projects } from '../../../core/ports';
 import { remoteById, targetOf } from '../../remotes';
 import { locateRemote } from '../../../core/remote/operations';
+import { chatShareDirectory } from '../../../core/agent/session/store';
 import { collectWorkspaceSources, workspaceSource, type WorkspaceSource } from './sources';
 import { availablePath, diskName } from './disk-name';
 import { officeExportPreviewInfo, officeZipMime, readOfficeExportLink } from '../../preview';
@@ -403,7 +404,19 @@ function fileEntry(
   parentId: string | null = null,
   stored?: WorkspaceEntry,
 ): WorkspaceEntry {
-  const stats = statSync(path);
+  let stats = statSync(path, { throwIfNoEntry: false });
+  if (!stats) {
+    const { paths, database } = hostPorts();
+    const sessionId = relative(join(paths.storage(), 'chat-share'), path);
+    if (
+      idSchema.safeParse(sessionId).success &&
+      database()
+        .prepare('SELECT 1 FROM sessions WHERE id=? AND project_id IS NULL AND parent_id IS NULL')
+        .get(sessionId)
+    )
+      chatShareDirectory(sessionId);
+    stats = statSync(path);
+  }
   if (!stats.isDirectory() && !stats.isFile()) throw new Error('条目不是普通文件');
   return {
     id: stored?.id ?? path,

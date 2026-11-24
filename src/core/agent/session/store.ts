@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, statSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import type { ChatSessionSummary, PermissionMode } from '../../protocol/agent';
 import { llmModelSettings } from '../../protocol/llm-models';
@@ -69,8 +69,12 @@ export function writePermissionMode(id: string, mode: PermissionMode) {
 }
 
 export function chatShareDirectory(id: string) {
-  const dir = join(hostPorts().paths.storage(), 'chat-share', id);
+  const root = join(hostPorts().paths.storage(), 'chat-share');
+  mkdirSync(root, { recursive: true });
+  if (!lstatSync(root).isDirectory()) throw new Error('共享文件目录不可用');
+  const dir = join(root, id);
   mkdirSync(dir, { recursive: true });
+  if (!lstatSync(dir).isDirectory()) throw new Error('共享文件目录不可用');
   return dir;
 }
 
