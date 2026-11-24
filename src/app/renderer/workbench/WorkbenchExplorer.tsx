@@ -135,6 +135,7 @@ export function WorkbenchExplorer({
             selectedId: null,
             expandedIds: [],
             entries: [],
+            sectionTitle: null,
           };
   const rootId = entries.some((entry) => entry.id === projectId) ? projectId : null;
   const root = entries.find((e) => e.id === rootId);
@@ -511,7 +512,11 @@ export function WorkbenchExplorer({
                   if (drag) move(drag, null);
                 }}
               >
-                <div className={eyebrowClass}>文件</div>
+                <div className={eyebrowClass}>
+                  {delivery?.mode === 'flat' && delivery.sectionTitle
+                    ? `文件 > ${delivery.sectionTitle}`
+                    : '文件'}
+                </div>
                 {visible && (
                   <ProjectFileTree
                     canDrop={(dragId, targetId) => !isDescendant(entries, targetId, dragId)}

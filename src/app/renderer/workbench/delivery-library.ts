@@ -107,6 +107,7 @@ export interface DeliveryLibrary {
   selectedId: string | null;
   expandedIds: string[];
   entries: WorkspaceEntry[];
+  sectionTitle: string | null;
 }
 
 export function deliveryLibrary(input: {
@@ -120,7 +121,14 @@ export function deliveryLibrary(input: {
   const ids = visibleLeafSessions(input.directory, input.groups, input.maximizedGroupId);
   const sessions = ids.map((id) => ({ id, title: input.titles[id] || '新对话' }));
   if (sessions.length === 0)
-    return { mode: 'empty', rootId: null, selectedId: null, expandedIds: [], entries: [] };
+    return {
+      mode: 'empty',
+      rootId: null,
+      selectedId: null,
+      expandedIds: [],
+      entries: [],
+      sectionTitle: null,
+    };
   const visibleGroups = input.maximizedGroupId
     ? input.groups.filter((group) => group.id === input.maximizedGroupId)
     : input.groups;
@@ -148,6 +156,7 @@ export function deliveryLibrary(input: {
       selectedId: focusedFile,
       expandedIds,
       entries: deliveryEntriesWithChildren([root], input.loaded),
+      sectionTitle: sessions[0]!.title,
     };
   }
   const roots = sessions.map((session) => folder(input.directory, session));
@@ -162,5 +171,6 @@ export function deliveryLibrary(input: {
     selectedId: focusedFile ?? selectedFolder?.id ?? roots[0]!.id,
     expandedIds,
     entries: deliveryEntriesWithChildren(roots, input.loaded),
+    sectionTitle: null,
   };
 }

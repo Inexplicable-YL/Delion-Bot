@@ -32,6 +32,8 @@ describe('资料区只跟随可见会话', () => {
       visibleLeafSessions('/data/Delion Bot', [{ id: 'primary', active: `chat:${alpha}` }], null),
     ).toEqual([alpha]);
     expect(shown.mode).toBe('flat');
+    expect(shown.sectionTitle).toBe('周报');
+    expect(shown.sectionTitle).not.toContain(alpha);
     expect(shown.rootId).toBe(`/data/Delion Bot/chat-delivery/${alpha}`);
     expect(shown.entries.filter((entry) => entry.id !== shown.rootId)).toEqual([]);
     const withHiddenTab = library([
@@ -64,6 +66,7 @@ describe('资料区只跟随可见会话', () => {
       { focus: 'right' },
     );
     expect(shown.mode).toBe('grouped');
+    expect(shown.sectionTitle).toBeNull();
     expect(shown.entries.map((entry) => entry.name)).toEqual(['周报', '周报']);
     expect(shown.entries.map((entry) => entry.path)).toEqual([
       `/data/Delion Bot/chat-delivery/${alpha}`,
@@ -141,6 +144,8 @@ describe('资料区只跟随可见会话', () => {
     const file = `/data/Delion Bot/chat-delivery/${alpha}/资料/报告.md`;
     const shown = library([{ id: 'primary', active: `note:${file}` }]);
     expect(shown.mode).toBe('flat');
+    expect(shown.sectionTitle).toBe('周报');
+    expect(shown.sectionTitle).not.toContain(alpha);
     expect(shown.rootId).toBe(`/data/Delion Bot/chat-delivery/${alpha}`);
     expect(shown.selectedId).toBe(file);
     expect(shown.expandedIds).toEqual([
@@ -160,6 +165,7 @@ describe('资料区只跟随可见会话', () => {
       { focus: 'right' },
     );
     expect(shown.mode).toBe('grouped');
+    expect(shown.sectionTitle).toBeNull();
     expect(shown.entries.map((entry) => entry.name)).toEqual(['周报', '周报']);
     expect(shown.entries.map((entry) => entry.path)).toEqual([
       `/data/Delion Bot/chat-delivery/${alpha}`,
