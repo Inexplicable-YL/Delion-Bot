@@ -417,13 +417,19 @@ export function ChatComposer({
     const measure = () => {
       const line = editor.querySelector<HTMLElement>('.cm-line');
       if (!line || !prompt.clientWidth) return;
+      const permission = prompt.querySelector<HTMLElement>('[data-slot="composer-permission"]');
+      const modelName = toolbar.querySelector<HTMLElement>('[data-slot="composer-model-name"]');
       const { paddingLeft, paddingRight, columnGap } = getComputedStyle(prompt);
       const inlineWidth =
         prompt.clientWidth -
         parseFloat(paddingLeft) -
         parseFloat(paddingRight) -
         add.offsetWidth -
-        toolbar.offsetWidth -
+        toolbar.offsetWidth +
+        (modelName?.offsetWidth
+          ? modelName.offsetWidth + parseFloat(getComputedStyle(modelName.parentElement!).columnGap)
+          : 0) -
+        (permission ? permission.offsetWidth + parseFloat(columnGap) : 0) -
         2 * parseFloat(columnGap);
       lineContents.selectNodeContents(line);
       setWrapped(
@@ -776,6 +782,14 @@ export function ChatComposer({
           onSelectSearch={sidechat ? undefined : (id) => void selectSearchEntry(id)}
           permissionMode={permissionMode}
         />
+        {permissionMode && onPermissionMode && !sidechat && (
+          <ChatPermissionPicker
+            mode={permissionMode}
+            project={projectPermissions}
+            onSelect={onPermissionMode}
+            side={hero ? 'bottom' : 'top'}
+          />
+        )}
         <PromptInputToolbar className="ml-auto min-w-0 shrink-0 justify-end">
           {tasks.length > 0 && onStopTask && (
             <BackgroundTasks
@@ -788,18 +802,11 @@ export function ChatComposer({
           {configured && contextUsage && (
             <ContextIndicator cacheHitRate={cacheHitRateText(contextUsage)} usage={contextUsage} />
           )}
-          {permissionMode && onPermissionMode && !sidechat && (
-            <ChatPermissionPicker
-              mode={permissionMode}
-              project={projectPermissions}
-              onSelect={onPermissionMode}
-              side={hero ? 'bottom' : 'top'}
-            />
-          )}
           {configured && !sidechat && (
             <ChatModelPicker
               effort={effort}
               effortLevels={effortLevels}
+              expanded={expanded}
               model={model}
               modelUnavailable={modelUnavailable}
               onEffortSelect={onEffortSelect}

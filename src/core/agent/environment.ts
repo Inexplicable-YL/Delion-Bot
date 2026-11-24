@@ -27,7 +27,7 @@ import { remoteTools } from './remote-tools';
 import { sessionTools } from './session-read';
 import { executionMode, ownerRow, scopedDirectories } from './sandbox/mode';
 import { virtualizeModelPaths } from './sandbox/model-paths';
-import { approveTool } from './sandbox/approve-tool';
+import { approveTool, deniedMessage } from './sandbox/approve-tool';
 import { downloadTool, scopedFileTools } from './sandbox/scoped-files';
 import { sandboxCommandTool } from './sandbox/local-command';
 import { scopedSkillTool } from './sandbox/skill-tool';
@@ -269,6 +269,10 @@ async function approvalTools(meta: ReturnType<typeof row>, session: string) {
             '运行 Delion 操作',
             undefined,
             (input) => (input as { command: string }).command === 'help',
+            (input) => {
+              const { command } = input as { command: string };
+              return { keys: [`delion:${command}`], label: `运行 Delion 操作 ${command}` };
+            },
           ),
         ]
       : []),
@@ -329,18 +333,24 @@ function webFetchTool(approvalSession?: string): ToolDefinition {
         await fetchWebPage(params.url, params.offset, deepseek, {
           signal: cancellation,
           ...(approvalSession && {
-            approve: async (url: string, service?: 'DeepSeek') =>
-              Boolean(
-                await hostPorts().desktop.approveToolAction?.({
-                  session: approvalSession,
-                  title: '读取网页',
-                  fields: [
-                    { label: '网页地址', value: url },
-                    ...(service ? [{ label: '服务', value: service }] : []),
-                  ],
-                  signal: cancellation,
-                }),
-              ),
+            approve: async (url: string, service?: 'DeepSeek') => {
+              const { host } = new URL(url);
+              const approval = await hostPorts().desktop.approveToolAction?.({
+                session: approvalSession,
+                title: '读取网页',
+                fields: [
+                  { label: '网页地址', value: url },
+                  ...(service ? [{ label: '服务', value: service }] : []),
+                ],
+                grant: {
+                  keys: [`web-fetch:${host}${service ? `@${service}` : ''}`],
+                  label: service ? `通过 ${service} 读取 ${host} 的网页` : `读取 ${host} 的网页`,
+                },
+                signal: cancellation,
+              });
+              if (approval?.approved) return true;
+              throw new Error(deniedMessage('网页读取未获批准', approval));
+            },
           }),
         }),
       );
@@ -381,13 +391,23 @@ async function mcpTools(approvalSession?: string): Promise<ToolDefinition[]> {
       },
     };
     return approvalSession
-      ? approveTool(tool, approvalSession, '调用连接器', [
-          {
-            label: '连接器',
-            value: source.domain ? `${source.name} (${source.domain})` : source.name,
-          },
-          { label: '工具', value: definition.name },
-        ])
+      ? approveTool(
+          tool,
+          approvalSession,
+          '调用连接器',
+          [
+            {
+              label: '连接器',
+              value: source.domain ? `${source.name} (${source.domain})` : source.name,
+            },
+            { label: '工具', value: definition.name },
+          ],
+          undefined,
+          () => ({
+            keys: [`connector:${source.name}/${definition.name}`],
+            label: `调用 ${source.name} 的 ${definition.name}`,
+          }),
+        )
       : tool;
   });
 }

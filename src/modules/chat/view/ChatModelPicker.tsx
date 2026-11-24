@@ -14,9 +14,13 @@ import { Slider } from '../../../ui/Slider';
 import { useChatTabSource } from './ChatSource';
 import { llmClient } from './client';
 
+const titleCase = (text: string) =>
+  text.replace(/(^|\s)(\S)/g, (_, space: string, letter: string) => space + letter.toUpperCase());
+
 export function ChatModelPicker({
   effort,
   effortLevels,
+  expanded,
   model,
   modelUnavailable,
   onEffortSelect,
@@ -26,6 +30,7 @@ export function ChatModelPicker({
 }: {
   effort: string | null;
   effortLevels: string[];
+  expanded: boolean;
   model: string;
   modelUnavailable: boolean;
   onEffortSelect: (level: string) => void;
@@ -50,6 +55,7 @@ export function ChatModelPicker({
   const activeIndex = Math.max(0, effortLevels.indexOf(effort ?? ''));
   const sliderIndex = preview ?? activeIndex;
   const displayedEffort = effortLevels[sliderIndex] ?? effort ?? 'default';
+  const widthLabels = [...new Set([...effortLevels, displayedEffort])];
 
   const changeOpen = (open: boolean) => {
     setPage(open ? 'effort' : null);
@@ -68,12 +74,44 @@ export function ChatModelPicker({
         <PromptInputTrigger
           aria-label="思考强度"
           className={cn(
-            'max-w-40 text-ui-headline',
+            'text-ui-body',
+            expanded ? 'max-w-72' : 'max-w-40',
             modelUnavailable && 'text-danger hover:text-danger',
           )}
           title={modelUnavailable ? `${model}（已停用或被移除，请另选模型）` : undefined}
         >
-          <span className="truncate">{modelUnavailable ? '模型已停用' : displayedEffort}</span>
+          {modelUnavailable ? (
+            <span className="truncate">模型已停用</span>
+          ) : (
+            <>
+              {expanded && (
+                <span className="truncate text-ink @max-md:hidden" data-slot="composer-model-name">
+                  {titleCase(model)}
+                </span>
+              )}
+              <span className="grid shrink-0 justify-items-end">
+                {widthLabels.map((label) => (
+                  <span
+                    aria-hidden={label !== displayedEffort}
+                    className={cn(
+                      'col-start-1 row-start-1',
+                      label !== displayedEffort && 'invisible',
+                    )}
+                    key={label}
+                  >
+                    {expanded ? (
+                      <>
+                        <span className="@max-md:hidden">{titleCase(label)}</span>
+                        <span className="hidden @max-md:inline">{label}</span>
+                      </>
+                    ) : (
+                      label
+                    )}
+                  </span>
+                ))}
+              </span>
+            </>
+          )}
           <ChevronDownIcon aria-hidden="true" className="size-4 shrink-0" />
         </PromptInputTrigger>
       </PopoverTrigger>

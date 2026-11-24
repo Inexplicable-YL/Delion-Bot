@@ -89,29 +89,39 @@ export interface SavePathOptions {
   extension: string;
 }
 
+export interface ApprovalGrant {
+  keys: string[];
+  label: string;
+}
+
+export type Approval = { approved: true } | { approved: false; note?: string };
+
 export interface Desktop {
   confirmFullAccess?(request: { session: string; signal: AbortSignal }): Promise<boolean>;
   approveToolAction?(request: {
     session: string;
     title: string;
     fields: { label: string; value: string }[];
+    grant?: ApprovalGrant;
     signal: AbortSignal;
-  }): Promise<boolean>;
+  }): Promise<Approval>;
   approveSandboxCommand?(request: {
     session: string;
     command: string;
     files: readonly string[];
     remote?: string;
+    grant?: ApprovalGrant;
     signal: AbortSignal;
-  }): Promise<boolean>;
+  }): Promise<Approval>;
   approveFileChange?(request: {
     session: string;
     action: 'write' | 'edit';
     path: string;
     oldText?: string;
     content?: string;
+    grant: ApprovalGrant;
     signal: AbortSignal;
-  }): Promise<boolean>;
+  }): Promise<Approval>;
   pickFiles(owner: ClientHandle): Promise<string[]>;
   pickSavePath(owner: ClientHandle | null, options: SavePathOptions): Promise<string | null>;
   reveal(path: string): void;

@@ -7,6 +7,8 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
 import { helperSession, type ScopedCommandResult } from '../../remote/helper';
 import type { SessionRow } from '../session/store';
+import { deniedMessage } from './approve-tool';
+import { commandNames } from './command-names';
 import { macosSandboxLauncher, runMacosCommand } from './macos-command';
 import { executionMode, ownerRow, scopedDirectories } from './mode';
 import { readScopedReference } from './scoped-files';
@@ -84,15 +86,22 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
       if (cancellation.aborted || command.includes('\0'))
         return commandResult({ error: '命令无效或已取消' }, true);
       if (mode === 'approval') {
-        const approved = await hostPorts().desktop.approveSandboxCommand?.({
+        const names = commandNames(command, windows ? 'cmd' : 'bash');
+        const approval = await hostPorts().desktop.approveSandboxCommand?.({
           session,
           command,
           files,
           signal: cancellation,
           ...(remote && { remote: remote.host }),
+          ...(names && {
+            grant: {
+              keys: names.map((name) => `command:${name}`),
+              label: `运行 ${names.join('、')} 命令`,
+            },
+          }),
         });
-        if (!approved || cancellation.aborted)
-          return commandResult({ error: '命令未获批准' }, true);
+        if (!approval?.approved || cancellation.aborted)
+          return commandResult({ error: deniedMessage('命令未获批准', approval) }, true);
       }
       let directory: string | undefined;
       try {

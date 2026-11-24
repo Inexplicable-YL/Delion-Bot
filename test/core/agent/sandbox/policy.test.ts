@@ -127,7 +127,10 @@ describe('路径契约', () => {
 
 it('远程受限命令只转交获批后读取的项目文件副本', async () => {
   database();
-  const approveSandboxCommand = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const approveSandboxCommand = vi
+    .fn()
+    .mockResolvedValueOnce({ approved: false })
+    .mockResolvedValueOnce({ approved: true });
   const host = hostPorts();
   const target = { host: 'user@remote' };
   provideTestHostPorts({
@@ -162,7 +165,12 @@ it('远程受限命令只转交获批后读取的项目文件副本', async () =
     content: [{ text: JSON.stringify({ exitCode: 0, output: 'staged' }) }],
   });
   expect(approveSandboxCommand).toHaveBeenLastCalledWith(
-    expect.objectContaining({ ...params, remote: target.host, session: id }),
+    expect.objectContaining({
+      ...params,
+      remote: target.host,
+      session: id,
+      grant: { keys: ['command:/bin/cat'], label: '运行 /bin/cat 命令' },
+    }),
   );
   expect(state.scopedFile).toHaveBeenCalledWith(
     '/srv/project',
@@ -181,12 +189,12 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
   const host = hostPorts();
   const approveToolAction = vi
     .fn()
-    .mockResolvedValueOnce(false)
+    .mockResolvedValueOnce({ approved: false, note: '改用草稿' })
     .mockImplementationOnce(async () => {
       cancellation.abort();
-      return true;
+      return { approved: true };
     })
-    .mockResolvedValueOnce(true);
+    .mockResolvedValueOnce({ approved: true });
   const cancellation = new AbortController();
   provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveToolAction } });
   const call = vi.fn().mockResolvedValue({
@@ -217,7 +225,10 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
   const payload = { address: 'person@example.test', body: 'Hello' };
   const execute = (signal?: AbortSignal) =>
     send.execute('1', payload, signal, undefined, {} as never);
-  expect(await execute()).toMatchObject({ isError: true });
+  expect(await execute()).toMatchObject({
+    isError: true,
+    content: [{ text: '操作未获批准或已取消。用户说明：改用草稿' }],
+  });
   expect(await execute(cancellation.signal)).toMatchObject({ isError: true });
   expect(call).not.toHaveBeenCalled();
   expect(await execute()).toMatchObject({ content: [{ text: 'done' }] });
@@ -339,9 +350,9 @@ describe('受限普通对话', () => {
       vi.stubGlobal('fetch', fetch);
       const approveToolAction = vi
         .fn()
-        .mockResolvedValueOnce(false)
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(true);
+        .mockResolvedValueOnce({ approved: false })
+        .mockResolvedValueOnce({ approved: true })
+        .mockResolvedValueOnce({ approved: true });
       provideTestHostPorts({
         ...host,
         desktop: { ...host.desktop, approveToolAction },
@@ -371,7 +382,10 @@ describe('受限普通对话', () => {
 
   it.skipIf(commandTools.length === 0)('受限命令逐次审批，只接收当前会话的副本', async () => {
     database();
-    const approveSandboxCommand = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const approveSandboxCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ approved: false })
+      .mockResolvedValueOnce({ approved: true });
     const host = hostPorts();
     provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
     const id = insertSession(null);
@@ -401,7 +415,10 @@ describe('受限普通对话', () => {
       join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
     ),
   )('每次单独批准写入，共享目录和私有目录分开', async () => {
-    const approve = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const approve = vi
+      .fn()
+      .mockResolvedValueOnce({ approved: true })
+      .mockResolvedValueOnce({ approved: false });
     database(approve);
     const id = insertSession(null);
     writePermissionMode(id, 'approval');
@@ -438,7 +455,7 @@ describe('受限普通对话', () => {
       join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
     ),
   )('项目内修改可直接写入项目，无法访问普通聊天目录', async () => {
-    const approve = vi.fn().mockResolvedValue(false);
+    const approve = vi.fn().mockResolvedValue({ approved: false });
     database(approve);
     const project = join(root, 'project');
     mkdirSync(project, { recursive: true });

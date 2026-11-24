@@ -89,7 +89,7 @@ async function requestPermission(
   signal: AbortSignal,
 ) {
   const window = workspaceWindow();
-  if (!window || signal.aborted) return false;
+  if (!window || signal.aborted) return { approved: false } as const;
   const closed = new AbortController();
   const abort = () => closed.abort();
   window.once('closed', abort);
@@ -101,9 +101,9 @@ async function requestPermission(
 }
 
 const desktop: Desktop = {
-  approveToolAction: ({ session, title, fields, signal }) =>
-    requestPermission(session, { kind: 'operation', title, fields }, signal),
-  approveSandboxCommand: ({ session, command, files, remote, signal }) =>
+  approveToolAction: ({ session, title, fields, grant, signal }) =>
+    requestPermission(session, { kind: 'operation', title, fields, grant }, signal),
+  approveSandboxCommand: ({ session, command, files, remote, grant, signal }) =>
     requestPermission(
       session,
       {
@@ -114,12 +114,19 @@ const desktop: Desktop = {
           { label: '命令', value: command },
           ...(files.length ? [{ label: '输入文件', value: files.join('\n') }] : []),
         ],
+        grant,
       },
       signal,
     ),
-  confirmFullAccess: ({ session, signal }) =>
-    requestPermission(session, { kind: 'full', title: '启用完全访问？', fields: [] }, signal),
-  approveFileChange: ({ session, action, path, oldText, content, signal }) =>
+  confirmFullAccess: async ({ session, signal }) =>
+    (
+      await requestPermission(
+        session,
+        { kind: 'full', title: '启用完全访问？', fields: [] },
+        signal,
+      )
+    ).approved,
+  approveFileChange: ({ session, action, path, oldText, content, grant, signal }) =>
     requestPermission(
       session,
       {
@@ -130,6 +137,7 @@ const desktop: Desktop = {
           ...(oldText === undefined ? [] : [{ label: '替换前', value: oldText }]),
           ...(content === undefined ? [] : [{ label: '写入内容', value: content }]),
         ],
+        grant,
       },
       signal,
     ),

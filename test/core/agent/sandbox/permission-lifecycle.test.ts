@@ -228,7 +228,7 @@ it.each([
   approveFileChange.mockImplementationOnce(({ signal }) => {
     approvalSignal = signal;
     return new Promise((resolve) =>
-      signal.addEventListener('abort', () => resolve(true), { once: true }),
+      signal.addEventListener('abort', () => resolve({ approved: true }), { once: true }),
     );
   });
   server.enqueue({

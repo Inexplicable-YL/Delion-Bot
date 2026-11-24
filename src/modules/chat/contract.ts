@@ -25,6 +25,7 @@ const permissionRequest = z.object({
   kind: z.enum(['full', 'operation']),
   title: z.string(),
   fields: z.array(z.object({ label: z.string(), value: z.string() })),
+  grant: z.object({ label: z.string(), scope: z.enum(['session', 'project']) }).optional(),
 });
 
 export type PermissionRequest = z.infer<typeof permissionRequest>;
@@ -65,7 +66,12 @@ const procedures = {
   listSessions: agentContract.procedures['list-sessions'],
   permissionRequests: { input: sessionId, output: z.array(permissionRequest) },
   decidePermissionRequest: {
-    input: z.object({ sessionId, id: z.uuid(), approved: z.boolean() }),
+    input: z.object({
+      sessionId,
+      id: z.uuid(),
+      decision: z.enum(['once', 'always', 'deny']),
+      note: z.string().trim().max(2000).optional(),
+    }),
     output: z.boolean(),
   },
   localCommandReplies: { input: sessionId, output: z.array(localCommandReply) },

@@ -76,7 +76,7 @@ export function Trace({
   foldLabel,
   running,
 }: {
-  blocks: { key: number; node: ReactNode }[];
+  blocks: { key: number; node: ReactNode; reply?: boolean }[];
   foldLabel?: string;
   running?: TraceRunning;
 }) {
@@ -129,10 +129,16 @@ export function Trace({
         </button>
       )}
       {folded > 0 && (
-        <div hidden={!expanded} className={cn(fadeIn, 'flow-root', running && nestedClass)}>
-          {blocks.slice(0, folded).map(({ key, node }) => (
-            <Fragment key={key}>{node}</Fragment>
-          ))}
+        <div hidden={!expanded} className={cn(fadeIn, 'flow-root')}>
+          {blocks.slice(0, folded).map(({ key, node, reply }) =>
+            running && !reply ? (
+              <div key={key} className={cn('flow-root', nestedClass)}>
+                {node}
+              </div>
+            ) : (
+              <Fragment key={key}>{node}</Fragment>
+            ),
+          )}
         </div>
       )}
       {blocks.slice(folded).map(({ key, node }) => (

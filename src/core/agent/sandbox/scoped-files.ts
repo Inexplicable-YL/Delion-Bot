@@ -12,6 +12,7 @@ import {
 } from '../../remote/helper';
 import { executionMode, ownerRow, scopedDirectories, type ScopedDirectory } from './mode';
 import type { SessionRow } from '../session/store';
+import { deniedMessage } from './approve-tool';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_TEXT_BYTES = 200_000;
@@ -273,7 +274,7 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
       )
         return textResult('请选择有名称的文件，内容上限为 5 MB', true);
       if (writable && mode === 'approval') {
-        const approved = await hostPorts().desktop.approveFileChange?.({
+        const approval = await hostPorts().desktop.approveFileChange?.({
           session: owner.id,
           action,
           path: root.remote
@@ -281,9 +282,11 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
             : join(root.host, key),
           oldText: params.oldText,
           content,
+          grant: { keys: ['file-change'], label: '修改文件' },
           signal: cancellation,
         });
-        if (!approved || cancellation.aborted) return textResult('文件修改未获批准', true);
+        if (!approval?.approved || cancellation.aborted)
+          return textResult(deniedMessage('文件修改未获批准', approval), true);
       }
       const mime = action === 'read' ? imageMimeOf(key) : null;
       const result = await runFileAction(

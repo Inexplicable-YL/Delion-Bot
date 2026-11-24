@@ -3,8 +3,9 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import { XMarkIcon as X } from '@heroicons/react/24/outline';
 import { AlertDialog as AlertDialogPrimitive, Dialog as DialogPrimitive } from 'radix-ui';
-import type { ComponentProps, ReactNode } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 import { Button } from './Button';
+import { Checkbox } from './Checkbox';
 import { cn } from './cn';
 import { useDialogFocus } from './use-dialog-focus';
 import { IconButton } from './IconButton';
@@ -117,18 +118,10 @@ type ConfirmDialogProps = {
   onConfirm: () => void;
   destructive?: boolean;
   busy?: boolean;
+  acknowledgement?: ReactNode;
 };
 
-function ConfirmDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  confirmLabel,
-  onConfirm,
-  destructive,
-  busy,
-}: ConfirmDialogProps) {
+function ConfirmDialog({ open, onOpenChange, ...content }: ConfirmDialogProps) {
   const focus = useDialogFocus();
   return (
     <AlertDialogPrimitive.Root onOpenChange={onOpenChange} open={open}>
@@ -140,32 +133,58 @@ function ConfirmDialog({
           aria-modal="true"
           {...focus}
         >
-          <AlertDialogPrimitive.Title className="text-ui-title-2" data-slot="dialog-title">
-            {title}
-          </AlertDialogPrimitive.Title>
-          <AlertDialogPrimitive.Description
-            className="mt-2 text-ui-callout text-ink-2"
-            data-slot="dialog-description"
-          >
-            {description}
-          </AlertDialogPrimitive.Description>
-          <DialogFooter>
-            <AlertDialogPrimitive.Cancel asChild>
-              <Button disabled={busy} variant="secondary">
-                取消
-              </Button>
-            </AlertDialogPrimitive.Cancel>
-            <Button
-              disabled={busy}
-              onClick={onConfirm}
-              variant={destructive ? 'destructive' : 'accent'}
-            >
-              {confirmLabel}
-            </Button>
-          </DialogFooter>
+          <ConfirmDialogBody {...content} />
         </AlertDialogPrimitive.Content>
       </AlertDialogPrimitive.Portal>
     </AlertDialogPrimitive.Root>
+  );
+}
+
+function ConfirmDialogBody({
+  title,
+  description,
+  confirmLabel,
+  onConfirm,
+  destructive,
+  busy,
+  acknowledgement,
+}: Omit<ConfirmDialogProps, 'open' | 'onOpenChange'>) {
+  const [acknowledged, setAcknowledged] = useState(false);
+  return (
+    <>
+      <AlertDialogPrimitive.Title className="text-ui-title-2" data-slot="dialog-title">
+        {title}
+      </AlertDialogPrimitive.Title>
+      <AlertDialogPrimitive.Description
+        className="mt-2 text-ui-callout text-ink-2"
+        data-slot="dialog-description"
+      >
+        {description}
+      </AlertDialogPrimitive.Description>
+      {acknowledgement && (
+        <label className="mt-4 flex items-center gap-2 text-ui-callout text-ink">
+          <Checkbox
+            checked={acknowledged}
+            onChange={(event) => setAcknowledged(event.currentTarget.checked)}
+          />
+          {acknowledgement}
+        </label>
+      )}
+      <DialogFooter>
+        <AlertDialogPrimitive.Cancel asChild>
+          <Button disabled={busy} variant="secondary">
+            取消
+          </Button>
+        </AlertDialogPrimitive.Cancel>
+        <Button
+          disabled={busy || (Boolean(acknowledgement) && !acknowledged)}
+          onClick={onConfirm}
+          variant={destructive ? 'destructive' : 'accent'}
+        >
+          {confirmLabel}
+        </Button>
+      </DialogFooter>
+    </>
   );
 }
 

@@ -1,5 +1,10 @@
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
-import { hostPorts } from '../../ports';
+import { hostPorts, type Approval, type ApprovalGrant } from '../../ports';
+
+export const deniedMessage = (message: string, approval: Approval | undefined) =>
+  approval && !approval.approved && approval.note
+    ? `${message}。用户说明：${approval.note}`
+    : message;
 
 export function approveTool(
   tool: ToolDefinition,
@@ -7,32 +12,31 @@ export function approveTool(
   title: string,
   fields?: { label: string; value: string }[],
   readOnly?: (input: unknown) => boolean,
+  grant: (input: unknown) => ApprovalGrant = () => ({ keys: [`tool:${tool.name}`], label: title }),
 ): ToolDefinition {
   return {
     ...tool,
     async execute(id, input, signal, onUpdate, context) {
       const args = structuredClone(input);
       const cancellation = signal ?? new AbortController().signal;
-      if (
-        !cancellation.aborted &&
-        (readOnly?.(args) ||
-          (await hostPorts().desktop.approveToolAction?.({
-            session,
-            title,
-            fields: [
-              ...(fields ?? []),
-              { label: '参数', value: JSON.stringify(args ?? {}, null, 2) },
-            ],
-            signal: cancellation,
-          }))) &&
-        !cancellation.aborted
-      )
+      if (cancellation.aborted) return denied('操作未获批准或已取消', undefined);
+      if (readOnly?.(args)) return tool.execute(id, args, cancellation, onUpdate, context);
+      const approval = await hostPorts().desktop.approveToolAction?.({
+        session,
+        title,
+        fields: [...(fields ?? []), { label: '参数', value: JSON.stringify(args ?? {}) }],
+        grant: grant(args),
+        signal: cancellation,
+      });
+      if (approval?.approved && !cancellation.aborted)
         return tool.execute(id, args, cancellation, onUpdate, context);
-      return {
-        content: [{ type: 'text', text: '操作未获批准或已取消' }],
-        details: undefined,
-        isError: true,
-      };
+      return denied('操作未获批准或已取消', approval);
     },
   };
 }
+
+const denied = (message: string, approval: Approval | undefined) => ({
+  content: [{ type: 'text' as const, text: deniedMessage(message, approval) }],
+  details: undefined,
+  isError: true,
+});

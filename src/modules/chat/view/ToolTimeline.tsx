@@ -297,7 +297,11 @@ export function ReplyTrace({
       : '已思考';
   return (
     <Trace
-      blocks={blocks.map((block, index) => ({ key: block.key, node: renderBlock(block, index) }))}
+      blocks={blocks.map((block, index) => ({
+        key: block.key,
+        node: renderBlock(block, index),
+        reply: block.part.type === 'text',
+      }))}
       foldLabel={foldable ? foldLabel : undefined}
       running={
         live && startedAt !== undefined
