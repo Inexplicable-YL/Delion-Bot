@@ -25,10 +25,15 @@ const executablePaths = programs.map((path) => `(literal "${path}")`).join(' ');
 const profile = `(version 1)
 (deny default)
 (allow process-exec ${executablePaths})
+(allow file-map-executable (subpath "/usr/lib") (subpath "/System/Library") ${executablePaths})
 (allow file-read* (subpath (param "INPUTS")) (subpath "/usr/lib") (subpath "/System/Library")
   (literal "/dev/null") (literal "/dev/zero") (literal "/dev/random") (literal "/dev/urandom")
   ${executablePaths})
+(allow file-read-metadata file-test-existence (path-ancestors (param "INPUTS")))
 (allow file-write-data (literal "/dev/null"))
+(allow sysctl-read (sysctl-name-prefix "hw.optional.arm") (sysctl-name "kern.osvariant_status")
+  (sysctl-name "hw.pagesize") (sysctl-name "hw.cpufamily") (sysctl-name "hw.cputype"))
+(allow system-mac-syscall (require-all (mac-policy-name "Sandbox") (mac-syscall-number 67)))
 `;
 
 export function runMacosCommand(directory: string, command: string, signal: AbortSignal) {
@@ -45,7 +50,7 @@ export function runMacosCommand(directory: string, command: string, signal: Abor
         maxBuffer: 128 * 1024,
       },
       (error, stdout, stderr) => {
-        const output = `${stdout}${stderr}`.replaceAll(directory, '.');
+        const output = (`${stdout}${stderr}` || error?.signal || '').replaceAll(directory, '.');
         resolve({
           exitCode: error ? (typeof error.code === 'number' ? error.code : null) : 0,
           output,
