@@ -66,7 +66,7 @@ Delion Bot Harness 基于 Pi 构建，可以作为一款通用 agent 产品使�
 ![Vite](https://img.shields.io/badge/Vite-v8-646CFF?style=for-the-badge&logo=vite&logoColor=white&labelColor=1F2328)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white&labelColor=1F2328)
 ![Pi](https://img.shields.io/badge/Pi-v1.1-1E293B?style=for-the-badge&logoColor=white&labelColor=1F2328)
-![Go](https://img.shields.io/badge/Go-v1.22-00ADD8?style=for-the-badge&logo=go&logoColor=white&labelColor=1F2328)
+![Go](https://img.shields.io/badge/Go-v1.25-00ADD8?style=for-the-badge&logo=go&logoColor=white&labelColor=1F2328)
 
 ## 下载安装
 

@@ -5,7 +5,7 @@ import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { chatMediaPath, readChatMediaBytes, stageChatMedia } from '../../../core/agent/media';
 import { executionMode } from '../../../core/agent/sandbox/mode';
-import { scopedReferencePath } from '../../../core/agent/sandbox/scoped-files';
+import { readScopedReference } from '../../../core/agent/sandbox/scoped-files';
 import { row, sessionCwd } from '../../../core/agent/session/store';
 import { hostPorts } from '../../../core/ports';
 import type { ChatMediaView } from '../../../core/protocol/agent';
@@ -32,8 +32,6 @@ type ImageFile =
 function locateImage(sessionId: string, path: string): ImageFile {
   if (!imageMimeOf(path)) throw new Error('不支持的图片格式');
   const meta = row(sessionId);
-  if (executionMode(meta) !== 'full')
-    return { kind: 'local', path: scopedReferencePath(meta, path) };
   const cwd = sessionCwd(meta.project_id, meta.cwd);
   const remote = meta.project_id ? hostPorts().projects.remoteOf(meta.project_id) : null;
   if (remote) return { kind: 'remote', target: remote.target, path: posix.resolve(cwd, path) };
@@ -102,6 +100,12 @@ async function readReplyImage(
   if ('url' in source) {
     if (executionMode(row(sessionId)) !== 'full') throw new Error('当前权限无法获取外部图片');
     return downloadImage(source.url);
+  }
+  const meta = row(sessionId);
+  if (executionMode(meta) !== 'full') {
+    if (!imageMimeOf(source.path)) throw new Error('不支持的图片格式');
+    const result = await readScopedReference(meta, source.path, 'read');
+    return { name: posix.basename(source.path), bytes: Buffer.from(result.data ?? '', 'base64') };
   }
   const file = locateImage(sessionId, source.path);
   if (file.kind === 'remote')
@@ -180,12 +184,16 @@ export async function replyImageResponse(_request: Request, url: URL): Promise<R
   const sessionId = decodeURIComponent(url.pathname.slice(1));
   const path = url.searchParams.get('path');
   if (!sessionId || !path) throw new Error('无效的图片地址');
-  const file = locateImage(sessionId, path);
   const headers = {
     'content-type': imageMimeOf(path)!,
     'cache-control': 'no-cache',
     'x-content-type-options': 'nosniff',
   };
+  if (executionMode(row(sessionId)) !== 'full') {
+    const { bytes } = await readReplyImage(sessionId, { path });
+    return new Response(new Uint8Array(bytes), { headers });
+  }
+  const file = locateImage(sessionId, path);
   if (file.kind === 'remote') {
     const bytes = await readRemoteImage(file.target, file.path);
     return new Response(new Uint8Array(bytes), { headers });

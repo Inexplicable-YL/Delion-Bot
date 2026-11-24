@@ -115,7 +115,13 @@ async function openLive(id: string): Promise<Live> {
   });
   if (session.sessionFile && session.sessionFile !== meta.file)
     storeSessionFile(id, session.sessionFile);
-  const entry: Live = { session, cwd, providerId: selection.provider.id, unsubscribe: () => {} };
+  const entry: Live = {
+    session,
+    cwd,
+    providerId: selection.provider.id,
+    unsubscribe: () => {},
+    captureDisabled: options.restricted && options.customTools.length === 0,
+  };
   entry.unsubscribe = session.subscribe((event) => onEvent(id, entry, event));
   live.set(id, entry);
   return entry;
@@ -482,7 +488,8 @@ async function runTurn(
   let captureError: string | undefined;
   const scoped = executionMode(meta) !== 'full';
   try {
-    if (isRemoteSession(meta)) captureError = '远程会话暂不记录目录快照';
+    if (entry.captureDisabled) captureError = '当前会话没有可访问的工作目录';
+    else if (isRemoteSession(meta)) captureError = '远程会话暂不记录目录快照';
     else if (!child)
       run.captured = changes.captureDirectory(entry.cwd, [], scoped).then(
         (snapshot) => {

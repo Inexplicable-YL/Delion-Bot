@@ -25,7 +25,7 @@ import (
 
 const (
 	protocolVersion = 2
-	helperVersion   = "0.3.3"
+	helperVersion   = "0.3.4"
 	idleTick        = 10 * time.Second
 	minTokenLength  = 16
 )
@@ -79,6 +79,7 @@ func (s *server) register(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/fs/stat", s.auth(s.handleStat))
 	mux.HandleFunc("/v1/fs/read", s.auth(s.handleRead))
 	mux.HandleFunc("/v1/fs/write", s.auth(s.handleWrite))
+	mux.HandleFunc("POST /v1/fs/scoped", s.auth(s.handleScopedFile))
 	mux.HandleFunc("/v1/watch", s.auth(s.handleWatch))
 	mux.HandleFunc("/v1/ports", s.auth(s.handlePorts))
 	mux.HandleFunc("/v1/fs/glob", s.auth(s.handleGlob))

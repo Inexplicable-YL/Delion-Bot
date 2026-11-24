@@ -38,9 +38,6 @@ jobs:
       - name: Test helper locally (no SSH)
         working-directory: helper
         run: go test -count=1 -timeout=2m ./...
-      - name: Test scoped filesystem
-        working-directory: helper/scopedfs
-        run: go test -count=1 -timeout=2m ./...
       - name: Build helper
         run: node scripts/build-helper.ts --all
       - name: Smoke test helper executables

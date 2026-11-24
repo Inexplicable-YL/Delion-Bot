@@ -98,6 +98,10 @@ afterAll(async () => {
 
 it('完全访问在宿主明确确认后才生效', async () => {
   const parent = (await newSession(null)).sessionId!;
+  state
+    .db!.prepare('INSERT INTO workspace_settings VALUES (?, ?)')
+    .run(`session-permission:${parent}`, 'full');
+  expect(readPermissionMode(parent)).toBe('read-only');
   confirmFullAccess.mockResolvedValueOnce(false);
   expect((await setSessionPermissionMode(parent, 'full')).permissionMode).toBe('read-only');
   expect(readPermissionMode(parent)).toBe('read-only');
@@ -113,6 +117,11 @@ it('完全访问在宿主明确确认后才生效', async () => {
     signal: expect.any(AbortSignal),
   });
   await setSessionPermissionMode(parent, 'read-only');
+  confirmFullAccess.mockReturnValueOnce(new Promise((resolve) => (confirm = resolve)));
+  const revoked = setSessionPermissionMode(parent, 'full');
+  await setSessionPermissionMode(parent, 'approval');
+  confirm(true);
+  expect((await revoked).permissionMode).toBe('approval');
 });
 
 it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受限后不再保留', async () => {
@@ -157,7 +166,7 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
     (restrictedRequests.at(-1)?.body as { tools?: { function: { name: string } }[] } | undefined)
       ?.tools ?? []
   ).map((tool) => tool.function.name);
-  expect(names.sort()).toEqual(['ls', 'read', 'task', 'task_output', 'task_stop']);
+  expect(names.sort()).toEqual(['find', 'grep', 'ls', 'read', 'task', 'task_output', 'task_stop']);
   expect(JSON.stringify(restrictedRequests.at(-1)?.body)).toContain('/privacy');
   stopRestricted();
 }, 30_000);

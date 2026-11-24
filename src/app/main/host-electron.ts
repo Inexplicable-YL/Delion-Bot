@@ -17,7 +17,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import {
   CredentialDecryptionError,
@@ -155,6 +155,11 @@ export const electronPorts: HostPorts = {
     documents: () => app.getPath('documents'),
     temp: () => app.getPath('temp'),
     storage: storageDirectory,
+    applicationCode: () => {
+      if (!app.isPackaged) return app.getAppPath();
+      const directory = dirname(process.execPath);
+      return process.platform === 'darwin' ? resolve(directory, '../..') : directory;
+    },
     bundled: (name) =>
       app.isPackaged
         ? join(process.resourcesPath, name)

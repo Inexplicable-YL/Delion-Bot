@@ -13,6 +13,7 @@ export interface Live {
   stale?: boolean;
   compactedTokens?: number;
   extraCompacting?: boolean;
+  captureDisabled?: boolean;
 }
 
 export interface Run {

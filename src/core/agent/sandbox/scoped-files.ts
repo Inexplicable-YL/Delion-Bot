@@ -1,18 +1,28 @@
 import { execFile } from 'node:child_process';
-import { isAbsolute, join, relative } from 'node:path';
+import { isAbsolute, join, posix, relative } from 'node:path';
 import { realpathSync } from 'node:fs';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
 import { imageMimeOf } from '../../protocol/files';
+import {
+  helperSession,
+  type ScopedFileOperation,
+  type ScopedFileResponse,
+} from '../../remote/helper';
 import { executionMode, ownerRow, scopedDirectories, type ScopedDirectory } from './mode';
 import type { SessionRow } from '../session/store';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_TEXT_BYTES = 200_000;
 
-type FileRequest = { path?: string; content?: string; oldText?: string; newText?: string };
-type FileResponse = { data?: string; entries?: string[]; error?: string };
-type Action = 'read' | 'ls' | 'write' | 'edit';
+type FileRequest = {
+  path?: string;
+  content?: string;
+  oldText?: string;
+  newText?: string;
+  pattern?: string;
+};
+type Action = Exclude<ScopedFileOperation['action'], 'stat'>;
 
 function targetPath(input: string, directories: ScopedDirectory[]) {
   const path = input.replaceAll('\\', '/');
@@ -38,6 +48,7 @@ function targetPath(input: string, directories: ScopedDirectory[]) {
 
 export function scopedReferencePath(meta: SessionRow, input: string): string {
   const { root, key } = targetPath(input, scopedDirectories(meta));
+  if (root.remote) return posix.join(root.host, key);
   const path = join(root.host, key);
   const actual = realpathSync(path);
   if (relative(path, actual) !== '' || !isAbsolute(actual)) throw new Error('链接超出聊天授权目录');
@@ -47,12 +58,25 @@ export function scopedReferencePath(meta: SessionRow, input: string): string {
 export function scopedPromptPath(meta: SessionRow, input: string): string | null {
   try {
     const directories = scopedDirectories(meta);
-    const virtual = directories.reduce((mapped, { host, name }) => {
-      if (!isAbsolute(input)) return mapped;
-      const key = relative(host, input).replaceAll('\\', '/');
-      if (isAbsolute(key) || key === '..' || key.startsWith('../')) return mapped;
-      return key ? `${name}/${key}` : name;
-    }, input);
+    let virtual = input;
+    for (const { host, name, remote } of directories) {
+      const source =
+        remote && meta.project_id && input.startsWith(`${meta.project_id}:`)
+          ? input.slice(meta.project_id.length + 1)
+          : input;
+      const path = remote ? posix : { isAbsolute, relative };
+      if (!path.isAbsolute(source)) continue;
+      let canonical = source;
+      if (!remote) {
+        try {
+          canonical = realpathSync(source);
+        } catch {}
+      }
+      const key = path.relative(host, canonical).replaceAll('\\', '/');
+      if (path.isAbsolute(key) || key === '..' || key.startsWith('../')) continue;
+      virtual = key ? `${name}/${key}` : name;
+      break;
+    }
     const { root, key } = targetPath(virtual, directories);
     return key === '.' ? root.name : `${root.name}/${key}`;
   } catch {
@@ -60,7 +84,18 @@ export function scopedPromptPath(meta: SessionRow, input: string): string | null
   }
 }
 
-function runFileAction(root: string, request: object, signal: AbortSignal): Promise<FileResponse> {
+async function runFileAction(
+  root: ScopedDirectory,
+  request: ScopedFileOperation,
+  signal: AbortSignal,
+): Promise<ScopedFileResponse> {
+  if (root.remote) {
+    try {
+      return await helperSession(root.remote).scopedFile(root.host, request, signal);
+    } catch {
+      return { error: '远程文件沙箱无法完成操作' };
+    }
+  }
   const binary = join(
     hostPorts().paths.bundled('scopedfs'),
     process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs',
@@ -68,7 +103,7 @@ function runFileAction(root: string, request: object, signal: AbortSignal): Prom
   return new Promise((resolve) => {
     const child = execFile(
       binary,
-      [root],
+      [root.host],
       { env: {}, windowsHide: true, signal, timeout: 10_000, maxBuffer: 8 * 1024 * 1024 },
       (error, output) => {
         if (error || signal.aborted) {
@@ -76,7 +111,7 @@ function runFileAction(root: string, request: object, signal: AbortSignal): Prom
           return;
         }
         try {
-          resolve(JSON.parse(output) as FileResponse);
+          resolve(JSON.parse(output) as ScopedFileResponse);
         } catch {
           resolve({ error: '文件沙箱返回了无效的响应' });
         }
@@ -85,6 +120,21 @@ function runFileAction(root: string, request: object, signal: AbortSignal): Prom
     child.stdin?.on('error', () => {});
     child.stdin?.end(JSON.stringify(request));
   });
+}
+
+export async function readScopedReference(
+  meta: SessionRow,
+  input: string,
+  action: 'read' | 'stat',
+) {
+  const { root, key } = targetPath(input, scopedDirectories(meta));
+  const result = await runFileAction(
+    root,
+    { action, path: key, limit: MAX_IMAGE_BYTES },
+    AbortSignal.timeout(10_000),
+  );
+  if (result.error) throw new Error(result.error);
+  return result;
 }
 
 const textResult = (text: string, isError = false) => ({
@@ -132,19 +182,22 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
         const approved = await hostPorts().desktop.approveFileChange?.({
           session: owner.id,
           action,
-          path: join(root.host, key),
+          path: root.remote
+            ? `${root.remote.host}: ${posix.join(root.host, key)}`
+            : join(root.host, key),
           signal: cancellation,
         });
         if (!approved || cancellation.aborted) return textResult('文件修改未获批准', true);
       }
       const mime = action === 'read' ? imageMimeOf(key) : null;
       const result = await runFileAction(
-        root.host,
+        root,
         {
           action,
           path: key,
           content,
           oldText: params.oldText,
+          pattern: params.pattern,
           limit: mime ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES,
           writable,
         },
@@ -153,6 +206,16 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
       if (result.error) return textResult(result.error, true);
       if (writable) return textResult(visible);
       if (action === 'ls') return textResult(JSON.stringify(result.entries ?? []));
+      if (action === 'find' || action === 'grep') {
+        const matches =
+          action === 'find'
+            ? (result.entries ?? []).map((path) => `${root.name}/${path}`)
+            : (result.matches ?? []).map((match) => ({
+                ...match,
+                path: `${root.name}/${match.path}`,
+              }));
+        return textResult(JSON.stringify({ matches, limited: Boolean(result.limited) }));
+      }
       if (mime && mime !== 'image/svg+xml')
         return {
           content: [{ type: 'image', data: result.data ?? '', mimeType: mime }],
@@ -166,6 +229,18 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
   const tools = [
     createTool('read', 'Read a file in the current chat directories.', { path }, ['path']),
     createTool('ls', 'List up to 1,000 entries in a current chat directory.', { path }, []),
+    createTool(
+      'find',
+      'Find names by glob pattern inside a current chat directory.',
+      { path, pattern: string },
+      ['pattern'],
+    ),
+    createTool(
+      'grep',
+      'Find text lines matching a regular expression inside a current chat directory.',
+      { path, pattern: string },
+      ['pattern'],
+    ),
   ];
   if (mode === 'approval' || mode === 'project-write')
     tools.push(

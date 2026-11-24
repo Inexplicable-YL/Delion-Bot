@@ -4,10 +4,10 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -38,7 +38,6 @@ vi.mock('../../../../src/core/capabilities/tools', () => ({
 
 import { agentEnvironment } from '../../../../src/core/agent/environment';
 import { launchPlan, scopedDirectories } from '../../../../src/core/agent/sandbox/mode';
-import { sandboxPath, resolveVirtualHost } from '../../../../src/core/agent/sandbox/paths';
 import { referenceFilePath } from '../../../../src/modules/chat/main/reference-file';
 import { fileLinkKey } from '../../../../src/modules/chat/view/reference-tokens';
 import { hostPorts } from '../../../../src/core/ports';
@@ -95,25 +94,7 @@ afterEach(() => {
 });
 
 describe('路径契约', () => {
-  it('把 privacy 和 share 映射进沙箱，不把它们解析到宿主目录', () => {
-    expect(sandboxPath('privacy/a.txt')).toBe('/privacy/a.txt');
-    expect(sandboxPath('/share')).toBe('/share');
-    expect(sandboxPath('notes/a.txt')).toBe('/privacy/notes/a.txt');
-    expect(sandboxPath('/etc/hosts')).toBe('/etc/hosts');
-    expect(sandboxPath('C:/secret/db')).toBe('C:/secret/db');
-    expect(sandboxPath('\\\\server\\share\\a')).toBe('//server/share/a');
-    expect(sandboxPath('~/cache')).toBe('/privacy/.home/cache');
-  });
-
-  it('虚拟链接不能通过 .. 离开两个根', () => {
-    const roots = { privacy: '/data/privacy', share: '/data/share' };
-    expect(resolveVirtualHost('/privacy/a.txt', roots)).toEqual({
-      kind: 'host',
-      path: resolve(roots.privacy, 'a.txt'),
-    });
-    expect(resolveVirtualHost('/privacy/../../etc/passwd', roots)).toEqual({ kind: 'denied' });
-    expect(resolveVirtualHost('/share/../secret', roots)).toEqual({ kind: 'denied' });
-    expect(resolveVirtualHost('/etc/hosts', roots)).toEqual({ kind: 'passthrough' });
+  it('解析会话文件链接时保留虚拟根', () => {
     expect(fileLinkKey('/privacy/a.txt', '/data/chat-sessions/uuid', null, true)).toBe(
       '/privacy/a.txt',
     );
@@ -138,7 +119,7 @@ describe('受限普通对话', () => {
     const parentRoots = scopedDirectories(row(id));
     expect(parentPlan).toMatchObject({ mode: 'read-only', piCwd: '/privacy' });
     expect(childPlan.piCwd).toBe('/privacy');
-    expect(parentRoots[1]?.host).toBe(share);
+    expect(parentRoots[1]?.host).toBe(realpathSync(share));
     expect(scopedDirectories(row(child))).toEqual(parentRoots);
   });
 
@@ -150,7 +131,7 @@ describe('受限普通对话', () => {
       sessionId: id,
     });
     const names = options.customTools.map((tool) => tool.name).sort();
-    expect(names).toEqual(['ls', 'read']);
+    expect(names).toEqual(['find', 'grep', 'ls', 'read']);
     expect(options.commandPrefix).toBeUndefined();
     const prompt = options.appendSystemPrompt.join('\n');
     expect(prompt).toContain('/privacy');
@@ -182,13 +163,20 @@ describe('受限普通对话', () => {
       sessionId: projectId,
     });
     expect(project.commandPrefix).toBeUndefined();
-    expect(project.customTools.map((tool) => tool.name)).toEqual(['read', 'ls']);
+    expect(project.customTools.map((tool) => tool.name)).toEqual(['read', 'ls', 'find', 'grep']);
     writePermissionMode(projectId, 'project-write');
     const writable = await agentEnvironment().sessionOptions('p1', '/project', {
       askCards: false,
       sessionId: projectId,
     });
-    expect(writable.customTools.map((tool) => tool.name)).toEqual(['read', 'ls', 'write', 'edit']);
+    expect(writable.customTools.map((tool) => tool.name)).toEqual([
+      'read',
+      'ls',
+      'find',
+      'grep',
+      'write',
+      'edit',
+    ]);
     expect(scopedDirectories(row(projectId)).map(({ name }) => name)).toEqual(['/project']);
   });
 
@@ -233,6 +221,7 @@ describe('受限普通对话', () => {
     expect(await run(write, { path: '/share/deliverable.txt', content: 'approved' })).toMatchObject(
       { content: [{ text: '/share/deliverable.txt' }] },
     );
+
     expect(
       await run(write, { path: '/share/deliverable.txt', content: 'overwrite' }),
     ).toMatchObject({ isError: true });
@@ -245,6 +234,33 @@ describe('受限普通对话', () => {
     expect(await run(read, { path: '/privacy/deliverable.txt' })).toMatchObject({ isError: true });
     expect(approve).toHaveBeenCalledTimes(2);
     expect(readFileSync(join(chatShareDirectory(id), 'deliverable.txt'), 'utf8')).toBe('approved');
+  });
+
+  it.skipIf(
+    !existsSync(
+      join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
+    ),
+  )('项目内修改可直接写入项目，无法访问普通聊天目录', async () => {
+    const approve = vi.fn().mockResolvedValue(false);
+    database(approve);
+    const project = join(root, 'project');
+    mkdirSync(project, { recursive: true });
+    const id = insertSession('p1');
+    writePermissionMode(id, 'project-write');
+    const options = await agentEnvironment().sessionOptions('p1', '/project', {
+      askCards: false,
+      sessionId: id,
+    });
+    const write = options.customTools.find(({ name }) => name === 'write')!;
+    const writeTo = (path: string) =>
+      write.execute('call', { path, content: 'project' }, undefined, undefined, {} as never);
+    expect(await writeTo('/project/code.txt')).toMatchObject({
+      content: [{ text: '/project/code.txt' }],
+    });
+    expect(await writeTo('/share/code.txt')).toMatchObject({ isError: true });
+    expect(await writeTo('/project/../outside.txt')).toMatchObject({ isError: true });
+    expect(readFileSync(join(project, 'code.txt'), 'utf8')).toBe('project');
+    expect(approve).not.toHaveBeenCalled();
   });
 
   it('主进程只能打开聊天目录内的链接目标', () => {
@@ -266,6 +282,6 @@ describe('受限普通对话', () => {
     expect(() => referenceFilePath(id, note)).toThrow('路径超出聊天授权目录');
     const shared = join(chatShareDirectory(id), 'shared.txt');
     writeFileSync(shared, 'shared');
-    expect(referenceFilePath(id, '/share/shared.txt')).toBe(shared);
+    expect(referenceFilePath(id, '/share/shared.txt')).toBe(realpathSync(shared));
   });
 });

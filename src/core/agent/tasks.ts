@@ -15,8 +15,6 @@ import type { BackgroundTaskView, TaskNoticeDetails, TaskStatus } from '../proto
 import type { RemoteBackend } from '../remote/operations';
 import { loadPi } from './pi';
 import { hostPorts } from '../ports';
-import type { SandboxRoots } from './sandbox/mode';
-import { sandboxBash, sandboxBashTool } from './sandbox/tools';
 
 export interface TaskNotice {
   text: string;
@@ -368,37 +366,7 @@ export async function backgroundTools(
   shellPath: string,
   commandPrefix: string | undefined,
   remote: RemoteBackend | null,
-  sandbox: SandboxRoots | null = null,
 ): Promise<ToolDefinition[]> {
-  if (sandbox) {
-    const run: BashRunner = (command, { signal, timeout, onData }) =>
-      sandboxBash(sandbox, command, {
-        signal,
-        timeoutMs: timeout ? timeout * 1000 : undefined,
-        onData,
-      }).then((result) => ({
-        status: result.code === 0 ? 'completed' : 'failed',
-        exitCode: result.code,
-      }));
-    const bash = await sandboxBashTool(sandbox, true);
-    return [
-      {
-        ...bash,
-        async execute(
-          toolCallId,
-          params: { command: string; timeout?: number; background?: boolean },
-          signal,
-          onUpdate,
-          ctx,
-        ) {
-          if (!params.background) return bash.execute(toolCallId, params, signal, onUpdate, ctx);
-          const id = startBash(parent, params.command, params.timeout, run);
-          return text(`已在后台运行（taskId: ${id}）。结束时会自动通知你，不需要轮询。`);
-        },
-      } as ToolDefinition,
-      ...taskControls(parent),
-    ];
-  }
   const pi = await loadPi();
   const bash = remote
     ? pi.createBashToolDefinition(cwd, { operations: remote.bash })

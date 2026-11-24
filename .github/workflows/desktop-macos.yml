@@ -60,7 +60,7 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build and test
         run: |
-          (cd helper/scopedfs && go test -count=1 ./...)
+          (cd helper && go test -count=1 ./scope)
           pnpm build:scopedfs
           pnpm build:bundle
           pnpm test

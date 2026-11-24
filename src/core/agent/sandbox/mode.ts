@@ -2,10 +2,10 @@ import { mkdirSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { hostPorts } from '../../ports';
 import type { PermissionMode } from '../../protocol/agent';
+import type { RemoteTarget } from '../../remote/transport';
 import {
   chatSessionDirectory,
   chatShareDirectory,
-  ensurePrivateSession,
   readPermissionMode,
   row,
   sessionCwd,
@@ -16,13 +16,7 @@ export type ExecutionMode = PermissionMode;
 export interface ScopedDirectory {
   name: '/privacy' | '/share' | '/project';
   host: string;
-}
-
-export interface SandboxRoots {
-  ownerId: string;
-  privacyHost: string;
-  shareHost: string;
-  conceal: readonly string[];
+  remote?: RemoteTarget;
 }
 
 export interface LaunchPlan {
@@ -39,24 +33,6 @@ export function executionMode(meta: SessionRow): ExecutionMode {
   const owner = ownerRow(meta);
   const mode = readPermissionMode(owner.id);
   return mode === 'project-write' && !owner.project_id ? 'read-only' : mode;
-}
-
-export function sandboxRoots(ownerId: string): SandboxRoots {
-  const privacyHost = ensurePrivateSession(ownerId);
-  const shareHost = chatShareDirectory(ownerId);
-  return {
-    ownerId,
-    privacyHost,
-    shareHost,
-    conceal: [
-      ownerId,
-      privacyHost,
-      shareHost,
-      hostPorts().paths.userData(),
-      join(hostPorts().paths.storage(), 'chat-sessions'),
-      join(hostPorts().paths.storage(), 'chat-share'),
-    ],
-  };
 }
 
 export function launchPlan(meta: SessionRow): LaunchPlan {
@@ -77,25 +53,32 @@ function covers(parent: string, child: string): boolean {
   return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
+function resolvedPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
 export function scopedDirectories(meta: SessionRow): ScopedDirectory[] {
   const owner = ownerRow(meta);
   const { paths, projects } = hostPorts();
-  if (owner.project_id && projects.remoteOf(owner.project_id)) return [];
+  const remote = owner.project_id ? projects.remoteOf(owner.project_id) : null;
+  if (remote) return [{ name: '/project', host: remote.path, remote: remote.target }];
   mkdirSync(paths.storage(), { recursive: true });
   const storage = realpathSync(paths.storage());
+  const application = resolvedPath(paths.applicationCode?.() ?? paths.bundled('scopedfs'));
   const blocked = [
+    application,
     paths.userData(),
     join(storage, 'chat-sessions'),
     join(storage, 'chat-share'),
     join(paths.home(), '.delion-bot'),
     join(paths.temp(), 'delion-document-reading'),
-  ].map((path) => {
-    try {
-      return realpathSync(path);
-    } catch {
-      return resolve(path);
-    }
-  });
+    ...(process.platform === 'linux' ? ['/dev', '/proc', '/sys', '/run'] : []),
+    ...(process.platform === 'darwin' ? ['/dev', '/System'] : []),
+  ].map(resolvedPath);
   if (owner.project_id) {
     const host = realpathSync(sessionCwd(owner.project_id, null));
     if (blocked.some((path) => covers(path, host) || covers(host, path))) return [];
@@ -106,7 +89,12 @@ export function scopedDirectories(meta: SessionRow): ScopedDirectory[] {
     { name: '/share' as const, path: chatShareDirectory(owner.id), directory: 'chat-share' },
   ].map(({ name, path, directory }) => {
     const host = realpathSync(path);
-    if (relative(host, join(storage, directory, owner.id)) !== '' || !statSync(host).isDirectory())
+    if (
+      relative(host, join(storage, directory, owner.id)) !== '' ||
+      !statSync(host).isDirectory() ||
+      covers(application, host) ||
+      covers(host, application)
+    )
       throw new Error('聊天文件目录不可用');
     return { name, host };
   });

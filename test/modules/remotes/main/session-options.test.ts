@@ -61,7 +61,7 @@ provideTestHostPorts({
           sql.includes('FROM sessions')
             ? { id, parent_id: null, project_id: id === 'remote-chat' ? 'p-remote' : 'p-local' }
             : id?.startsWith('session-permission:')
-              ? { value: 'full' }
+              ? { value: 'full-confirmed' }
               : undefined,
         all: () => [],
       }),

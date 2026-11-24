@@ -22,6 +22,7 @@ export interface Paths {
   documents(): string;
   temp(): string;
   storage(): string;
+  applicationCode?(): string;
   bundled(name: BundledResource): string;
   bash(): string;
 }

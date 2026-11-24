@@ -56,14 +56,15 @@ function setting(key: string): string | undefined {
 
 export function readPermissionMode(id: string): PermissionMode {
   const mode = setting(permissionKey(id));
-  return mode === 'full' || mode === 'approval' || mode === 'project-write' ? mode : 'read-only';
+  if (mode === 'full-confirmed') return 'full';
+  return mode === 'approval' || mode === 'project-write' ? mode : 'read-only';
 }
 
 export function writePermissionMode(id: string, mode: PermissionMode) {
   hostPorts()
     .database()
     .prepare('INSERT OR REPLACE INTO workspace_settings VALUES (?, ?)')
-    .run(permissionKey(id), mode);
+    .run(permissionKey(id), mode === 'full' ? 'full-confirmed' : mode);
 }
 
 export function chatShareDirectory(id: string) {
