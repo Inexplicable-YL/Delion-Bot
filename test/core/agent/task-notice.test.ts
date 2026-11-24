@@ -36,7 +36,7 @@ vi.mock('node-pty', () => ({ spawn: vi.fn() }));
 import { newSession, openSession } from '../../../src/core/agent/session/commands';
 import { sessionBranch, sessionRunning } from '../../../src/core/agent/session/live';
 import { askSession, cancelRun, shutdownSessions } from '../../../src/core/agent/session/run';
-import { preloadPi } from '../../../src/core/agent/session/store';
+import { preloadPi, writePermissionMode } from '../../../src/core/agent/session/store';
 import { sessionTurns } from '../../../src/core/agent/session-read';
 import { locateBash } from '../../../src/modules/terminal';
 import { provideTestHostPorts } from '../host-mock';
@@ -83,6 +83,7 @@ afterAll(async () => {
 
 it('父会话空闲时自动开一轮处理通知，界面显示运行中；只投递一次，会话读取里自成一轮', async () => {
   const parent = (await newSession(null)).sessionId!;
+  writePermissionMode(parent, 'full');
   const requests: RecordedRequest[] = [];
   let runningAtWake = false;
   const stop = server.onRequest((request) => {
@@ -122,6 +123,7 @@ it('父会话空闲时自动开一轮处理通知，界面显示运行中；只�
 
 it('主对话停止不影响后台任务，之后正常结束的任务仍会唤醒父会话', async () => {
   const parent = (await newSession(null)).sessionId!;
+  writePermissionMode(parent, 'full');
   const { requests, stop } = recorded();
   server.enqueue(backgroundBash('sleep 1; echo 迟到的结果'));
   server.enqueue(reply('慢慢说', 3000));

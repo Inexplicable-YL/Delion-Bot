@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { mkdtempSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -112,7 +113,7 @@ describe('路径契约', () => {
     const roots = { privacy: '/data/privacy', delivery: '/data/delivery' };
     expect(resolveVirtualHost('/privacy/a.txt', roots)).toEqual({
       kind: 'host',
-      path: '/data/privacy/a.txt',
+      path: resolve(roots.privacy, 'a.txt'),
     });
     expect(resolveVirtualHost('/privacy/../../etc/passwd', roots)).toEqual({ kind: 'denied' });
     expect(resolveVirtualHost('/delivery/../secret', roots)).toEqual({ kind: 'denied' });

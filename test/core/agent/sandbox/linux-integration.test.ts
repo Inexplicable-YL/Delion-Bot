@@ -8,7 +8,10 @@ import type { SandboxRoots } from '../../../../src/core/agent/sandbox/mode';
 import { sandboxBash, sandboxTools } from '../../../../src/core/agent/sandbox/tools';
 import { provideTestHostPorts } from '../../host-mock';
 
-const root = mkdtempSync(join('/home/ubuntu', 'delion-bwrap-'));
+const root =
+  process.platform === 'linux'
+    ? mkdtempSync(join('/home/ubuntu', 'delion-bwrap-'))
+    : join('/home/ubuntu', 'delion-bwrap-skipped');
 const sessionId = '11111111-1111-4111-8111-111111111111';
 const privacyHost = join(root, 'storage', 'chat-sessions', sessionId);
 const deliveryHost = join(root, 'storage', 'chat-delivery', sessionId);
@@ -59,7 +62,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  rmSync(root, { recursive: true, force: true });
+  if (process.platform === 'linux') rmSync(root, { recursive: true, force: true });
 });
 
 describe.skipIf(!available)('Linux bubblewrap 隔离', () => {
