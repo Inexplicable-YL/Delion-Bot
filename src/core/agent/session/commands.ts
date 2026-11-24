@@ -8,7 +8,7 @@ import { closeSidechat, sidechatBusy } from '../sidechat';
 import { stopSessionTasks } from '../tasks';
 import { live, sessionBranch, type Live } from './live';
 import { COMPACTION_DETAILS, publish, snapshot } from './projection';
-import { disposeLive, ensureLive, sessionOpening } from './run';
+import { disposeLive, ensureLive, sessionOpening, stopArchivedRun } from './run';
 import {
   adoptSessionFile,
   archiveProject,
@@ -122,12 +122,17 @@ export function updateSessionVisibility(
   patch: { archived?: boolean; pinned?: boolean },
 ) {
   row(id);
-  if (patch.archived) {
-    fullAccessRequests.get(id)?.abort();
-    stopSessionTasks(id);
-    void closeSidechat(id);
-  }
   storeVisibility(id, patch);
+  if (patch.archived) {
+    for (const sessionId of [id, ...childSessionIds(id)]) stopArchivedSession(sessionId);
+  }
+}
+
+function stopArchivedSession(id: string) {
+  fullAccessRequests.get(id)?.abort();
+  stopSessionTasks(id);
+  stopArchivedRun(id);
+  void closeSidechat(id);
 }
 
 export function moveSession(id: string, projectId: string | null) {
@@ -142,11 +147,7 @@ export function moveSession(id: string, projectId: string | null) {
 
 export function archiveProjectSessions(projectId: string | null): string[] {
   const ids = archiveProject(projectId);
-  for (const id of ids) {
-    fullAccessRequests.get(id)?.abort();
-    stopSessionTasks(id);
-    void closeSidechat(id);
-  }
+  for (const id of ids) stopArchivedSession(id);
   return ids;
 }
 

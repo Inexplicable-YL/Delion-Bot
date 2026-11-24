@@ -62,6 +62,7 @@ export function sessionOpening(id: string): boolean {
 }
 
 export function ensureLive(id: string): Promise<Live> {
+  if (row(id).archived) return Promise.reject(new Error('请先恢复已归档的会话'));
   const existing = live.get(id);
   if (existing) return Promise.resolve(existing);
   const pending = openingSessions.get(id);
@@ -123,6 +124,10 @@ async function openLive(id: string): Promise<Live> {
     ...(meta.parent_id ? { parentSession: row(meta.parent_id).file } : {}),
     beforeTool: () => live.get(id)?.run?.captured,
   });
+  if (row(id).archived) {
+    session.dispose();
+    throw new Error('请先恢复已归档的会话');
+  }
   if (session.sessionFile && session.sessionFile !== meta.file)
     storeSessionFile(id, session.sessionFile);
   const entry: Live = {
@@ -338,6 +343,14 @@ export function cancelRun(id: string): ChatQueuedDraft | null {
   return queued;
 }
 
+export function stopArchivedRun(id: string): void {
+  const entry = live.get(id);
+  if (!entry) return;
+  if (entry.run) entry.run.cancelled = true;
+  entry.session.abortCompaction();
+  void entry.session.abort();
+}
+
 export function withdrawQueued(id: string): ChatQueuedDraft | null {
   const entry = live.get(id);
   if (!entry?.run) return null;
@@ -366,7 +379,9 @@ function undeliveredNotices(entry: Live, run: Run): TaskNotice[] {
 }
 
 async function deliverTaskNotice(id: string, notice: TaskNotice, wake: boolean): Promise<void> {
+  if (row(id).archived) return;
   const entry = await ensureLive(id);
+  if (row(id).archived) return;
   if (!wake) {
     await entry.session.sendCustomMessage(noticeMessage(notice), { triggerTurn: false });
     return;
@@ -420,6 +435,7 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
   if (entry.run) throw new Error('请等待当前回答完成');
   if (entry.session.isCompacting) throw new Error('正在压缩上下文，请稍候');
   const meta = row(id);
+  if (meta.archived) throw new Error('请先恢复已归档的会话');
   const { prompt, userText, images, attachments, comments, turnId } = composePrompt(input, meta);
   if (input.replaceLastUser) {
     const branch = entry.session.sessionManager.getBranch();
@@ -475,6 +491,7 @@ async function runTurn(
   start: () => Promise<void>,
 ): Promise<TurnStatus> {
   const meta = row(id);
+  if (meta.archived) throw new Error('请先恢复已归档的会话');
   const child = meta.parent_id !== null;
   const modelId = entry.session.model?.id;
   const autoCompaction = modelId ? modelAutoCompaction(entry.providerId, modelId) : undefined;
@@ -541,11 +558,13 @@ async function runTurn(
       changesError = error instanceof Error ? error.message : String(error);
     }
     const orphaned = takeSteers(entry, run);
+    const archived = Boolean(row(id).archived);
     const lostNotices = undeliveredNotices(entry, run);
     try {
       releaseChatAttachments([
         ...attachments,
         ...run.steers.flatMap((steer) => steer.input.attachments),
+        ...(archived ? orphaned.flatMap((steer) => steer.attachments) : []),
       ]);
       const finishedThinking = [...(liveThinking.get(id) ?? [])].filter(
         ([, time]) => time.finishedAt !== undefined,
@@ -569,14 +588,16 @@ async function runTurn(
     } finally {
       finishRun();
     }
-    for (const steer of orphaned)
-      void askSession(id, steer).catch((error: unknown) =>
-        console.error('插队消息发送失败', error),
-      );
-    for (const notice of lostNotices)
-      void deliverTaskNotice(id, notice, !run.cancelled).catch((error: unknown) =>
-        console.error('后台任务通知投递失败', error),
-      );
+    if (!archived) {
+      for (const steer of orphaned)
+        void askSession(id, steer).catch((error: unknown) =>
+          console.error('插队消息发送失败', error),
+        );
+      for (const notice of lostNotices)
+        void deliverTaskNotice(id, notice, !run.cancelled).catch((error: unknown) =>
+          console.error('后台任务通知投递失败', error),
+        );
+    }
   }
   return status;
 }

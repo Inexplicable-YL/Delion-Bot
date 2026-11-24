@@ -40,7 +40,12 @@ vi.mock('../../../../src/core/capabilities/tools', () => ({
 vi.mock('node-pty', () => ({ spawn: vi.fn() }));
 
 import { live, sessionRunning } from '../../../../src/core/agent/session/live';
-import { setSessionPermissionMode, newSession } from '../../../../src/core/agent/session/commands';
+import {
+  archiveProjectSessions,
+  setSessionPermissionMode,
+  newSession,
+  updateSessionVisibility,
+} from '../../../../src/core/agent/session/commands';
 import { askSession, shutdownSessions } from '../../../../src/core/agent/session/run';
 import {
   chatSessionDirectory,
@@ -57,9 +62,11 @@ import { askInput as input, reply, startMockModel, stopMockModel } from '../../m
 
 const confirmFullAccess =
   vi.fn<NonNullable<ReturnType<typeof hostPorts>['desktop']['confirmFullAccess']>>();
+const approveFileChange =
+  vi.fn<NonNullable<ReturnType<typeof hostPorts>['desktop']['approveFileChange']>>();
 provideTestHostPorts({
   database: () => state.db!,
-  desktop: { ...hostPorts().desktop, confirmFullAccess },
+  desktop: { ...hostPorts().desktop, confirmFullAccess, approveFileChange },
   paths: {
     userData: () => join(root, 'user'),
     storage: () => join(root, 'storage'),
@@ -209,3 +216,38 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
   expect(JSON.stringify(restrictedRequests.at(-1)?.body)).toContain('/privacy');
   stopRestricted();
 }, 30_000);
+
+it.each([
+  ['归档会话', (id: string) => updateSessionVisibility(id, { archived: true })],
+  ['批量归档', () => archiveProjectSessions(null)],
+] as const)('%s取消正在等待批准的写入', async (_label, archive) => {
+  const id = (await newSession(null)).sessionId!;
+  await setSessionPermissionMode(id, 'approval');
+  const destination = join(chatShareDirectory(id), 'archived.txt');
+  let approvalSignal: AbortSignal | undefined;
+  approveFileChange.mockImplementationOnce(({ signal }) => {
+    approvalSignal = signal;
+    return new Promise((resolve) =>
+      signal.addEventListener('abort', () => resolve(true), { once: true }),
+    );
+  });
+  server.enqueue({
+    kind: 'sse',
+    frames: [
+      mockFrames.toolCallDelta({
+        index: 0,
+        id: 'archive-write',
+        name: 'write',
+        arguments: JSON.stringify({ path: '/share/archived.txt', content: 'pending' }),
+      }),
+      mockFrames.finishFrame('tool_calls'),
+    ],
+  });
+  const run = askSession(id, input('写入测试文件'));
+  await vi.waitFor(() => expect(approvalSignal).toBeDefined());
+  archive(id);
+  await run;
+  expect(approvalSignal?.aborted).toBe(true);
+  expect(existsSync(destination)).toBe(false);
+  await expect(askSession(id, input('再次写入'))).rejects.toThrow('请先恢复已归档的会话');
+});

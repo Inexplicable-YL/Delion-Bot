@@ -170,6 +170,7 @@ async function createSide(parentId: string): Promise<Side> {
 }
 
 export async function openSidechat(parentId: string): Promise<SidechatView> {
+  if (row(parentId).archived) throw new Error('请先恢复已归档的会话');
   const existing = sides.get(parentId);
   if (existing) return view(parentId, existing);
   let pending = opening.get(parentId);
@@ -178,6 +179,7 @@ export async function openSidechat(parentId: string): Promise<SidechatView> {
     opening.set(parentId, pending);
   }
   const side = await pending;
+  if (row(parentId).archived) throw new Error('请先恢复已归档的会话');
   sides.set(parentId, side);
   return view(parentId, side);
 }
@@ -189,11 +191,13 @@ function requireSide(parentId: string): Side {
 }
 
 export async function askSidechat(parentId: string, input: ChatAskInput): Promise<SidechatView> {
+  const meta = row(parentId);
+  if (meta.archived) throw new Error('请先恢复已归档的会话');
   const side = requireSide(parentId);
   if (side.run) throw new Error('请等待旁问回答完成');
   if (!usableLlmProviders().some(({ id }) => id === side.providerId))
     throw new Error('模型提供商已停用或不可用，请重新启用');
-  const { prompt, images } = composePrompt(input, row(parentId));
+  const { prompt, images } = composePrompt(input, meta);
   let finish!: () => void;
   const run = { cancelled: false, done: new Promise<void>((resolve) => (finish = resolve)) };
   side.run = run;
