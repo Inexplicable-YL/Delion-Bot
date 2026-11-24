@@ -35,6 +35,7 @@ import { hostPorts } from '../../core/ports';
 import { implement } from '../../core/protocol/contract';
 import { hasVsCode, registerPreviewHost, workspaceFilePath } from '../workspace';
 import { chatContract } from './contract';
+import { decidePermissionRequest, permissionRequests } from './main/permission-requests';
 import {
   chatMediaResponse,
   readImagePreview,
@@ -77,6 +78,7 @@ function localProjectDirectory(projectId: string): string {
 }
 
 export { chatContract };
+export { requestChatPermission } from './main/permission-requests';
 
 export function liveCompactionTranscript(sessionId: string, streaming = false) {
   const session = live.get(sessionId)?.session;
@@ -93,6 +95,8 @@ export const chatModule = defineModule({
   },
   ipc: implement(chatContract, {
     listSessions: ({ projectId, query }) => listSessions(projectId, query, true),
+    permissionRequests,
+    decidePermissionRequest,
     localCommandReplies: (id) => {
       row(id);
       return localCommandReplies(id);

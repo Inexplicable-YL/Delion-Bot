@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { isAbsolute, join, posix, relative } from 'node:path';
 import { realpathSync } from 'node:fs';
+import { isIP } from 'node:net';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
 import { imageMimeOf } from '../../protocol/files';
@@ -145,6 +146,97 @@ const textResult = (text: string, isError = false) => ({
   ...(isError ? { isError: true } : {}),
 });
 
+export function downloadTool(meta: SessionRow): ToolDefinition | null {
+  const directories = scopedDirectories(meta).filter(({ name }) => name !== '/privacy');
+  if (!directories.length) return null;
+  return {
+    name: 'download_file',
+    label: 'Download file',
+    description:
+      'Download the original binary from an HTTPS URL to an explicit path in /share or /project. Maximum size is 5 MiB. This requires approval. If the server redirects, call this tool again with the returned URL.',
+    parameters: {
+      type: 'object',
+      properties: { url: { type: 'string', maxLength: 8192 }, path: { type: 'string' } },
+      required: ['url', 'path'],
+    } as unknown as ToolDefinition['parameters'],
+    async execute(_id, input: { url: string; path: string }, signal) {
+      let target: ReturnType<typeof targetPath>;
+      let url: URL;
+      try {
+        target = targetPath(input.path, directories);
+        url = new URL(input.url);
+        if (
+          target.key === '.' ||
+          url.protocol !== 'https:' ||
+          url.username ||
+          url.password ||
+          isIP(url.hostname.replace(/^\[|\]$/g, '')) ||
+          !url.hostname.includes('.') ||
+          /\.(?:local|localhost|internal)\.?$/i.test(url.hostname)
+        )
+          throw new Error();
+      } catch {
+        return textResult('请输入公开 HTTPS 地址和共享目录或项目内的文件路径', true);
+      }
+      const cancellation = AbortSignal.any([
+        ...(signal ? [signal] : []),
+        AbortSignal.timeout(15_000),
+      ]);
+      try {
+        const response = await hostPorts().network.fetch(url.toString(), {
+          credentials: 'omit',
+          redirect: 'manual',
+          signal: cancellation,
+        });
+        const location =
+          response.status >= 300 && response.status < 400 && response.headers.get('location');
+        if (location) {
+          await response.body?.cancel();
+          return textResult(JSON.stringify({ redirect: new URL(location, url).toString() }));
+        }
+        if (
+          !response.ok ||
+          !response.body ||
+          Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES
+        ) {
+          await response.body?.cancel();
+          return textResult('文件无法下载或超过 5 MiB', true);
+        }
+        const reader = response.body.getReader();
+        const chunks = [];
+        let size = 0;
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.length;
+            if (size > MAX_IMAGE_BYTES) return textResult('文件超过 5 MiB', true);
+            chunks.push(value);
+          }
+        } finally {
+          await reader.cancel().catch(() => {});
+          reader.releaseLock();
+        }
+        cancellation.throwIfAborted();
+        const { root, key } = target;
+        const result = await runFileAction(
+          root,
+          {
+            action: 'write',
+            path: key,
+            data: Buffer.concat(chunks).toString('base64'),
+            writable: true,
+          },
+          cancellation,
+        );
+        return result.error ? textResult(result.error, true) : textResult(`${root.name}/${key}`);
+      } catch {
+        return textResult('无法下载或保存文件', true);
+      }
+    },
+  };
+}
+
 export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
   const mode = executionMode(meta);
   const owner = ownerRow(meta);
@@ -187,6 +279,8 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
           path: root.remote
             ? `${root.remote.host}: ${posix.join(root.host, key)}`
             : join(root.host, key),
+          oldText: params.oldText,
+          content,
           signal: cancellation,
         });
         if (!approved || cancellation.aborted) return textResult('文件修改未获批准', true);

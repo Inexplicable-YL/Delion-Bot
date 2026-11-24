@@ -33,6 +33,7 @@ import { formatBytes } from '../../../ui/format-bytes';
 import type { ComposerContext } from './composer-context';
 import { ChatComposerMenu } from './ChatComposerMenu';
 import { ChatModelPicker } from './ChatModelPicker';
+import { ChatPermissionPicker } from './ChatPermissionPicker';
 import { ReplyCommentRail } from './ReplyComment';
 import { formatDuration } from './ToolTimeline';
 import { openSubagent } from './ToolViews';
@@ -270,6 +271,7 @@ export function ChatComposer({
   tasks = [],
   onStopTask,
   permissionMode = null,
+  projectPermissions = false,
   onPermissionMode,
 }: {
   queued?: string[];
@@ -277,6 +279,7 @@ export function ChatComposer({
   tasks?: BackgroundTaskView[];
   onStopTask?: (taskId: string) => void;
   permissionMode?: PermissionMode | null;
+  projectPermissions?: boolean;
   onPermissionMode?: (mode: PermissionMode) => void;
   sidechat?: boolean;
   context?: ComposerContext | null;
@@ -772,7 +775,6 @@ export function ChatComposer({
           onRefreshSearch={() => void refreshSearch()}
           onSelectSearch={sidechat ? undefined : (id) => void selectSearchEntry(id)}
           permissionMode={permissionMode}
-          onPermissionMode={onPermissionMode}
         />
         <PromptInputToolbar className="ml-auto min-w-0 shrink-0 justify-end">
           {tasks.length > 0 && onStopTask && (
@@ -785,6 +787,14 @@ export function ChatComposer({
           )}
           {configured && contextUsage && (
             <ContextIndicator cacheHitRate={cacheHitRateText(contextUsage)} usage={contextUsage} />
+          )}
+          {permissionMode && onPermissionMode && !sidechat && (
+            <ChatPermissionPicker
+              mode={permissionMode}
+              project={projectPermissions}
+              onSelect={onPermissionMode}
+              side={hero ? 'bottom' : 'top'}
+            />
           )}
           {configured && !sidechat && (
             <ChatModelPicker

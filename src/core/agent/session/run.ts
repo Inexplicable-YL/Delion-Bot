@@ -42,6 +42,7 @@ import {
 } from './projection';
 import { composePrompt } from './prompt';
 import { executionMode, launchPlan } from '../sandbox/mode';
+import { approveTool } from '../sandbox/approve-tool';
 import {
   isRemoteSession,
   readySelection,
@@ -88,28 +89,37 @@ async function openLive(id: string): Promise<Live> {
     publish: () => publish(id),
     deliver: (notice, wake) => deliverTaskNotice(id, notice, wake),
   };
+  const delegatesTools = delegates
+    ? plan.mode === 'full'
+      ? await backgroundTools(
+          parent,
+          cwd,
+          options.shellPath,
+          options.commandPrefix,
+          remote && remoteBackend(remote.target),
+        )
+      : taskControls(parent, true)
+    : [];
+  if (delegates) delegatesTools.push(taskTool(parent, cwd, runSubagent, plan.mode !== 'full'));
+  const extraTools =
+    plan.mode === 'approval'
+      ? delegatesTools.map((tool) => {
+          switch (tool.name) {
+            case 'task':
+              return approveTool(tool, id, '启动子 Agent');
+            case 'task_stop':
+              return approveTool(tool, id, '停止后台任务');
+            default:
+              return tool;
+          }
+        })
+      : delegatesTools;
   const session = await openPiSession({
     cwd: plan.piCwd,
     file: existsSync(meta.file) ? meta.file : undefined,
     selection,
     ...options,
-    ...(delegates
-      ? {
-          customTools: [
-            ...options.customTools,
-            ...(plan.mode === 'full'
-              ? await backgroundTools(
-                  parent,
-                  cwd,
-                  options.shellPath,
-                  options.commandPrefix,
-                  remote && remoteBackend(remote.target),
-                )
-              : taskControls(parent, true)),
-            taskTool(parent, cwd, runSubagent, plan.mode !== 'full'),
-          ],
-        }
-      : {}),
+    customTools: [...options.customTools, ...extraTools],
     ...(meta.parent_id ? { parentSession: row(meta.parent_id).file } : {}),
     beforeTool: () => live.get(id)?.run?.captured,
   });

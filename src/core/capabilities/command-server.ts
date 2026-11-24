@@ -12,7 +12,7 @@ function availableCommands() {
   );
 }
 
-async function executeDomainCommand(name: string, input: unknown) {
+export async function executeDomainCommand(name: string, input: unknown) {
   const commands = availableCommands();
   if (name === 'help') {
     const selected =

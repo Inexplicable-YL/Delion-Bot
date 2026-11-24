@@ -91,6 +91,12 @@ export interface SavePathOptions {
 
 export interface Desktop {
   confirmFullAccess?(request: { session: string; signal: AbortSignal }): Promise<boolean>;
+  approveToolAction?(request: {
+    session: string;
+    title: string;
+    fields: { label: string; value: string }[];
+    signal: AbortSignal;
+  }): Promise<boolean>;
   approveSandboxCommand?(request: {
     session: string;
     command: string;
@@ -102,6 +108,8 @@ export interface Desktop {
     session: string;
     action: 'write' | 'edit';
     path: string;
+    oldText?: string;
+    content?: string;
     signal: AbortSignal;
   }): Promise<boolean>;
   pickFiles(owner: ClientHandle): Promise<string[]>;

@@ -17,7 +17,7 @@ import {
   type RemoteTarget,
 } from './transport';
 
-export const HELPER_VERSION = '0.3.5';
+export const HELPER_VERSION = '0.3.6';
 const PROTOCOL_VERSION = 2;
 const HEARTBEAT_MS = 30_000;
 const IDLE_TIMEOUT = '1h';
@@ -225,6 +225,7 @@ export interface ScopedFileOperation {
   action: 'read' | 'ls' | 'write' | 'edit' | 'find' | 'grep' | 'stat';
   path: string;
   content?: string;
+  data?: string;
   oldText?: string;
   pattern?: string;
   limit?: number;

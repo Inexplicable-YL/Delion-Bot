@@ -20,6 +20,14 @@ const replyImageSource = z.union([
 ]);
 const replyImage = z.object({ sessionId, image: replyImageSource });
 const chatImage = z.object({ id: z.uuid(), name: z.string().min(1).max(255) });
+const permissionRequest = z.object({
+  id: z.uuid(),
+  kind: z.enum(['full', 'operation']),
+  title: z.string(),
+  fields: z.array(z.object({ label: z.string(), value: z.string() })),
+});
+
+export type PermissionRequest = z.infer<typeof permissionRequest>;
 
 export type ReplyImageSource = z.infer<typeof replyImageSource>;
 
@@ -55,6 +63,11 @@ export type LocalCommandReply = z.infer<typeof localCommandReply>;
 
 const procedures = {
   listSessions: agentContract.procedures['list-sessions'],
+  permissionRequests: { input: sessionId, output: z.array(permissionRequest) },
+  decidePermissionRequest: {
+    input: z.object({ sessionId, id: z.uuid(), approved: z.boolean() }),
+    output: z.boolean(),
+  },
   localCommandReplies: { input: sessionId, output: z.array(localCommandReply) },
   runLocalCommand: {
     input: z.object({
@@ -134,6 +147,7 @@ const procedures = {
 };
 
 export const chatContract = defineContract('chat', procedures, {
+  permissionRequestsChanged: z.object({ sessionId, requests: z.array(permissionRequest) }),
   compactionChanged: compactionTranscript.extend({ sessionId }),
   compactionStream: z.object({ sessionId, entryId: z.string(), message: chatMessageSchema }),
 });

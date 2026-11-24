@@ -30,7 +30,7 @@ import {
 import { getDatabase } from './database';
 import { agentContract } from '../../core/protocol/agent';
 import type { EventPayload } from '../../core/protocol/contract';
-import { chatContract, liveCompactionTranscript } from '../../modules/chat';
+import { chatContract, liveCompactionTranscript, requestChatPermission } from '../../modules/chat';
 import { withoutToolImages } from '../../core/agent/session/projection';
 import { workspaceWindow } from './window';
 import { notifyRunFinished } from '../../modules/settings';
@@ -83,60 +83,56 @@ const clients = new Set<WebContents>();
 
 const windowOf = (owner: ClientHandle) => BrowserWindow.fromWebContents(owner as WebContents);
 
+async function requestPermission(
+  session: string,
+  request: Parameters<typeof requestChatPermission>[1],
+  signal: AbortSignal,
+) {
+  const window = workspaceWindow();
+  if (!window || signal.aborted) return false;
+  const closed = new AbortController();
+  const abort = () => closed.abort();
+  window.once('closed', abort);
+  try {
+    return await requestChatPermission(session, request, AbortSignal.any([signal, closed.signal]));
+  } finally {
+    window.off('closed', abort);
+  }
+}
+
 const desktop: Desktop = {
-  async approveSandboxCommand({ session, command, files, remote, signal }) {
-    const window = workspaceWindow();
-    if (!window || signal.aborted) return false;
-    const escaped = (value: unknown) =>
-      JSON.stringify(value).replace(
-        /\p{Cf}/gu,
-        (character) => `\\u{${character.codePointAt(0)!.toString(16)}}`,
-      );
-    const { response } = await dialog.showMessageBox(window, {
-      type: 'warning',
-      title: '受限命令请求',
-      message: '是否允许执行这条受限命令？',
-      detail: `会话 ${session}\n执行位置 ${remote ? escaped(remote) : '本机'}\n命令 ${escaped(command)}\n输入文件 ${escaped(files)}`,
-      buttons: ['拒绝', '允许本次'],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
+  approveToolAction: ({ session, title, fields, signal }) =>
+    requestPermission(session, { kind: 'operation', title, fields }, signal),
+  approveSandboxCommand: ({ session, command, files, remote, signal }) =>
+    requestPermission(
+      session,
+      {
+        kind: 'operation',
+        title: '运行受限命令',
+        fields: [
+          { label: '执行位置', value: remote ?? '本机' },
+          { label: '命令', value: command },
+          ...(files.length ? [{ label: '输入文件', value: files.join('\n') }] : []),
+        ],
+      },
       signal,
-    });
-    return response === 1 && !signal.aborted;
-  },
-  async confirmFullAccess({ session, signal }) {
-    const window = workspaceWindow();
-    if (!window || signal.aborted) return false;
-    const { response } = await dialog.showMessageBox(window, {
-      type: 'warning',
-      title: '启用完全访问',
-      message: '允许此会话完全访问？',
-      detail: `Agent 可使用当前用户的文件、终端和网络权限。工具操作不再逐次确认。\n\n会话 ${session}`,
-      buttons: ['取消', '启用完全访问'],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
+    ),
+  confirmFullAccess: ({ session, signal }) =>
+    requestPermission(session, { kind: 'full', title: '启用完全访问？', fields: [] }, signal),
+  approveFileChange: ({ session, action, path, oldText, content, signal }) =>
+    requestPermission(
+      session,
+      {
+        kind: 'operation',
+        title: action === 'edit' ? '编辑文件' : '写入文件',
+        fields: [
+          { label: '文件', value: path },
+          ...(oldText === undefined ? [] : [{ label: '替换前', value: oldText }]),
+          ...(content === undefined ? [] : [{ label: '写入内容', value: content }]),
+        ],
+      },
       signal,
-    });
-    return response === 1 && !signal.aborted;
-  },
-  async approveFileChange({ session, action, path, signal }) {
-    const window = workspaceWindow();
-    if (!window || signal.aborted) return false;
-    const { response } = await dialog.showMessageBox(window, {
-      type: 'warning',
-      title: '文件修改请求',
-      message: action === 'edit' ? '是否允许本次编辑文件？' : '是否允许本次写入文件？',
-      detail: `会话 ${session}\n文件 ${path}`,
-      buttons: ['拒绝', '允许本次'],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-      signal,
-    });
-    return response === 1 && !signal.aborted;
-  },
+    ),
   async pickFiles(owner) {
     const window = windowOf(owner);
     if (!window) return [];
@@ -220,6 +216,10 @@ export const electronPorts: HostPorts = {
       target.once('destroyed', () => clients.delete(target));
     },
     send(channel, ...args) {
+      if (channel === `${chatContract.namespace}:permissionRequestsChanged`) {
+        workspaceWindow()?.webContents.send(channel, ...args);
+        return;
+      }
       if (clients.size && channel === `${agentContract.namespace}:session-update`) {
         const { sessionId, chat } = args[0] as EventPayload<typeof agentContract, 'session-update'>;
         const transcript = chat.messages[0]?.compacted ? liveCompactionTranscript(sessionId) : null;

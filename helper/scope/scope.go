@@ -20,6 +20,7 @@ type Request struct {
 	Action   string
 	Path     string
 	Content  string
+	Data     []byte
 	OldText  string
 	Pattern  string
 	Limit    int64
@@ -139,6 +140,9 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 		return Response{Entries: entries}
 	case "write", "edit":
 		data := []byte(input.Content)
+		if input.Action == "write" && input.Data != nil {
+			data = input.Data
+		}
 		var mode fs.FileMode = 0600
 		info, err := dir.Lstat(name)
 		switch {

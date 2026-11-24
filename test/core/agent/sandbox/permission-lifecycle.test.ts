@@ -43,6 +43,8 @@ import { live, sessionRunning } from '../../../../src/core/agent/session/live';
 import { setSessionPermissionMode, newSession } from '../../../../src/core/agent/session/commands';
 import { askSession, shutdownSessions } from '../../../../src/core/agent/session/run';
 import {
+  chatSessionDirectory,
+  chatShareDirectory,
   preloadPi,
   readPermissionMode,
   writePermissionMode,
@@ -122,6 +124,31 @@ it('完全访问在宿主明确确认后才生效', async () => {
   await setSessionPermissionMode(parent, 'approval');
   confirm(true);
   expect((await revoked).permissionMode).toBe('approval');
+});
+
+it('受限模型收到虚拟目录，现有消息中的宿主路径也会被替换', async () => {
+  const id = (await newSession(null)).sessionId!;
+  const privacy = chatSessionDirectory(id);
+  const share = chatShareDirectory(id);
+  const requests: RecordedRequest[] = [];
+  const stop = server.onRequest((request) => requests.push(request));
+  try {
+    server.enqueue(reply('我看到了两个目录。'));
+    await askSession(
+      id,
+      input(`核对 ${join(privacy, 'draft.txt')} 与 ${join(share, 'deliverable.txt')}`),
+    );
+    const context = JSON.stringify(requests.at(-1)?.body);
+    expect(context).toContain('/privacy');
+    expect(context).toContain('/share');
+    expect(context).not.toContain(JSON.stringify(privacy).slice(1, -1));
+    expect(context).not.toContain(JSON.stringify(share).slice(1, -1));
+    expect(context).not.toMatch(/[a-z]:\/privacy/i);
+    expect(context).not.toContain('Pi documentation');
+    expect(context).not.toContain('"name":"bash"');
+  } finally {
+    stop();
+  }
 });
 
 it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受限后不再保留', async () => {

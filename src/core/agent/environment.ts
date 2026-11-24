@@ -3,7 +3,11 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../ports';
 import { remoteBackend } from '../remote/operations';
 import { syncRemoteContext } from '../remote/context';
-import { COMMAND_BRIDGE, startDomainBridge } from '../capabilities/command-server';
+import {
+  COMMAND_BRIDGE,
+  executeDomainCommand,
+  startDomainBridge,
+} from '../capabilities/command-server';
 import { commandPrompt } from '../capabilities/commands';
 import { contextDirectories } from './context-directories';
 import { getAgentInstruction, getProjectChatContext } from './instruction';
@@ -15,14 +19,16 @@ import {
   readDisabledSkillPaths,
 } from '../capabilities/skills';
 import { piAgentDir, type OpenSessionInput } from './pi';
-import { mcpToolDefinitions, executeMcpTool } from '../capabilities/mcp';
+import { mcpToolDefinitions } from '../capabilities/mcp';
 import { readDisabledTools } from '../capabilities/tools';
 import { readWebSearchConfig, webSearch } from '../capabilities/web-search';
 import { fetchWebPage } from '../capabilities/web-fetch';
 import { remoteTools } from './remote-tools';
 import { sessionTools } from './session-read';
-import { executionMode, ownerRow } from './sandbox/mode';
-import { scopedFileTools } from './sandbox/scoped-files';
+import { executionMode, ownerRow, scopedDirectories } from './sandbox/mode';
+import { virtualizeModelPaths } from './sandbox/model-paths';
+import { approveTool } from './sandbox/approve-tool';
+import { downloadTool, scopedFileTools } from './sandbox/scoped-files';
 import { sandboxCommandTool } from './sandbox/local-command';
 import { chatSessionDirectory, chatShareDirectory, row, workspaceRoot } from './session/store';
 
@@ -120,6 +126,7 @@ export function agentEnvironment() {
         const owner = ownerRow(meta);
         const tools = scopedFileTools(meta);
         const command = tools.length ? sandboxCommandTool(meta) : null;
+        const approval = mode === 'approval' ? await approvalTools(meta, owner.id) : null;
         const files =
           tools.length === 0
             ? 'Files are unavailable under the current permissions.'
@@ -130,7 +137,7 @@ export function agentEnvironment() {
           mode === 'read-only'
             ? 'Mode: read-only.'
             : mode === 'approval'
-              ? 'Mode: request approval. Each write or edit requires a decision from the user through the app.'
+              ? 'Mode: request approval. The app asks the user to approve writes, commands, external requests, and tool calls whose effects may change data. Use download_file to save an original binary to an allowed directory. Use the delion tool for Delion app commands when it is available.'
               : 'Mode: project write. You can write and edit files in /project.';
         return {
           appendSystemPrompt: [
@@ -141,12 +148,13 @@ export function agentEnvironment() {
             instruction ? `## Additional user instructions\n${instruction}` : '',
           ].filter(Boolean),
           restricted: true,
+          transformModelContext: virtualizeModelPaths(scopedDirectories(meta)),
           shellPath: '',
           skillPaths: [],
           globalSkillDirs: [],
           disabledSkills: new Set(),
           disabledTools: [...readDisabledTools()],
-          customTools: command ? [...tools, command] : tools,
+          customTools: [...tools, ...(command ? [command] : []), ...(approval ?? [])],
         };
       }
       const project = projectContext(projectId, cwd);
@@ -240,6 +248,46 @@ const text = (value: unknown) => ({
   details: undefined,
 });
 
+async function approvalTools(meta: ReturnType<typeof row>, session: string) {
+  const remote = meta.project_id ? hostPorts().projects.remoteOf(meta.project_id) : null;
+  const download = downloadTool(meta);
+  return [
+    ...(download ? [approveTool(download, session, '下载文件')] : []),
+    ...webTools.map((tool) =>
+      approveTool(tool, session, tool.name === 'web_search' ? '联网搜索' : '读取网页'),
+    ),
+    ...(await mcpTools(session)),
+    ...(meta.project_id
+      ? sessionTools(meta.project_id)
+      : sessionTools(null).map((tool) => approveTool(tool, session, '读取其他会话'))),
+    ...(!remote
+      ? [
+          approveTool(
+            domainTool,
+            session,
+            '运行 Delion 操作',
+            undefined,
+            (input) => (input as { command: string }).command === 'help',
+          ),
+        ]
+      : []),
+  ];
+}
+
+const domainTool: ToolDefinition = {
+  name: 'delion',
+  label: 'Delion',
+  description:
+    'Call a Delion app command. Call help to list enabled commands and their parameters.',
+  parameters: {
+    type: 'object',
+    properties: { command: { type: 'string' }, input: { type: 'object' } },
+    required: ['command'],
+  } as unknown as ToolDefinition['parameters'],
+  execute: async (_id, { command, input = {} }: { command: string; input?: object }) =>
+    text(await executeDomainCommand(command, input)),
+};
+
 const webTools: ToolDefinition[] = [
   {
     name: 'web_search',
@@ -279,31 +327,44 @@ const webTools: ToolDefinition[] = [
   },
 ];
 
-async function mcpTools(): Promise<ToolDefinition[]> {
-  return (await mcpToolDefinitions()).map(({ function: definition }) => ({
-    name: definition.name,
-    label: definition.name,
-    description: definition.description,
-    parameters: definition.parameters as ToolDefinition['parameters'],
-    async execute(_id, params) {
-      const result = await executeMcpTool(definition.name, params);
-      if (!result.ok)
+async function mcpTools(approvalSession?: string): Promise<ToolDefinition[]> {
+  return (await mcpToolDefinitions()).map(({ function: definition, source, execute }) => {
+    const tool: ToolDefinition = {
+      name: definition.name,
+      label: definition.name,
+      description: definition.description,
+      parameters: definition.parameters as ToolDefinition['parameters'],
+      async execute(_id, params, signal) {
+        const result = await execute(params, signal);
+        if (!result.ok)
+          return {
+            content: [{ type: 'text', text: result.error.message }],
+            details: undefined,
+            isError: true,
+          };
+        const { text, images = [], structured } = result.result;
         return {
-          content: [{ type: 'text', text: result.error.message }],
-          details: undefined,
-          isError: true,
+          content: [
+            { type: 'text', text: structured ? `${text}\n${JSON.stringify(structured)}` : text },
+            ...images.flatMap(({ dataUrl }) => {
+              const match = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl);
+              return match
+                ? [{ type: 'image' as const, mimeType: match[1]!, data: match[2]! }]
+                : [];
+            }),
+          ],
+          details: { source: result.source, links: result.links },
         };
-      const { text, images = [], structured } = result.result;
-      return {
-        content: [
-          { type: 'text', text: structured ? `${text}\n${JSON.stringify(structured)}` : text },
-          ...images.flatMap(({ dataUrl }) => {
-            const match = /^data:([^;]+);base64,(.*)$/s.exec(dataUrl);
-            return match ? [{ type: 'image' as const, mimeType: match[1]!, data: match[2]! }] : [];
-          }),
-        ],
-        details: { source: result.source, links: result.links },
-      };
-    },
-  }));
+      },
+    };
+    return approvalSession
+      ? approveTool(tool, approvalSession, '调用连接器', [
+          {
+            label: '连接器',
+            value: source.domain ? `${source.name} (${source.domain})` : source.name,
+          },
+          { label: '工具', value: definition.name },
+        ])
+      : tool;
+  });
 }

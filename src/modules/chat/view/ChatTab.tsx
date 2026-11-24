@@ -13,6 +13,7 @@ import { agentClient, chatClient, commandRepliesKey } from './client';
 import { Button } from '../../../ui/Button';
 import { IconButton } from '../../../ui/IconButton';
 import { ChatComposer } from './ChatComposer';
+import { ChatPermissionRequest } from './ChatPermissionRequest';
 import { composerContext } from './composer-context';
 import { ChatSessions } from './ChatSessions';
 import { ChatThread } from './ChatThread';
@@ -92,6 +93,13 @@ function ChatComposerArea({
   hideAgentActions?: boolean;
 }) {
   const { prompt, comments = noComments } = useChatDraft(sessionId);
+  const pushed = useSessions((state) => state.permissions[sessionId]);
+  const { data: initialRequests } = useQuery({
+    queryKey: ['chat', 'permission-requests', sessionId],
+    queryFn: () => chatClient.permissionRequests(sessionId),
+    enabled: Boolean(chat) && pushed === undefined && Boolean(window.delionBot),
+  });
+  const request = (pushed ?? initialRequests)?.[0];
   const referenceOptions = useReferenceOptions(files, chat);
   const references = referenceContext(prompt, referenceOptions);
   const projectId = chat?.projectId ?? null;
@@ -120,8 +128,17 @@ function ChatComposerArea({
     onError: (cause) =>
       showToast({ variant: 'error', title: '切换项目失败', description: errorMessage(cause) }),
   });
+  if (request?.kind === 'operation')
+    return (
+      <div className="mx-auto w-full max-w-reading shrink-0">
+        <ChatPermissionRequest key={request.id} request={request} sessionId={sessionId} />
+      </div>
+    );
   return (
     <div className="mx-auto w-full max-w-reading shrink-0">
+      {request && (
+        <ChatPermissionRequest key={request.id} request={request} sessionId={sessionId} />
+      )}
       <ChatComposer
         hero={hero}
         hideAgentActions={hideAgentActions}
@@ -159,6 +176,7 @@ function ChatComposerArea({
         tasks={chat?.tasks}
         onStopTask={chatState.stopTask}
         permissionMode={chat?.subagent ? null : (chat?.permissionMode ?? null)}
+        projectPermissions={projectId !== null}
         onPermissionMode={chatState.selectPermissionMode}
         referenceOptions={referenceOptions}
         notice={error}

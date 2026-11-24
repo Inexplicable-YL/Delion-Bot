@@ -44,12 +44,17 @@ export function composePrompt(
       imageMeta.push({ id: block.id, name: block.name });
     }
   const attachments = input.attachments.map(readChatAttachment);
-  const restricted = executionMode(session) !== 'full';
+  const mode = executionMode(session);
+  const restricted = mode !== 'full';
   const projectId = session.project_id;
   const { comments } = input;
   if (!userText && !images.length && !attachments.length && !comments.length)
     throw new Error('请输入内容或添加文件');
-  if (restricted && attachments.some((attachment) => 'path' in attachment))
+  if (
+    mode !== 'full' &&
+    mode !== 'approval' &&
+    attachments.some((attachment) => 'path' in attachment)
+  )
     throw new Error('当前权限支持图片和文本附件。请添加图片或粘贴文档文本。');
   if (
     attachments.some((attachment) => 'path' in attachment) &&
@@ -61,7 +66,7 @@ export function composePrompt(
     const key = restricted ? scopedPromptPath(session, path) : path;
     return key ? [{ key, title: key }] : [];
   });
-  const sessions = restricted ? [] : (input.sessions ?? []);
+  const sessions = mode === 'full' || mode === 'approval' ? (input.sessions ?? []) : [];
   const meta = {
     turnId,
     body: userText,

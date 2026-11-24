@@ -56,6 +56,7 @@ function setting(key: string): string | undefined {
 
 export function readPermissionMode(id: string): PermissionMode {
   const mode = setting(permissionKey(id));
+  if (mode === undefined) return row(id).project_id ? 'project-write' : 'approval';
   if (mode === 'full-confirmed') return 'full';
   return mode === 'approval' || mode === 'project-write' ? mode : 'read-only';
 }

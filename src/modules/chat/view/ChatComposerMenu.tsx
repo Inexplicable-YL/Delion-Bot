@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
+  AdjustmentsHorizontalIcon,
   CheckIcon,
   CloudIcon,
   DocumentPlusIcon,
@@ -9,7 +10,6 @@ import {
   FolderPlusIcon,
   GlobeAltIcon,
   PlusIcon,
-  AdjustmentsHorizontalIcon,
   WrenchScrewdriverIcon,
   AtSymbolIcon,
   ChatBubbleLeftIcon,
@@ -30,7 +30,7 @@ import {
 import { IconButton } from '../../../ui/IconButton';
 import { Input } from '../../../ui/Input';
 import type { WebSearchEntrySummary } from '../../../core/protocol/capabilities';
-import { permissionModeSchema, type PermissionMode } from '../../../core/protocol/agent';
+import type { PermissionMode } from '../../../core/protocol/agent';
 import { ConnectorAppIcon, type ConnectorApp } from '../../connectors/view';
 import { useWorkspaceStore } from '../../workspace/view';
 import { useChatTabSource } from './ChatSource';
@@ -55,7 +55,6 @@ export function ChatComposerMenu({
   onRefreshSearch,
   onSelectSearch,
   permissionMode = null,
-  onPermissionMode,
 }: {
   className?: string;
   allowProjectSwitch: boolean;
@@ -75,7 +74,6 @@ export function ChatComposerMenu({
   onRefreshSearch: () => void;
   onSelectSearch?: (id: string | null) => void;
   permissionMode?: PermissionMode | null;
-  onPermissionMode?: (mode: PermissionMode) => void;
 }) {
   const { navigate, onCreateProject } = useChatTabSource();
   const entries = useWorkspaceStore((state) => state.workspace.entries);
@@ -193,75 +191,46 @@ export function ChatComposerMenu({
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}
-        {permissionMode && onPermissionMode && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger>
-              <AdjustmentsHorizontalIcon /> 文件权限
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-64">
-              <DropdownMenuRadioGroup
-                value={permissionMode}
-                onValueChange={(value) => {
-                  const mode = permissionModeSchema.safeParse(value);
-                  if (mode.success) defer(() => onPermissionMode(mode.data));
-                }}
-              >
-                <DropdownMenuRadioItem value="read-only">只读模式</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="approval">请求批准</DropdownMenuRadioItem>
-                {projectId && (
-                  <DropdownMenuRadioItem value="project-write">项目内修改</DropdownMenuRadioItem>
-                )}
-                <DropdownMenuRadioItem value="full">完全访问</DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
-              <p className="px-2 py-2 text-ui-callout text-ink-2">
-                {permissionMode === 'full'
-                  ? '工具可使用当前用户的文件、终端和网络权限。'
-                  : permissionMode === 'approval'
-                    ? '读取限于当前聊天的目录。每次修改需要你确认。'
-                    : permissionMode === 'project-write'
-                      ? '可直接读取和修改当前项目内的文件。'
-                      : '只能读取当前聊天的目录。'}
-              </p>
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        )}
         <DropdownMenuSeparator />
-        {onSelectSearch && (
-          <DropdownMenuSub onOpenChange={(open) => open && onRefreshSearch()}>
-            <DropdownMenuSubTrigger>
-              <GlobeAltIcon /> 联网搜索
-            </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="w-56">
-              {searchEntries?.length ? (
-                <DropdownMenuRadioGroup
-                  value={searchSelectedId ?? ''}
-                  onValueChange={(id) => onSelectSearch(id || null)}
-                >
-                  <DropdownMenuRadioItem value="">关闭</DropdownMenuRadioItem>
-                  {searchEntries.map((entry) => (
-                    <DropdownMenuRadioItem key={entry.id} value={entry.id}>
-                      <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                      {entry.provider === 'deepseek' && (
-                        <span className="shrink-0 text-ui-subhead text-ink-2">按次计费</span>
-                      )}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              ) : searchEntries === null && !searchFailed ? (
-                <DropdownMenuItem disabled>正在加载搜索配置…</DropdownMenuItem>
-              ) : (
-                <>
-                  {searchFailed && <DropdownMenuItem disabled>搜索配置加载失败</DropdownMenuItem>}
-                  <DropdownMenuItem
-                    onSelect={() => navigate({ page: 'settings', section: 'capabilities' })}
+        {onSelectSearch &&
+          (permissionMode === null ||
+            permissionMode === 'approval' ||
+            permissionMode === 'full') && (
+            <DropdownMenuSub onOpenChange={(open) => open && onRefreshSearch()}>
+              <DropdownMenuSubTrigger>
+                <GlobeAltIcon /> 联网搜索
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-56">
+                {searchEntries?.length ? (
+                  <DropdownMenuRadioGroup
+                    value={searchSelectedId ?? ''}
+                    onValueChange={(id) => onSelectSearch(id || null)}
                   >
-                    配置搜索服务
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        )}
+                    <DropdownMenuRadioItem value="">关闭</DropdownMenuRadioItem>
+                    {searchEntries.map((entry) => (
+                      <DropdownMenuRadioItem key={entry.id} value={entry.id}>
+                        <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+                        {entry.provider === 'deepseek' && (
+                          <span className="shrink-0 text-ui-subhead text-ink-2">按次计费</span>
+                        )}
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                ) : searchEntries === null && !searchFailed ? (
+                  <DropdownMenuItem disabled>正在加载搜索配置…</DropdownMenuItem>
+                ) : (
+                  <>
+                    {searchFailed && <DropdownMenuItem disabled>搜索配置加载失败</DropdownMenuItem>}
+                    <DropdownMenuItem
+                      onSelect={() => navigate({ page: 'settings', section: 'capabilities' })}
+                    >
+                      配置搜索服务
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
         <DropdownMenuSub onOpenChange={setSkillsOpen} open={skillsOpen}>
           <DropdownMenuSubTrigger>
             <WrenchScrewdriverIcon /> 技能

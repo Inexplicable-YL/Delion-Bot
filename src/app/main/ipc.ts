@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { hostPorts } from '../../core/ports';
-import { checkWorkspaceSender } from './window';
+import { checkWorkspaceSender, workspaceWindow } from './window';
 import type { ModuleDefinition } from '../module';
 
 export function registerModuleIpc(modules: ModuleDefinition[]): void {
@@ -13,6 +13,12 @@ export function registerModuleIpc(modules: ModuleDefinition[]): void {
     for (const name of Object.keys(ipc.contract.procedures)) {
       ipcMain.handle(`${ipc.contract.namespace}:${name}`, (event, input: unknown) => {
         checkWorkspaceSender(event);
+        if (
+          ipc.contract.namespace === 'chat' &&
+          (name === 'permissionRequests' || name === 'decidePermissionRequest') &&
+          workspaceWindow()?.webContents !== event.sender
+        )
+          throw new Error('请在聊天中操作权限审批');
         return ipc.call(name, input);
       });
     }

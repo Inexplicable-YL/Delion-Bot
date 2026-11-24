@@ -16,6 +16,12 @@ const state = vi.hoisted(() => ({
   bridge: vi.fn(() => ({ url: 'http://127.0.0.1:9/', token: 'token', close() {} })),
   scopedCommand: vi.fn(),
   scopedFile: vi.fn(),
+  mcpDefinitions:
+    vi.fn<
+      () => ReturnType<
+        (typeof import('../../../../src/core/capabilities/mcp'))['mcpToolDefinitions']
+      >
+    >(),
 }));
 
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/delion-sandbox-policy' } }));
@@ -27,8 +33,7 @@ vi.mock('../../../../src/core/capabilities/skills', () => ({
   readDisabledSkillPaths: () => new Set<string>(),
 }));
 vi.mock('../../../../src/core/capabilities/mcp', () => ({
-  mcpToolDefinitions: async () => [],
-  executeMcpTool: vi.fn(),
+  mcpToolDefinitions: state.mcpDefinitions,
 }));
 vi.mock('../../../../src/core/capabilities/command-server', () => ({
   COMMAND_BRIDGE: 'delion() { :; }',
@@ -66,6 +71,7 @@ let db: Database.Database;
 function database(
   approveFileChange?: NonNullable<ReturnType<typeof hostPorts>['desktop']['approveFileChange']>,
 ) {
+  state.mcpDefinitions.mockResolvedValue([]);
   db = new Database(':memory:');
   db.exec(`
     CREATE TABLE sessions (
@@ -103,6 +109,7 @@ afterEach(() => {
   state.bridge.mockClear();
   state.scopedCommand.mockReset();
   state.scopedFile.mockReset();
+  state.mcpDefinitions.mockReset();
   db?.close();
 });
 
@@ -168,6 +175,60 @@ it('远程受限命令只转交获批后读取的项目文件副本', async () =
   );
 });
 
+it('请求批准提供联网和连接器，拒绝和取消均不调用连接器', async () => {
+  database();
+  const host = hostPorts();
+  const approveToolAction = vi
+    .fn()
+    .mockResolvedValueOnce(false)
+    .mockImplementationOnce(async () => {
+      cancellation.abort();
+      return true;
+    })
+    .mockResolvedValueOnce(true);
+  const cancellation = new AbortController();
+  provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveToolAction } });
+  const call = vi.fn().mockResolvedValue({
+    ok: true,
+    result: { text: 'done' },
+    source: { name: 'Mailbox' },
+    links: [],
+  });
+  state.mcpDefinitions.mockResolvedValue([
+    {
+      type: 'function',
+      function: { name: 'mail_send', description: 'Send mail', parameters: { type: 'object' } },
+      source: { name: 'Mailbox', domain: 'mail.example.test' },
+      execute: call,
+    },
+  ]);
+  const id = insertSession(null);
+  writePermissionMode(id, 'approval');
+  const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+    askCards: false,
+    sessionId: id,
+  });
+  expect(customTools.map((tool) => tool.name)).toEqual(
+    expect.arrayContaining(['download_file', 'web_search', 'web_fetch', 'mail_send', 'delion']),
+  );
+  expect(customTools.map((tool) => tool.name)).not.toContain('bash');
+  const send = customTools.find(({ name }) => name === 'mail_send')!;
+  const payload = { address: 'person@example.test', body: 'Hello' };
+  const execute = (signal?: AbortSignal) =>
+    send.execute('1', payload, signal, undefined, {} as never);
+  expect(await execute()).toMatchObject({ isError: true });
+  expect(await execute(cancellation.signal)).toMatchObject({ isError: true });
+  expect(call).not.toHaveBeenCalled();
+  expect(await execute()).toMatchObject({ content: [{ text: 'done' }] });
+  expect(call).toHaveBeenCalledExactlyOnceWith(payload, expect.any(AbortSignal));
+  expect(approveToolAction).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      session: id,
+      fields: expect.arrayContaining([{ label: '连接器', value: 'Mailbox (mail.example.test)' }]),
+    }),
+  );
+});
+
 describe('受限普通对话', () => {
   it('默认受限，共享目录名不是会话 id，子会话共用父目录', async () => {
     database();
@@ -181,7 +242,7 @@ describe('受限普通对话', () => {
     const parentPlan = launchPlan(row(id));
     const childPlan = launchPlan(row(child));
     const parentRoots = scopedDirectories(row(id));
-    expect(parentPlan).toMatchObject({ mode: 'read-only', piCwd: '/privacy' });
+    expect(parentPlan).toMatchObject({ mode: 'approval', piCwd: '/privacy' });
     expect(childPlan.piCwd).toBe('/privacy');
     expect(parentRoots[1]?.host).toBe(realpathSync(share));
     expect(scopedDirectories(row(child))).toEqual(parentRoots);
@@ -190,6 +251,7 @@ describe('受限普通对话', () => {
   it('工具列表没有网络、MCP、会话读取和命令桥，提示词不含会话 id', async () => {
     database();
     const id = insertSession(null);
+    writePermissionMode(id, 'read-only');
     const options = await agentEnvironment().sessionOptions(null, '/privacy', {
       askCards: false,
       sessionId: id,
@@ -207,7 +269,7 @@ describe('受限普通对话', () => {
     expect(state.bridge).not.toHaveBeenCalled();
   });
 
-  it('完全访问保留命令桥，项目默认只读，项目内修改只增加项目文件写入', async () => {
+  it('完全访问保留命令桥，项目默认可直接修改自己的文件', async () => {
     database();
     const id = insertSession(null);
     writePermissionMode(id, 'full');
@@ -222,19 +284,7 @@ describe('受限普通对话', () => {
     ).run(join(root, 'project'));
     mkdirSync(join(root, 'project'), { recursive: true });
     const projectId = insertSession('p1');
-    const project = await agentEnvironment().sessionOptions('p1', join(root, 'project'), {
-      askCards: false,
-      sessionId: projectId,
-    });
-    expect(project.commandPrefix).toBeUndefined();
-    expect(project.customTools.map((tool) => tool.name)).toEqual([
-      'read',
-      'ls',
-      'find',
-      'grep',
-      ...commandTools,
-    ]);
-    writePermissionMode(projectId, 'project-write');
+    expect(launchPlan(row(projectId)).mode).toBe('project-write');
     const writable = await agentEnvironment().sessionOptions('p1', '/project', {
       askCards: false,
       sessionId: projectId,
@@ -269,6 +319,36 @@ describe('受限普通对话', () => {
     );
     expect(result).toMatchObject({ isError: true });
   });
+
+  it.skipIf(commandTools.length === 0)(
+    '原始二进制文件经批准下载至共享目录，模型只收到虚拟路径',
+    async () => {
+      database();
+      const host = hostPorts();
+      const data = Uint8Array.of(0x50, 0x4b, 0, 255, 129);
+      const fetch = vi.fn(async () => new Response(data));
+      const approveToolAction = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      provideTestHostPorts({
+        ...host,
+        network: { fetch },
+        desktop: { ...host.desktop, approveToolAction },
+      });
+      const id = insertSession(null);
+      const { customTools, appendSystemPrompt } = await agentEnvironment().sessionOptions(
+        null,
+        '/privacy',
+        { askCards: false, sessionId: id },
+      );
+      const download = customTools.find(({ name }) => name === 'download_file')!;
+      const input = { url: 'https://drive.example.test/export', path: '/share/原件.docx' };
+      const execute = () => download.execute('1', input, undefined, undefined, {} as never);
+      expect(await execute()).toMatchObject({ isError: true });
+      expect(fetch).not.toHaveBeenCalled();
+      expect(await execute()).toMatchObject({ content: [{ text: '/share/原件.docx' }] });
+      expect(readFileSync(join(chatShareDirectory(id), '原件.docx'))).toEqual(Buffer.from(data));
+      expect(appendSystemPrompt.join('\n')).not.toContain(chatShareDirectory(id));
+    },
+  );
 
   it.skipIf(commandTools.length === 0)('受限命令逐次审批，只接收当前会话的副本', async () => {
     database();

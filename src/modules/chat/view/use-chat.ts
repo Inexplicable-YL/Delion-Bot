@@ -413,7 +413,7 @@ export function useChat(
     if (!window.delionBot) return;
     void agentClient['set-permission-mode']({ sessionId, mode })
       .catch((e) =>
-        showToast({ variant: 'error', title: '切换文件权限失败', description: errorMessage(e) }),
+        showToast({ variant: 'error', title: '切换 Agent 权限失败', description: errorMessage(e) }),
       )
       .finally(refresh);
   };
