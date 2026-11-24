@@ -13,9 +13,17 @@ permissions:
 
 jobs:
   helper:
-    name: Check helper linux (amd64 + arm64)
-    runs-on: ubuntu-24.04
+    name: Check helper linux (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -29,34 +37,27 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
-      - name: Vet helper for linux/arm64
+      - name: Vet helper
         working-directory: helper
-        env:
-          GOOS: linux
-          GOARCH: arm64
         run: go vet ./...
+      - name: Install Bubblewrap for isolation tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq bubblewrap
       - name: Test helper locally (no SSH)
         working-directory: helper
+        env:
+          DELION_REQUIRE_LINUX_SANDBOX_TEST: '1'
         run: go test -count=1 -timeout=2m ./...
       - name: Build helper
         run: node scripts/build-helper.ts --all
-      - name: Smoke test helper executables
-        run: |
-          ./vendor/delion-helper/delion-helper-linux-amd64 --version
-          if ! command -v qemu-aarch64-static >/dev/null 2>&1; then
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq qemu-user-static
-          fi
-          qemu-aarch64-static ./vendor/delion-helper/delion-helper-linux-arm64 --version
+      - name: Smoke test helper executable
+        env:
+          HELPER_ARCH: ${{ matrix.arch }}
+        run: ./vendor/delion-helper/delion-helper-linux-${HELPER_ARCH} --version
       - uses: actions/upload-artifact@v6
         with:
-          name: helper-linux-amd64
-          path: vendor/delion-helper/delion-helper-linux-amd64
-          if-no-files-found: error
-          retention-days: 7
-      - uses: actions/upload-artifact@v6
-        with:
-          name: helper-linux-arm64
-          path: vendor/delion-helper/delion-helper-linux-arm64
+          name: helper-linux-${{ matrix.arch }}
+          path: vendor/delion-helper/delion-helper-linux-${{ matrix.arch }}
           if-no-files-found: error
           retention-days: 7

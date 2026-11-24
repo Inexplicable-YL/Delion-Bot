@@ -95,6 +95,7 @@ export interface Desktop {
     session: string;
     command: string;
     files: readonly string[];
+    remote?: string;
     signal: AbortSignal;
   }): Promise<boolean>;
   approveFileChange?(request: {

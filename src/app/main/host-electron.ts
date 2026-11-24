@@ -84,7 +84,7 @@ const clients = new Set<WebContents>();
 const windowOf = (owner: ClientHandle) => BrowserWindow.fromWebContents(owner as WebContents);
 
 const desktop: Desktop = {
-  async approveSandboxCommand({ session, command, files, signal }) {
+  async approveSandboxCommand({ session, command, files, remote, signal }) {
     const window = workspaceWindow();
     if (!window || signal.aborted) return false;
     const escaped = (value: unknown) =>
@@ -96,7 +96,7 @@ const desktop: Desktop = {
       type: 'warning',
       title: '受限命令请求',
       message: '是否允许执行这条受限命令？',
-      detail: `会话 ${session}\n命令 ${escaped(command)}\n输入文件 ${escaped(files)}`,
+      detail: `会话 ${session}\n执行位置 ${remote ? escaped(remote) : '本机'}\n命令 ${escaped(command)}\n输入文件 ${escaped(files)}`,
       buttons: ['拒绝', '允许本次'],
       defaultId: 0,
       cancelId: 0,

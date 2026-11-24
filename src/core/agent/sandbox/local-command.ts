@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
+import { helperSession, type ScopedCommandResult } from '../../remote/helper';
 import type { SessionRow } from '../session/store';
 import { macosSandboxLauncher, runMacosCommand } from './macos-command';
 import { executionMode, ownerRow, scopedDirectories } from './mode';
@@ -21,7 +22,7 @@ export function runWindowsCommand(
   command: string,
   inputs: readonly Buffer[],
   signal: AbortSignal,
-): Promise<{ exitCode: number | null; output: string; error?: string }> {
+): Promise<ScopedCommandResult> {
   return new Promise((resolve) => {
     const child = execFile(
       broker,
@@ -50,20 +51,21 @@ export function runWindowsCommand(
   });
 }
 
-export function localCommandTool(meta: SessionRow): ToolDefinition | null {
-  if (process.platform !== 'darwin' && process.platform !== 'win32') return null;
-  const windows = process.platform === 'win32';
+export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
+  const mode = executionMode(meta);
+  const root = scopedDirectories(meta)[0];
+  if (mode === 'full' || !root) return null;
+  const remote = root.remote;
+  const windows = !remote && process.platform === 'win32';
   const launcher = windows
     ? join(hostPorts().paths.bundled('scopedfs'), 'scopedfs.exe')
     : macosSandboxLauncher;
-  if (!existsSync(launcher)) return null;
-  const mode = executionMode(meta);
-  const roots = scopedDirectories(meta);
-  if (mode === 'full' || !roots.length || roots.some(({ remote }) => remote)) return null;
+  if (!remote && ((!windows && process.platform !== 'darwin') || !existsSync(launcher)))
+    return null;
   const { id: session } = ownerRow(meta);
   const runtime = windows
     ? 'Run one Windows cmd.exe process using built-in commands such as type, dir and echo. Changes made inside the temporary working directory are discarded. Other processes and network are unavailable.'
-    : 'Run one macOS Bash process. Use built-ins or exec with cat, ls, awk, grep, sed, sort or wc. The temporary working directory is read-only. Other processes and network are unavailable.';
+    : `Run one ${remote ? 'remote Linux' : 'macOS'} Bash process. Use built-ins or exec with cat, ls, awk, grep, sed, sort or wc. The temporary working directory is read-only. Other processes and network are unavailable.`;
   return {
     name: 'sandbox_command',
     label: 'Sandbox command',
@@ -86,6 +88,7 @@ export function localCommandTool(meta: SessionRow): ToolDefinition | null {
           command,
           files,
           signal: cancellation,
+          ...(remote && { remote: remote.host }),
         });
         if (!approved || cancellation.aborted)
           return commandResult({ error: '命令未获批准' }, true);
@@ -103,6 +106,10 @@ export function localCommandTool(meta: SessionRow): ToolDefinition | null {
           copies.push(bytes);
         }
         cancellation.throwIfAborted();
+        if (remote) {
+          const output = await helperSession(remote).scopedCommand(command, copies, cancellation);
+          return commandResult(output, output.exitCode !== 0);
+        }
         if (windows) {
           const output = await runWindowsCommand(launcher, command, copies, cancellation);
           return commandResult(output, output.exitCode !== 0);

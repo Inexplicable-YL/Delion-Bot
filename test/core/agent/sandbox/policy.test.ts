@@ -14,6 +14,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   bridge: vi.fn(() => ({ url: 'http://127.0.0.1:9/', token: 'token', close() {} })),
+  scopedCommand: vi.fn(),
+  scopedFile: vi.fn(),
 }));
 
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp/delion-sandbox-policy' } }));
@@ -34,6 +36,10 @@ vi.mock('../../../../src/core/capabilities/command-server', () => ({
 }));
 vi.mock('../../../../src/core/capabilities/tools', () => ({
   readDisabledTools: () => new Set<string>(),
+}));
+vi.mock('../../../../src/core/remote/helper', async (original) => ({
+  ...(await original<typeof import('../../../../src/core/remote/helper')>()),
+  helperSession: () => ({ scopedCommand: state.scopedCommand, scopedFile: state.scopedFile }),
 }));
 
 import { agentEnvironment } from '../../../../src/core/agent/environment';
@@ -95,6 +101,8 @@ function database(
 
 afterEach(() => {
   state.bridge.mockClear();
+  state.scopedCommand.mockReset();
+  state.scopedFile.mockReset();
   db?.close();
 });
 
@@ -107,6 +115,57 @@ describe('路径契约', () => {
       '/data/chat-sessions/uuid/src/a.ts',
     );
   });
+});
+
+it('远程受限命令只转交获批后读取的项目文件副本', async () => {
+  database();
+  const approveSandboxCommand = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  const host = hostPorts();
+  const target = { host: 'user@remote' };
+  provideTestHostPorts({
+    ...host,
+    desktop: { ...host.desktop, approveSandboxCommand },
+    projects: {
+      ...host.projects,
+      remoteOf: () => ({
+        id: 'p1',
+        label: 'remote',
+        path: '/srv/project',
+        remoteId: 'ssh',
+        target,
+      }),
+    },
+  });
+  state.scopedFile.mockResolvedValue({ data: Buffer.from('staged').toString('base64') });
+  state.scopedCommand.mockResolvedValue({ exitCode: 0, output: 'staged' });
+  const id = insertSession('p1');
+  writePermissionMode(id, 'approval');
+  const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
+    askCards: false,
+    sessionId: id,
+  });
+  const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
+  const params = { command: 'exec /bin/cat inputs/1', files: ['/project/note.txt'] };
+  const execute = () => tool.execute('call', params, undefined, undefined, {} as never);
+  expect(await execute()).toMatchObject({ isError: true });
+  expect(state.scopedFile).not.toHaveBeenCalled();
+  expect(state.scopedCommand).not.toHaveBeenCalled();
+  expect(await execute()).toMatchObject({
+    content: [{ text: JSON.stringify({ exitCode: 0, output: 'staged' }) }],
+  });
+  expect(approveSandboxCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({ ...params, remote: target.host, session: id }),
+  );
+  expect(state.scopedFile).toHaveBeenCalledWith(
+    '/srv/project',
+    expect.objectContaining({ action: 'read', path: 'note.txt' }),
+    expect.any(AbortSignal),
+  );
+  expect(state.scopedCommand).toHaveBeenCalledWith(
+    params.command,
+    [Buffer.from('staged')],
+    expect.any(AbortSignal),
+  );
 });
 
 describe('受限普通对话', () => {

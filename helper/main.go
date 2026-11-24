@@ -1,7 +1,7 @@
 // delion-helper 是 Delion Bot 在远端运行的常驻 runtime：远程项目的全部工具调用都经它执行。只绑回环地址，
 // 由 Delion Bot 经 `ssh -L` 隧道访问，每个请求带 token。它的生命周期不随隧道：断线期间任务照跑，
 // Delion Bot 重连后复用同一个实例并接回任务；连续一段时间没有任何请求才退出。
-// 它不做沙箱：权限就是启动它的 SSH 用户的权限（与 `ssh <host> <命令>` 一致）。协议见 helper/README.md。
+// 受限会话走独立的文件和命令接口。协议见 helper/README.md。
 package main
 
 import (
@@ -25,7 +25,7 @@ import (
 
 const (
 	protocolVersion = 2
-	helperVersion   = "0.3.4"
+	helperVersion   = "0.3.5"
 	idleTick        = 10 * time.Second
 	minTokenLength  = 16
 )
@@ -80,6 +80,7 @@ func (s *server) register(mux *http.ServeMux) {
 	mux.HandleFunc("/v1/fs/read", s.auth(s.handleRead))
 	mux.HandleFunc("/v1/fs/write", s.auth(s.handleWrite))
 	mux.HandleFunc("POST /v1/fs/scoped", s.auth(s.handleScopedFile))
+	mux.HandleFunc("POST /v1/commands/scoped", s.auth(s.handleScopedCommand))
 	mux.HandleFunc("/v1/watch", s.auth(s.handleWatch))
 	mux.HandleFunc("/v1/ports", s.auth(s.handlePorts))
 	mux.HandleFunc("/v1/fs/glob", s.auth(s.handleGlob))
