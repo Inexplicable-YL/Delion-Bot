@@ -65,14 +65,14 @@ async function renderReply(markdown: string) {
   return [...host.querySelectorAll('img')].map((image) => image.getAttribute('src'));
 }
 
-it('回复里被文字隔开的图片各自单张显示在原文位置', async () => {
+it('回复内本机图片原位预览，外部图片由用户打开链接', async () => {
   const sources = await renderReply(
     '前文 ![图表](out/my%20chart.png) 中间 ![网图](https://example.com/a.png) 后文',
   );
 
-  expect(sources).toEqual([localSrc('out/my chart.png'), 'https://example.com/a.png']);
-  expect(host.querySelector('p')!.textContent).toMatch(/^前文\s+中间\s+后文\s*$/);
-  expect(host.querySelectorAll('[aria-label^="放大查看"]')).toHaveLength(2);
+  expect(sources).toEqual([localSrc('out/my chart.png')]);
+  expect(host.querySelector('p')!.textContent).toMatch(/^前文\s+中间\s+网图\s+后文\s*$/);
+  expect(host.querySelectorAll('[aria-label^="放大查看"]')).toHaveLength(1);
 });
 
 it('loads reply thumbnails instead of originals in the message', async () => {

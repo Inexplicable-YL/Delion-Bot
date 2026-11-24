@@ -12,6 +12,12 @@ export const commandRepliesKey = (id: string) => ['chat', 'local-command-replies
 export const llmClient = createClient(llmContract, bridge);
 export const capabilitiesClient = createClient(capabilitiesContract, bridge);
 
+export function onPermissionRequestsChanged(
+  listener: (payload: EventPayload<typeof chatContract, 'permissionRequestsChanged'>) => void,
+) {
+  return subscribe(chatContract, bridge, 'permissionRequestsChanged', listener);
+}
+
 export function onCompactionChanged(
   listener: (payload: EventPayload<typeof chatContract, 'compactionChanged'>) => void,
 ) {

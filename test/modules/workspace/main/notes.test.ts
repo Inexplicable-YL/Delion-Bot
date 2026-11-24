@@ -109,6 +109,25 @@ afterEach(() => {
 });
 
 describe('磁盘工作区', () => {
+  it('打开普通聊天的共享区时重建缺失目录', async () => {
+    const id = crypto.randomUUID();
+    db.prepare('INSERT INTO sessions (id, file, created_at, updated_at) VALUES (?, ?, ?, ?)').run(
+      id,
+      '',
+      'now',
+      'now',
+    );
+    const shareRoot = join(state.root, 'Delion Bot', 'chat-share');
+    const path = join(shareRoot, id);
+    expect(existsSync(path)).toBe(false);
+    await expect(listLocalDirectory(path)).resolves.toEqual([]);
+    expect(statSync(path).isDirectory()).toBe(true);
+
+    const other = join(shareRoot, crypto.randomUUID());
+    await expect(listLocalDirectory(other)).rejects.toThrow();
+    expect(existsSync(other)).toBe(false);
+  });
+
   it('批量读取 Git 忽略规则，保留反向规则与已跟踪文件，隐藏内部元数据', async () => {
     const git = await vi.importActual<typeof import('node:child_process')>('node:child_process');
     state.execFile.mockImplementation(git.execFile);

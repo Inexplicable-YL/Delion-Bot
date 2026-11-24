@@ -21,7 +21,8 @@ import {
   withoutToolImages,
 } from './session/projection';
 import { composePrompt } from './session/prompt';
-import { adoptSessionFile, readySelection, row, sessionCwd } from './session/store';
+import { launchPlan } from './sandbox/mode';
+import { adoptSessionFile, readySelection, row } from './session/store';
 import { emit } from '../ports';
 
 interface Side {
@@ -135,23 +136,23 @@ async function sidechatSource(id: string) {
       )
     : -1;
   if (asking >= 0) branch = branch.slice(0, asking);
-  const cwd = entry?.cwd ?? sessionCwd(meta.project_id, meta.cwd);
-  return { meta, cwd, selection, branch };
+  const plan = launchPlan(meta);
+  return { meta, cwd: plan.hostCwd, piCwd: plan.piCwd, selection, branch };
 }
 
 async function createSide(parentId: string): Promise<Side> {
-  const { meta, cwd, selection, branch } = await sidechatSource(parentId);
+  const { meta, piCwd, selection, branch } = await sidechatSource(parentId);
   const pi = await loadPi();
   const inMemory = pi.SessionManager.inMemory(
-    cwd,
+    piCwd,
     meta.file ? { parentSession: meta.file } : undefined,
     branch,
   );
   const session = await openPiSession({
-    cwd,
+    cwd: piCwd,
     inMemory,
     selection,
-    ...(await agentEnvironment().sessionOptions(meta.project_id, cwd, {
+    ...(await agentEnvironment().sessionOptions(meta.project_id, piCwd, {
       askCards: false,
       sessionId: parentId,
     })),
@@ -169,6 +170,7 @@ async function createSide(parentId: string): Promise<Side> {
 }
 
 export async function openSidechat(parentId: string): Promise<SidechatView> {
+  if (row(parentId).archived) throw new Error('请先恢复已归档的会话');
   const existing = sides.get(parentId);
   if (existing) return view(parentId, existing);
   let pending = opening.get(parentId);
@@ -177,6 +179,7 @@ export async function openSidechat(parentId: string): Promise<SidechatView> {
     opening.set(parentId, pending);
   }
   const side = await pending;
+  if (row(parentId).archived) throw new Error('请先恢复已归档的会话');
   sides.set(parentId, side);
   return view(parentId, side);
 }
@@ -188,11 +191,13 @@ function requireSide(parentId: string): Side {
 }
 
 export async function askSidechat(parentId: string, input: ChatAskInput): Promise<SidechatView> {
+  const meta = row(parentId);
+  if (meta.archived) throw new Error('请先恢复已归档的会话');
   const side = requireSide(parentId);
   if (side.run) throw new Error('请等待旁问回答完成');
   if (!usableLlmProviders().some(({ id }) => id === side.providerId))
     throw new Error('模型提供商已停用或不可用，请重新启用');
-  const { prompt, images } = composePrompt(input, row(parentId).project_id);
+  const { prompt, images } = composePrompt(input, meta);
   let finish!: () => void;
   const run = { cancelled: false, done: new Promise<void>((resolve) => (finish = resolve)) };
   side.run = run;
@@ -213,6 +218,10 @@ export function cancelSidechat(parentId: string) {
   const side = sides.get(parentId);
   if (side?.run) side.run.cancelled = true;
   void side?.session.abort();
+}
+
+export function sidechatBusy(parentId: string): boolean {
+  return Boolean(sides.get(parentId)?.run || opening.has(parentId));
 }
 
 export async function closeSidechat(parentId: string): Promise<void> {

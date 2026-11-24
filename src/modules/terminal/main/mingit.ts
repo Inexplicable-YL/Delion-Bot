@@ -23,10 +23,19 @@ function systemBash(): string | null {
   return candidates.find((path) => existsSync(path)) ?? null;
 }
 
+function unixBash(): string | null {
+  return ['/usr/bin/bash', '/bin/bash'].find((path) => existsSync(path)) ?? null;
+}
+
 export function locateBash(): string {
   if (process.platform === 'darwin') {
     const bash = systemBash();
     if (!bash) throw new Error('未找到 macOS 系统 Bash（/bin/bash），请检查系统环境');
+    return bash;
+  }
+  if (process.platform === 'linux') {
+    const bash = unixBash();
+    if (!bash) throw new Error('未找到 Bash（/usr/bin/bash 或 /bin/bash）');
     return bash;
   }
   const bash = systemBash() ?? bundledBash();

@@ -77,6 +77,25 @@ describe('web_fetch', () => {
     expect(first.truncated).toBe(false);
   });
 
+  it('请求批准时在发出重定向请求前检查跳转目标', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(null, { status: 302, headers: { location: 'https://docs.example.com/page' } }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const approve = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    await expect(
+      fetchWebPage('https://example.com/start', 0, undefined, { approve }),
+    ).rejects.toThrow('未获批准');
+    expect(approve.mock.calls.map(([url]) => url)).toEqual([
+      'https://example.com/start',
+      'https://docs.example.com/page',
+    ]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('纯文本保持原样，PDF 返回完整临时任务而不在主进程解析', async () => {
     vi.stubGlobal(
       'fetch',

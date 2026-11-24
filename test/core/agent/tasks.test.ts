@@ -101,14 +101,16 @@ it('长输出完整写进日志：通知只带末尾几行，task_output 按 off
 
 it('task_stop 连同子进程一起结束，记为停止并照常投递', async () => {
   const taskId = await start(
-    `node -e 'console.log("child-pid: " + process.pid); setTimeout(() => {}, 30000)' & wait`,
+    `node -e 'console.log("child-pid: " + process.pid); setInterval(() => {}, 1000)'`,
   );
   const pid = await vi.waitFor(
     async () => {
       const output = await call('task_output', { taskId });
       const match = /child-pid: (\d+)/.exec(output);
       expect(match).not.toBeNull();
-      return Number(match![1]);
+      const child = Number(match![1]);
+      expect(() => process.kill(child, 0)).not.toThrow();
+      return child;
     },
     { timeout: 5_000 },
   );

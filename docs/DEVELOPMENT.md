@@ -157,11 +157,9 @@ Windows 与 macOS 共用一套：`electron-updater` + `electron-builder` 的 NSI
 
 ## 6. 安全边界
 
-诚实而非表演：给了 bash 就不设业务级守卫、无沙箱、无越权校验；skill 启停是引导层。
-
 - 数据保存在本机 SQLite，凭据经 Electron `safeStorage` 加密。
 - renderer 不接触文件系统、数据库与凭据，一切经受控 IPC 通信。
-- Agent 的 bash 与文件工具即本机权限，不设沙箱。这是已知取舍，不是待修复的漏洞，也不要描述成安全隔离。
+- 普通聊天和项目聊天默认只读。受限工具经文件代理访问 `/privacy`、`/share` 或当前项目的 `/project`。请求批准逐次确认写入，项目内修改只允许直接写入项目目录。只有宿主弹窗确认后才开启完全访问。模型读取的内容可发送给配置的模型服务。
 - Pi 的 auth / models / sessions / skills 放在 `userData/pi`，与用户的 `~/.pi` 隔离（bin 例外，见 §2.1）。模型密钥只在主进程内注册给 Pi 运行时，不写入 `auth.json`。
 - 应用启动**不读取仓库 `.env`**，凭据只能在应用内配置。
 
@@ -179,7 +177,7 @@ SQLite 在独立的应用数据目录中保存数据。Schema 2 为会话增加�
 
 node-pty + xterm.js。本地终端跟随用户自己的 shell：Windows 优先 PowerShell 7（PATH 上或默认安装目录），没有时用系统自带的 Windows PowerShell 5.1；macOS 以登录模式启动用户的默认 shell（通常是 zsh），加载用户自己的配置。终端不注入 delion 命令桥。
 
-Agent 的 bash 工具与终端分开：固定用 bash，每条命令前拼上 delion 命令桥（`commandPrefix`）。macOS 用 `/bin/bash`，不执行登录 shell 来取环境；下面的 Git Bash 规则只用于 Windows 上的 Agent。
+终端属于项目。Agent 在完全访问模式获得通用 bash 工具。本机完全访问命令通过 delion 命令桥获得领域工具。受限本机命令使用单进程隔离，Windows 使用 AppContainer，macOS 使用 Seatbelt。命令按需接收文件副本，通过标准输出返回结果。
 
 - **Git Bash 探测顺序：系统 Git for Windows → 随包 MinGit**，都缺失说明安装包被破坏，Agent 报错提示安装 Git for Windows 后重启，**不回退 PowerShell**。
 - 随包 MinGit 由打包前脚本 `prepare-runtime.ts` 按写死的版本与 SHA256 下载校验，仓库不提交这份约 40MB 的产物。MinGit 只以 `sh.exe` 名义带 bash 本体，脚本要复制出 `bash.exe`——**argv[0] 决定 bash 是否走完整模式**。

@@ -48,7 +48,7 @@ function mergeDirectories(
       .filter((item) => item.id !== workspaceArchiveId)
       .map((item) => [item.id, item]),
   );
-  const pending = [...entries.keys(), workspaceArchiveId];
+  const pending = [...entries.keys(), workspaceArchiveId, ...Object.keys(directories)];
   const seen = new Set<string>();
   while (pending.length) {
     const id = pending.pop()!;

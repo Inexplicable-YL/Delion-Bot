@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, statSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import type { ChatSessionSummary } from '../../protocol/agent';
+import type { ChatSessionSummary, PermissionMode } from '../../protocol/agent';
 import { llmModelSettings } from '../../protocol/llm-models';
 import type { StoredLlmProvider } from '../llm-config';
 import { hostPorts } from '../../ports';
@@ -42,6 +42,51 @@ export function workspaceRoot() {
 export function chatSessionDirectory(id: string) {
   const dir = join(hostPorts().paths.storage(), 'chat-sessions', id);
   mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+const permissionKey = (id: string) => `session-permission:${id}`;
+
+function setting(key: string): string | undefined {
+  return (
+    hostPorts().database().prepare('SELECT value FROM workspace_settings WHERE key=?').get(key) as
+      { value: string } | undefined
+  )?.value;
+}
+
+export function readPermissionMode(id: string): PermissionMode {
+  const mode = setting(permissionKey(id));
+  if (mode === undefined) return row(id).project_id ? 'project-write' : 'approval';
+  if (mode === 'full-confirmed') return 'full';
+  return mode === 'approval' || mode === 'project-write' ? mode : 'read-only';
+}
+
+export function writePermissionMode(id: string, mode: PermissionMode) {
+  hostPorts()
+    .database()
+    .prepare('INSERT OR REPLACE INTO workspace_settings VALUES (?, ?)')
+    .run(permissionKey(id), mode === 'full' ? 'full-confirmed' : mode);
+}
+
+export function chatShareDirectory(id: string) {
+  const root = join(hostPorts().paths.storage(), 'chat-share');
+  mkdirSync(root, { recursive: true });
+  if (!lstatSync(root).isDirectory()) throw new Error('共享文件目录不可用');
+  const dir = join(root, id);
+  mkdirSync(dir, { recursive: true });
+  if (!lstatSync(dir).isDirectory()) throw new Error('共享文件目录不可用');
+  return dir;
+}
+
+export function ensurePrivateSession(id: string): string {
+  const dir = chatSessionDirectory(id);
+  mkdirSync(join(dir, '.home'), { recursive: true });
+  mkdirSync(join(dir, '.cache'), { recursive: true });
+  hostPorts()
+    .database()
+    .prepare('UPDATE sessions SET cwd=? WHERE id=? AND (cwd IS NULL OR cwd<>?)')
+    .run(dir, id, dir);
+  chatShareDirectory(id);
   return dir;
 }
 
@@ -185,8 +230,11 @@ export function storeVisibility(id: string, patch: { archived?: boolean; pinned?
 export function storeProject(id: string, projectId: string | null) {
   const db = hostPorts().database();
   const cwd = projectId === null ? chatSessionDirectory(id) : null;
-  db.prepare('UPDATE sessions SET project_id=?, cwd=? WHERE id=?').run(projectId, cwd, id);
-  db.prepare('UPDATE sessions SET project_id=? WHERE parent_id=?').run(projectId, id);
+  db.transaction(() => {
+    db.prepare('UPDATE sessions SET project_id=?, cwd=? WHERE id=?').run(projectId, cwd, id);
+    db.prepare('UPDATE sessions SET project_id=?, cwd=NULL WHERE parent_id=?').run(projectId, id);
+    db.prepare('DELETE FROM workspace_settings WHERE key=?').run(permissionKey(id));
+  })();
 }
 
 export function modelAutoCompaction(providerId: string, modelId: string): number | undefined {
@@ -255,9 +303,10 @@ export function removeSession(id: string) {
   const db = hostPorts().database();
   db.transaction(() => {
     db.prepare('DELETE FROM sessions WHERE id=?').run(id);
-    db.prepare('DELETE FROM workspace_settings WHERE key IN (?, ?)').run(
+    db.prepare('DELETE FROM workspace_settings WHERE key IN (?, ?, ?)').run(
       `session-commands:${id}`,
       `session-autocompact:${id}`,
+      permissionKey(id),
     );
   })();
 }
@@ -324,7 +373,7 @@ export function emptySessionId(projectId: string | null): string | undefined {
 
 export function insertSession(projectId: string | null): string {
   const id = randomUUID();
-  const cwd = projectId !== null ? null : chatSessionDirectory(id);
+  const cwd = projectId !== null ? null : ensurePrivateSession(id);
   const now = new Date().toISOString();
   hostPorts()
     .database()
@@ -351,7 +400,7 @@ export function adoptSessionFile(meta: SessionRow, file: string, titlePrefix: st
     .run(
       id,
       meta.project_id,
-      meta.cwd,
+      meta.project_id === null ? ensurePrivateSession(id) : null,
       file,
       `${titlePrefix}${meta.title}`.slice(0, 60),
       userMessages,

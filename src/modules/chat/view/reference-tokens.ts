@@ -93,7 +93,27 @@ export function sourceReferences(sources: { key: string }[]): ChatReference[] {
   });
 }
 
-export function fileLinkKey(path: string, cwd: string | null, remoteProjectId: string | null) {
+function virtualLink(path: string): string | null {
+  const normalized = path.replaceAll('\\', '/').replace(/^\.\//, '');
+  const name = ['privacy', 'share'].find(
+    (root) =>
+      normalized === root ||
+      normalized === `/${root}` ||
+      normalized.startsWith(`${root}/`) ||
+      normalized.startsWith(`/${root}/`),
+  );
+  if (!name) return null;
+  return normalized.startsWith('/') ? normalized : `/${normalized}`;
+}
+
+export function fileLinkKey(
+  path: string,
+  cwd: string | null,
+  remoteProjectId: string | null,
+  restricted = false,
+) {
+  const virtual = restricted ? virtualLink(path) : null;
+  if (virtual) return remoteProjectId ? `${remoteProjectId}:${virtual}` : virtual;
   const absolute =
     !cwd || /^(?:[a-z]:[\\/]|[\\/])/i.test(path)
       ? path

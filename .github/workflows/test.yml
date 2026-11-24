@@ -24,13 +24,19 @@ jobs:
         with:
           node-version-file: .node-version
           package-manager-cache: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.2'
+          cache: false
       - uses: pnpm/action-setup@v6
         with:
           cache: true
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build
-        run: pnpm build:bundle
+        run: |
+          pnpm build:scopedfs
+          pnpm build:bundle
       - name: Unit tests
         run: pnpm test
       - name: Smoke test Electron

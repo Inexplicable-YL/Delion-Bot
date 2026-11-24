@@ -3,13 +3,16 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-const state = vi.hoisted(() => ({ root: '', packaged: false, systemBash: true }));
+const state = vi.hoisted(() => ({ root: '', packaged: false, systemBash: true, usrBash: false }));
 vi.mock('node:fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs')>();
   return {
     ...actual,
-    existsSync: (path: Parameters<typeof actual.existsSync>[0]) =>
-      path === '/bin/bash' ? state.systemBash : actual.existsSync(path),
+    existsSync: (path: Parameters<typeof actual.existsSync>[0]) => {
+      if (path === '/bin/bash') return state.systemBash;
+      if (path === '/usr/bin/bash') return state.usrBash;
+      return actual.existsSync(path);
+    },
   };
 });
 vi.mock('electron', () => ({
@@ -33,6 +36,7 @@ beforeEach(async () => {
   state.root = mkdtempSync(join(tmpdir(), 'delion-runtime-'));
   state.packaged = false;
   state.systemBash = true;
+  state.usrBash = false;
   vi.stubGlobal('process', {
     ...process,
     platform: 'darwin',
@@ -116,5 +120,15 @@ describe('Git Bash 定位', () => {
     expect(runtime.locateBash()).toBe('/bin/bash');
     state.systemBash = false;
     expect(() => runtime.locateBash()).toThrow('macOS 系统 Bash');
+  });
+
+  it('Linux 使用系统 Bash，缺失时明确报错', () => {
+    vi.stubGlobal('process', { ...process, platform: 'linux' });
+    state.usrBash = true;
+    expect(runtime.locateBash()).toBe('/usr/bin/bash');
+    state.usrBash = false;
+    expect(runtime.locateBash()).toBe('/bin/bash');
+    state.systemBash = false;
+    expect(() => runtime.locateBash()).toThrow('未找到 Bash');
   });
 });

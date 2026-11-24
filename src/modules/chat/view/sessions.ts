@@ -11,7 +11,9 @@ import {
   onAgentEvent,
   onCompactionChanged,
   onCompactionStream,
+  onPermissionRequestsChanged,
 } from './client';
+import type { PermissionRequest } from '../contract';
 
 export function poolKey(projectId: string | null): string {
   return projectId ?? 'general';
@@ -21,6 +23,7 @@ interface SessionsState {
   lists: Record<string, ChatSessionSummary[]>;
   chats: Record<string, WorkspaceChat>;
   compacted: Record<string, { entryId: string; messages: ChatMessage[] }>;
+  permissions: Partial<Record<string, PermissionRequest[]>>;
   homeSessionId: string | null;
   refreshTimers: Record<string, ReturnType<typeof setTimeout>>;
   refresh: (projectId: string | null) => Promise<void>;
@@ -51,6 +54,7 @@ export const useSessions = create<SessionsState>((set, get) => {
     lists: {},
     chats: {},
     compacted: {},
+    permissions: {},
     homeSessionId: null,
     refreshTimers: {},
     refresh: async (projectId) => {
@@ -70,10 +74,12 @@ export const useSessions = create<SessionsState>((set, get) => {
         delete chats[sessionId];
         const compacted = { ...state.compacted };
         delete compacted[sessionId];
+        const permissions = { ...state.permissions };
+        delete permissions[sessionId];
         const lists: Record<string, ChatSessionSummary[]> = {};
         for (const [key, list] of Object.entries(state.lists))
           lists[key] = list.filter((item) => item.id !== sessionId);
-        return { chats, compacted, lists };
+        return { chats, compacted, lists, permissions };
       }),
   };
 });
@@ -89,6 +95,11 @@ export function querySessions(
 
 onAgentEvent('session-update', ({ sessionId, chat }) => {
   useSessions.getState().putChat(sessionId, chat);
+});
+onPermissionRequestsChanged(({ sessionId, requests }) => {
+  useSessions.setState((state) => ({
+    permissions: { ...state.permissions, [sessionId]: requests },
+  }));
 });
 onCompactionChanged(({ sessionId, ...transcript }) => {
   useSessions.setState((state) => ({

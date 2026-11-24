@@ -82,6 +82,30 @@ describe('workspace store mirror', () => {
     ).toBe(prior);
   });
 
+  it('keeps files listed in a share directory that is not a workspace entry', async () => {
+    const share = 'C:/delion/chat-share/11111111-1111-4111-8111-111111111111';
+    const report: WorkspaceEntry = {
+      id: `${share}/报告.md`,
+      parentId: share,
+      kind: 'file',
+      name: '报告.md',
+      path: `${share}/报告.md`,
+      sourceId: null,
+      updatedAt: '',
+    };
+    installDela({ workspace: async () => workspaceState });
+    api.listLocalDirectory = vi.fn(async () => [report]);
+    useWorkspaceStore.setState({
+      workspace: workspaceState,
+      overview: workspaceState,
+      directories: {},
+    });
+    await useWorkspaceStore.getState().ensureDirectory(share);
+    expect(useWorkspaceStore.getState().workspace.entries.map((entry) => entry.name)).toContain(
+      '报告.md',
+    );
+  });
+
   it('does not restore directory data after it was released while a request was pending', async () => {
     installDela({});
     let resolve!: (entries: WorkspaceEntry[]) => void;

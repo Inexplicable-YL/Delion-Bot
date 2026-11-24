@@ -130,6 +130,22 @@ async function pathsIn(cwd: string): Promise<string[]> {
   }
 }
 
+async function scopedPathsIn(cwd: string): Promise<string[]> {
+  const directories = ['.'];
+  const files: string[] = [];
+  while (directories.length && files.length <= FILE_LIMIT) {
+    const directory = directories.pop()!;
+    for (const entry of await readdir(join(cwd, directory), { withFileTypes: true })) {
+      if (excluded.has(entry.name)) continue;
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) directories.push(path);
+      else if (entry.isFile()) files.push(path);
+      if (files.length > FILE_LIMIT) break;
+    }
+  }
+  return files;
+}
+
 function stateOf(bytes: Buffer, budget: { remaining: number }): FileState {
   const state: FileState = {
     bytes: bytes.length,
@@ -202,6 +218,7 @@ async function diskState(
 export async function captureDirectory(
   cwd: string,
   previousPaths: string[] = [],
+  scoped = false,
 ): Promise<DirectorySnapshot> {
   cwd = await realpath(cwd);
   const files: Record<string, FileState> = Object.create(null);
@@ -210,7 +227,7 @@ export async function captureDirectory(
   const budget = { remaining: TEXT_BUDGET };
   const paths = [
     ...new Set(
-      [...(await pathsIn(cwd)), ...previousPaths].map((path) =>
+      [...(await (scoped ? scopedPathsIn(cwd) : pathsIn(cwd))), ...previousPaths].map((path) =>
         slash(relative(cwd, resolve(cwd, path))),
       ),
     ),
@@ -314,13 +331,14 @@ export async function freezeTurnChanges(
   runStatus: TurnChanges['runStatus'],
   before: DirectorySnapshot | null,
   unavailableReason?: string,
+  scoped = false,
 ): Promise<void> {
   let files: SavedChange[] = [],
     warnings = before?.warnings ?? [],
     state: TurnChanges['state'] = 'unavailable';
   if (before) {
     try {
-      const after = await captureDirectory(cwd, Object.keys(before.files));
+      const after = await captureDirectory(cwd, Object.keys(before.files), scoped);
       files = changesBetween(before, after);
       warnings = [...new Set([...warnings, ...after.warnings])];
       state = warnings.length ? 'partial' : 'complete';

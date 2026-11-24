@@ -17,7 +17,7 @@ import {
   type RemoteTarget,
 } from './transport';
 
-export const HELPER_VERSION = '0.3.3';
+export const HELPER_VERSION = '0.3.6';
 const PROTOCOL_VERSION = 2;
 const HEARTBEAT_MS = 30_000;
 const IDLE_TIMEOUT = '1h';
@@ -221,8 +221,44 @@ export interface PortTunnel {
   close(): void;
 }
 
+export interface ScopedFileOperation {
+  action: 'read' | 'ls' | 'write' | 'edit' | 'find' | 'grep' | 'stat';
+  path: string;
+  content?: string;
+  data?: string;
+  oldText?: string;
+  pattern?: string;
+  limit?: number;
+  writable?: boolean;
+}
+
+export interface ScopedFileResponse {
+  data?: string;
+  entries?: string[];
+  kind?: 'file' | 'directory';
+  matches?: { path: string; line: number; text: string }[];
+  limited?: boolean;
+  error?: string;
+}
+
+export interface ScopedCommandResult {
+  exitCode: number | null;
+  output: string;
+  error?: string;
+}
+
 export interface HelperSession {
   target: RemoteTarget;
+  scopedFile(
+    directory: string,
+    operation: ScopedFileOperation,
+    signal: AbortSignal,
+  ): Promise<ScopedFileResponse>;
+  scopedCommand(
+    command: string,
+    inputs: readonly Buffer[],
+    signal: AbortSignal,
+  ): Promise<ScopedCommandResult>;
   readFile(path: string, signal?: AbortSignal): Promise<Buffer>;
   readFileRange(
     path: string,
@@ -943,6 +979,26 @@ function createSession(channel: Channel): HelperSession {
 
   return {
     target: channel.target,
+    async scopedFile(directory, operation, signal) {
+      const endpoint = await channel.endpointFor(signal);
+      const response = await sendRequest(endpoint, 'POST', '/v1/fs/scoped', {
+        body: JSON.stringify({ directory, ...operation }),
+        timeoutMs: 10_000,
+        signal,
+      });
+      assertOk(response, '访问远程授权目录');
+      return JSON.parse(response.body.toString()) as ScopedFileResponse;
+    },
+    async scopedCommand(command, inputs, signal) {
+      const endpoint = await channel.endpointFor(signal);
+      const response = await sendRequest(endpoint, 'POST', '/v1/commands/scoped', {
+        body: JSON.stringify({ command, inputs: inputs.map((bytes) => bytes.toString('base64')) }),
+        timeoutMs: 12_000,
+        signal,
+      });
+      assertOk(response, '运行远程受限命令');
+      return JSON.parse(response.body.toString()) as ScopedCommandResult;
+    },
     readFile: (path, signal) =>
       request('GET', `/v1/fs/read?path=${encodeURIComponent(path)}`, `读取 ${path} `, { signal }),
     readFileRange: (path, offset, length, signal) =>

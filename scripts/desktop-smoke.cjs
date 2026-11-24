@@ -60,6 +60,63 @@ async function run(window) {
   };
   await wait(() => js("!!document.querySelector('main')"), 'app mounted');
   assert.equal(await js('window.delionBot.platform'), process.platform);
+  const composer =
+    '!!document.querySelector(\'[aria-label="对话"] [data-slot="prompt-input-toolbar"]\')';
+  await wait(() => js(composer), 'chat composer mounted');
+  const chat = await js(
+    "window.delionBot.bridge.invoke('agent:create-session', { projectId: null })",
+  );
+  assert.ok(chat);
+  const sessionId = JSON.stringify(chat.sessionId);
+  const requestFullAccess = () =>
+    js(
+      `void window.delionBot.bridge.invoke('agent:set-permission-mode', { sessionId: ${sessionId}, mode: 'full' })`,
+    );
+  const mode = () =>
+    js(
+      `window.delionBot.bridge.invoke('agent:open-session', { sessionId: ${sessionId} }).then(chat => chat.permissionMode)`,
+    );
+  const modal = "document.querySelector('[role=alertdialog]')";
+  const clickModalButton = (label) =>
+    js(
+      `[...${modal}.querySelectorAll('button')].find(button => button.textContent.trim() === ${JSON.stringify(label)}).click()`,
+    );
+  await requestFullAccess();
+  await wait(() => js(`!!${modal}`), 'full access confirmation in workspace');
+  assert.equal(await mode(), 'approval');
+  await clickModalButton('取消');
+  await wait(() => js(`!${modal}`), 'full access confirmation declined');
+  assert.equal(await mode(), 'approval');
+  await requestFullAccess();
+  await wait(() => js(`!!${modal}`), 'full access confirmation reopened');
+  await clickModalButton('启用完全访问');
+  await wait(async () => (await mode()) === 'full', 'full access enabled after confirmation');
+  await js(
+    `window.delionBot.bridge.invoke('agent:set-permission-mode', { sessionId: ${sessionId}, mode: 'approval' })`,
+  );
+  window.webContents.send('chat:permissionRequestsChanged', {
+    sessionId: chat.sessionId,
+    requests: [
+      {
+        id: randomUUID(),
+        kind: 'operation',
+        title: '联网搜索',
+        fields: [{ label: '搜索词', value: 'Delion Bot' }],
+      },
+    ],
+  });
+  await wait(
+    () =>
+      js(
+        `!!document.querySelector('section[aria-label="权限审批"]') && !(${composer}) && !${modal}`,
+      ),
+    'operation approval replaces the composer',
+  );
+  window.webContents.send('chat:permissionRequestsChanged', {
+    sessionId: chat.sessionId,
+    requests: [],
+  });
+  await wait(() => js(composer), 'composer returns after approval clears');
   if (process.platform === 'darwin') {
     assert.ok(dockIcon && !dockIcon.isEmpty(), 'Dock icon must use generated macOS assets');
     assert.deepEqual(

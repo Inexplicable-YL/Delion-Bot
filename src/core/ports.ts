@@ -22,11 +22,12 @@ export interface Paths {
   documents(): string;
   temp(): string;
   storage(): string;
+  applicationCode?(): string;
   bundled(name: BundledResource): string;
   bash(): string;
 }
 
-export type BundledResource = 'delion-helper' | 'remote-rg' | 'openssh';
+export type BundledResource = 'delion-helper' | 'remote-rg' | 'openssh' | 'scopedfs';
 
 export interface SqlStatement {
   run(...params: unknown[]): unknown;
@@ -89,6 +90,28 @@ export interface SavePathOptions {
 }
 
 export interface Desktop {
+  confirmFullAccess?(request: { session: string; signal: AbortSignal }): Promise<boolean>;
+  approveToolAction?(request: {
+    session: string;
+    title: string;
+    fields: { label: string; value: string }[];
+    signal: AbortSignal;
+  }): Promise<boolean>;
+  approveSandboxCommand?(request: {
+    session: string;
+    command: string;
+    files: readonly string[];
+    remote?: string;
+    signal: AbortSignal;
+  }): Promise<boolean>;
+  approveFileChange?(request: {
+    session: string;
+    action: 'write' | 'edit';
+    path: string;
+    oldText?: string;
+    content?: string;
+    signal: AbortSignal;
+  }): Promise<boolean>;
   pickFiles(owner: ClientHandle): Promise<string[]>;
   pickSavePath(owner: ClientHandle | null, options: SavePathOptions): Promise<string | null>;
   reveal(path: string): void;

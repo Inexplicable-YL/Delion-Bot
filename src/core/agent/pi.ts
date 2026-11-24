@@ -7,6 +7,7 @@ import type {
   ToolDefinition,
 } from '@earendil-works/pi-coding-agent';
 import type { Api, Model } from '@earendil-works/pi-ai';
+import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { LlmCatalogProvider } from '../protocol/llm';
 import type { StoredLlmProvider } from './llm-config';
 import {
@@ -185,6 +186,7 @@ export interface OpenSessionInput {
   selection: SessionModel;
   appendSystemPrompt: string[];
   customTools: ToolDefinition[];
+  restricted?: boolean;
   shellPath: string;
   commandPrefix?: string;
   skillPaths: string[];
@@ -196,6 +198,7 @@ export interface OpenSessionInput {
   globalSkillDirs: string[];
   disabledTools: string[];
   beforeTool?: () => Promise<void> | undefined;
+  transformModelContext?: (messages: AgentMessage[]) => AgentMessage[];
 }
 
 export async function openPiSession(input: OpenSessionInput): Promise<AgentSession> {
@@ -215,11 +218,15 @@ export async function openPiSession(input: OpenSessionInput): Promise<AgentSessi
     noExtensions: true,
     noPromptTemplates: true,
     noThemes: true,
+    noSkills: input.restricted,
+    noContextFiles: input.restricted,
     extensionFactories: input.beforeTool
       ? [(api) => void api.on('tool_call', async () => void (await input.beforeTool!()))]
       : [],
     additionalSkillPaths: input.skillPaths,
-    appendSystemPrompt: input.appendSystemPrompt,
+    ...(input.restricted
+      ? { systemPrompt: input.appendSystemPrompt.join('\n\n') }
+      : { appendSystemPrompt: input.appendSystemPrompt }),
     ...(input.agentsFilesOverride ? { agentsFilesOverride: input.agentsFilesOverride } : {}),
     skillsOverride: (base) => ({
       ...base,
@@ -252,8 +259,29 @@ export async function openPiSession(input: OpenSessionInput): Promise<AgentSessi
     resourceLoader,
     sessionManager,
     customTools: input.customTools,
+    ...(input.restricted
+      ? { noTools: 'builtin', tools: input.customTools.map(({ name }) => name) }
+      : {}),
     excludeTools: input.disabledTools,
   });
+  const { transformModelContext } = input;
+  if (transformModelContext) {
+    const previous = session.agent.transformContext;
+    session.agent.transformContext = async (messages, signal) => {
+      const context = previous ? await previous(messages, signal) : messages;
+      return transformModelContext(context).map((message) => {
+        if (message.role !== 'system' || !message.sections) return message;
+        return {
+          ...message,
+          sections: {
+            ...message.sections,
+            docs: null,
+            ...('cwd' in message.sections && { cwd: `<cwd>\n${input.cwd}\n</cwd>` }),
+          },
+        };
+      });
+    };
+  }
   return session;
 }
 

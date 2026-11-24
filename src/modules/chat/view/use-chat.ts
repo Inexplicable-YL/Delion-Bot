@@ -4,6 +4,7 @@ import type {
   ChatComment,
   ChatMediaView,
   ChatQueuedDraft,
+  PermissionMode,
   SessionCommandName,
   WorkspaceChat,
 } from '../../../core/protocol/agent';
@@ -408,6 +409,15 @@ export function useChat(
       .finally(refresh);
   };
 
+  const selectPermissionMode = (mode: PermissionMode) => {
+    if (!window.delionBot) return;
+    void agentClient['set-permission-mode']({ sessionId, mode })
+      .catch((e) =>
+        showToast({ variant: 'error', title: '切换 Agent 权限失败', description: errorMessage(e) }),
+      )
+      .finally(refresh);
+  };
+
   const selectEffort = (level: string) => {
     if (!window.delionBot) return;
     optimisticChat({ effort: level });
@@ -459,6 +469,7 @@ export function useChat(
       askAbout,
       selectModel,
       selectEffort,
+      selectPermissionMode,
       fork,
       refresh,
     },

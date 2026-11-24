@@ -162,21 +162,14 @@ it('hides the write entries while a remote project is open', async () => {
   expect(nameInput()).toBeNull();
 });
 
-it('reveals a nested folder while a document remains active', async () => {
-  const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+it('does not surface workspace folders in ordinary chat materials', async () => {
   useWorkspaceStore.setState({
     workspace: { ...workspace, entries: [...workspace.entries, localFolder] },
   });
   await render(null, 'active-document');
-  const target = () => container.querySelector('[role="treeitem"][aria-label="资料"]');
-  expect(target()).toBeNull();
-  useTreeState.getState().setQuery('unrelated');
-
   await act(async () => useTreeState.getState().revealFolder([localProject.id, localFolder.id]));
-  expect(target()?.getAttribute('aria-expanded')).toBe('true');
-  expect(target()?.getAttribute('aria-selected')).toBe('true');
-  expect(scroll.mock.contexts).toContain(target());
-  scroll.mockRestore();
+  expect(container.querySelector('[aria-label="资料"]')).toBeNull();
+  expect(container.querySelector('[aria-label="本地项目"]')).toBeNull();
 });
 
 function type(input: HTMLInputElement, value: string) {
@@ -254,9 +247,17 @@ it('asks before opening an archived file and opens its restored path after confi
   api.state = () => ({ ...before, entries: [...before.entries, restored] });
   window.delionBot = desktop;
   useWorkspaceStore.setState({ workspace: before, overview: before, directories: {} });
-  useNavigationStore.setState({ view: 'workbench', projectId: null, restoreRequest: null });
-  useWorkbenchLayout.setState({ ...createDefaultLayout(), projectId: null, ready: true });
-  await render(null);
+  useNavigationStore.setState({
+    view: 'workbench',
+    projectId: localProject.id,
+    restoreRequest: null,
+  });
+  useWorkbenchLayout.setState({
+    ...createDefaultLayout(),
+    projectId: localProject.id,
+    ready: true,
+  });
+  await render(localProject.id);
 
   const button = (text: string) =>
     [...document.querySelectorAll('button')].find(
@@ -298,10 +299,15 @@ it('hides remote and external projects from the library tree', async () => {
   });
   useTreeState.setState({ expanded: [externalProject.id] });
   await render(null);
-  expect(treeRow('本地项目')).toBeTruthy();
+  expect(treeRow('本地项目')).toBeUndefined();
   expect(treeRow('远端项目')).toBeUndefined();
   expect(treeRow('外部项目')).toBeUndefined();
   expect(treeRow('外部资料')).toBeUndefined();
+  expect(
+    [...document.querySelectorAll('button')].some(
+      (element) => element.textContent?.trim() === '归档',
+    ),
+  ).toBe(false);
 });
 
 it('switches the project sidebar and reuses the diff tab for the same file', async () => {

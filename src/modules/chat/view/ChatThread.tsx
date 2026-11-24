@@ -533,7 +533,12 @@ export function ChatThread({
   const openFile =
     onOpenSource &&
     ((path: string) => {
-      const key = fileLinkKey(path, chat.cwd, remoteProject ? chat.projectId : null);
+      const key = fileLinkKey(
+        path,
+        chat.cwd,
+        remoteProject ? chat.projectId : null,
+        Boolean(chat.permissionMode && chat.permissionMode !== 'full'),
+      );
       if (openReplyFile && fileSessionId) openReplyFile(key, fileSessionId, chat.projectId);
       else onOpenSource(key);
     });

@@ -4,7 +4,10 @@ import type { ChatAskInput } from '../../protocol/agent';
 import { parseChatBlocks, stripChatImageTokens } from '../../protocol/chat-input';
 import { hostPorts } from '../../ports';
 import { readChatAttachment, readChatMediaBytes } from '../media';
+import { executionMode } from '../sandbox/mode';
+import { scopedPromptPath } from '../sandbox/scoped-files';
 import { encodeMeta } from './projection';
+import type { SessionRow } from './store';
 
 const imageMime: Record<string, string> = {
   png: 'image/png',
@@ -23,7 +26,7 @@ export const COMMENTS_HEADER = 'User comments on excerpts from your previous rep
 
 export function composePrompt(
   input: ChatAskInput,
-  projectId: string | null,
+  session: SessionRow,
   turnId: string = randomUUID(),
 ) {
   const blocks = parseChatBlocks(input.text);
@@ -41,17 +44,29 @@ export function composePrompt(
       imageMeta.push({ id: block.id, name: block.name });
     }
   const attachments = input.attachments.map(readChatAttachment);
+  const mode = executionMode(session);
+  const restricted = mode !== 'full';
+  const projectId = session.project_id;
   const { comments } = input;
   if (!userText && !images.length && !attachments.length && !comments.length)
     throw new Error('请输入内容或添加文件');
+  if (
+    mode !== 'full' &&
+    mode !== 'approval' &&
+    attachments.some((attachment) => 'path' in attachment)
+  )
+    throw new Error('当前权限支持图片和文本附件。请添加图片或粘贴文档文本。');
   if (
     attachments.some((attachment) => 'path' in attachment) &&
     projectId &&
     hostPorts().projects.remoteOf(projectId)
   )
     throw new Error('文档附件目前只支持本机会话，请切换到随聊或本地项目');
-  const sources = input.context.map((key) => ({ key, title: key }));
-  const sessions = input.sessions ?? [];
+  const sources = input.context.flatMap((path) => {
+    const key = restricted ? scopedPromptPath(session, path) : path;
+    return key ? [{ key, title: key }] : [];
+  });
+  const sessions = mode === 'full' || mode === 'approval' ? (input.sessions ?? []) : [];
   const meta = {
     turnId,
     body: userText,

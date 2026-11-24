@@ -17,7 +17,13 @@ import { agentEnvironment } from '../environment';
 import { chatAttachmentView, releaseChatAttachments } from '../media';
 import { openPiSession } from '../pi';
 import { taskTool, type SubagentResult } from '../subagent';
-import { backgroundTools, stopAllTasks, type TaskNotice, type TaskParent } from '../tasks';
+import {
+  backgroundTools,
+  stopAllTasks,
+  taskControls,
+  type TaskNotice,
+  type TaskParent,
+} from '../tasks';
 import { live, liveSteps, liveThinking, type Live, type Run } from './live';
 import {
   encodeMeta,
@@ -35,12 +41,13 @@ import {
   THINKING_TIME,
 } from './projection';
 import { composePrompt } from './prompt';
+import { executionMode, launchPlan } from '../sandbox/mode';
+import { approveTool } from '../sandbox/approve-tool';
 import {
   isRemoteSession,
   readySelection,
   row,
   modelAutoCompaction,
-  sessionCwd,
   storeActivity,
   storeModel,
   storeSessionFile,
@@ -48,15 +55,31 @@ import {
 } from './store';
 import { generateSessionTitles } from './title';
 
-export async function ensureLive(id: string): Promise<Live> {
+const openingSessions = new Map<string, Promise<Live>>();
+
+export function sessionOpening(id: string): boolean {
+  return openingSessions.has(id);
+}
+
+export function ensureLive(id: string): Promise<Live> {
+  if (row(id).archived) return Promise.reject(new Error('请先恢复已归档的会话'));
   const existing = live.get(id);
-  if (existing) return existing;
+  if (existing) return Promise.resolve(existing);
+  const pending = openingSessions.get(id);
+  if (pending) return pending;
+  const opening = openLive(id).finally(() => openingSessions.delete(id));
+  openingSessions.set(id, opening);
+  return opening;
+}
+
+async function openLive(id: string): Promise<Live> {
   const meta = row(id);
   const choice = readySelection(meta);
   const { selection } = choice;
   if (!choice.stored) storeModel(id, selection.provider.id, selection.model, selection.effort);
-  const cwd = sessionCwd(meta.project_id, meta.cwd);
-  const options = await agentEnvironment().sessionOptions(meta.project_id, cwd, {
+  const plan = launchPlan(meta);
+  const cwd = plan.hostCwd;
+  const options = await agentEnvironment().sessionOptions(meta.project_id, plan.piCwd, {
     askCards: !meta.parent_id,
     sessionId: id,
   });
@@ -67,32 +90,53 @@ export async function ensureLive(id: string): Promise<Live> {
     publish: () => publish(id),
     deliver: (notice, wake) => deliverTaskNotice(id, notice, wake),
   };
+  const delegatesTools = delegates
+    ? plan.mode === 'full'
+      ? await backgroundTools(
+          parent,
+          cwd,
+          options.shellPath,
+          options.commandPrefix,
+          remote && remoteBackend(remote.target),
+        )
+      : taskControls(parent, true)
+    : [];
+  if (delegates) delegatesTools.push(taskTool(parent, cwd, runSubagent, plan.mode !== 'full'));
+  const extraTools =
+    plan.mode === 'approval'
+      ? delegatesTools.map((tool) => {
+          switch (tool.name) {
+            case 'task':
+              return approveTool(tool, id, '启动子 Agent');
+            case 'task_stop':
+              return approveTool(tool, id, '停止后台任务');
+            default:
+              return tool;
+          }
+        })
+      : delegatesTools;
   const session = await openPiSession({
-    cwd,
+    cwd: plan.piCwd,
     file: existsSync(meta.file) ? meta.file : undefined,
     selection,
     ...options,
-    ...(delegates
-      ? {
-          customTools: [
-            ...options.customTools,
-            ...(await backgroundTools(
-              parent,
-              cwd,
-              options.shellPath,
-              options.commandPrefix,
-              remote && remoteBackend(remote.target),
-            )),
-            taskTool(parent, cwd, runSubagent),
-          ],
-        }
-      : {}),
+    customTools: [...options.customTools, ...extraTools],
     ...(meta.parent_id ? { parentSession: row(meta.parent_id).file } : {}),
     beforeTool: () => live.get(id)?.run?.captured,
   });
+  if (row(id).archived) {
+    session.dispose();
+    throw new Error('请先恢复已归档的会话');
+  }
   if (session.sessionFile && session.sessionFile !== meta.file)
     storeSessionFile(id, session.sessionFile);
-  const entry: Live = { session, cwd, providerId: selection.provider.id, unsubscribe: () => {} };
+  const entry: Live = {
+    session,
+    cwd,
+    providerId: selection.provider.id,
+    unsubscribe: () => {},
+    captureDisabled: options.restricted && options.customTools.length === 0,
+  };
   entry.unsubscribe = session.subscribe((event) => onEvent(id, entry, event));
   live.set(id, entry);
   return entry;
@@ -299,6 +343,14 @@ export function cancelRun(id: string): ChatQueuedDraft | null {
   return queued;
 }
 
+export function stopArchivedRun(id: string): void {
+  const entry = live.get(id);
+  if (!entry) return;
+  if (entry.run) entry.run.cancelled = true;
+  entry.session.abortCompaction();
+  void entry.session.abort();
+}
+
 export function withdrawQueued(id: string): ChatQueuedDraft | null {
   const entry = live.get(id);
   if (!entry?.run) return null;
@@ -327,7 +379,9 @@ function undeliveredNotices(entry: Live, run: Run): TaskNotice[] {
 }
 
 async function deliverTaskNotice(id: string, notice: TaskNotice, wake: boolean): Promise<void> {
+  if (row(id).archived) return;
   const entry = await ensureLive(id);
+  if (row(id).archived) return;
   if (!wake) {
     await entry.session.sendCustomMessage(noticeMessage(notice), { triggerTurn: false });
     return;
@@ -381,10 +435,8 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
   if (entry.run) throw new Error('请等待当前回答完成');
   if (entry.session.isCompacting) throw new Error('正在压缩上下文，请稍候');
   const meta = row(id);
-  const { prompt, userText, images, attachments, comments, turnId } = composePrompt(
-    input,
-    meta.project_id,
-  );
+  if (meta.archived) throw new Error('请先恢复已归档的会话');
+  const { prompt, userText, images, attachments, comments, turnId } = composePrompt(input, meta);
   if (input.replaceLastUser) {
     const branch = entry.session.sessionManager.getBranch();
     const lastUser = [...branch]
@@ -439,6 +491,7 @@ async function runTurn(
   start: () => Promise<void>,
 ): Promise<TurnStatus> {
   const meta = row(id);
+  if (meta.archived) throw new Error('请先恢复已归档的会话');
   const child = meta.parent_id !== null;
   const modelId = entry.session.model?.id;
   const autoCompaction = modelId ? modelAutoCompaction(entry.providerId, modelId) : undefined;
@@ -460,10 +513,12 @@ async function runTurn(
   const startedAt = new Date().toISOString();
   let before: changes.DirectorySnapshot | null = null;
   let captureError: string | undefined;
+  const scoped = executionMode(meta) !== 'full';
   try {
-    if (isRemoteSession(meta)) captureError = '远程会话暂不记录目录快照';
+    if (entry.captureDisabled) captureError = '当前会话没有可访问的工作目录';
+    else if (isRemoteSession(meta)) captureError = '远程会话暂不记录目录快照';
     else if (!child)
-      run.captured = changes.captureDirectory(entry.cwd).then(
+      run.captured = changes.captureDirectory(entry.cwd, [], scoped).then(
         (snapshot) => {
           before = snapshot;
         },
@@ -497,16 +552,19 @@ async function runTurn(
           status,
           before,
           captureError,
+          scoped,
         );
     } catch (error) {
       changesError = error instanceof Error ? error.message : String(error);
     }
     const orphaned = takeSteers(entry, run);
+    const archived = Boolean(row(id).archived);
     const lostNotices = undeliveredNotices(entry, run);
     try {
       releaseChatAttachments([
         ...attachments,
         ...run.steers.flatMap((steer) => steer.input.attachments),
+        ...(archived ? orphaned.flatMap((steer) => steer.attachments) : []),
       ]);
       const finishedThinking = [...(liveThinking.get(id) ?? [])].filter(
         ([, time]) => time.finishedAt !== undefined,
@@ -530,20 +588,22 @@ async function runTurn(
     } finally {
       finishRun();
     }
-    for (const steer of orphaned)
-      void askSession(id, steer).catch((error: unknown) =>
-        console.error('插队消息发送失败', error),
-      );
-    for (const notice of lostNotices)
-      void deliverTaskNotice(id, notice, !run.cancelled).catch((error: unknown) =>
-        console.error('后台任务通知投递失败', error),
-      );
+    if (!archived) {
+      for (const steer of orphaned)
+        void askSession(id, steer).catch((error: unknown) =>
+          console.error('插队消息发送失败', error),
+        );
+      for (const notice of lostNotices)
+        void deliverTaskNotice(id, notice, !run.cancelled).catch((error: unknown) =>
+          console.error('后台任务通知投递失败', error),
+        );
+    }
   }
   return status;
 }
 
 async function steerRun(id: string, entry: Live, run: Run, input: ChatAskInput) {
-  const { prompt, images } = composePrompt(input, row(id).project_id, run.id);
+  const { prompt, images } = composePrompt(input, row(id), run.id);
   await entry.session.steer(prompt, images.length ? images : undefined);
   run.steers.push({ prompt, input });
   return snapshot(id);

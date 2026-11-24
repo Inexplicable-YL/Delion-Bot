@@ -10,6 +10,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { finished } from 'node:stream/promises';
 import type { ToolDefinition, getShellConfig } from '@earendil-works/pi-coding-agent';
 import type { BackgroundTaskView, TaskNoticeDetails, TaskStatus } from '../protocol/agent';
 import type { RemoteBackend } from '../remote/operations';
@@ -81,8 +82,7 @@ export function trackTask(
         error: error instanceof Error ? error.message : String(error),
       }))
       .then((outcome) => {
-        if (entry.stoppedBy && outcome.status !== 'completed')
-          outcome = { ...outcome, status: 'stopped' };
+        if (entry.stoppedBy) outcome = { ...outcome, status: 'stopped' };
         Object.assign(entry, { status: outcome.status, outcome, finishedAt: Date.now() });
         if (entry.stoppedBy === 'session') return;
         entry.parent.publish();
@@ -207,6 +207,7 @@ function localBash(
       child.stdin?.end(script);
     }
     let timedOut = false;
+    let aborted = false;
     let finished = false;
     const forward = (chunk: Buffer) => {
       if (!finished) onData(chunk);
@@ -214,7 +215,11 @@ function localBash(
     child.stdout?.on('data', forward);
     child.stderr?.on('data', forward);
     const stop = () => child.pid && killTree(child.pid);
-    signal.addEventListener('abort', stop, { once: true });
+    const onAbort = () => {
+      aborted = true;
+      stop();
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
     const timer = timeout
       ? setTimeout(() => ((timedOut = true), stop()), timeout * 1000)
       : undefined;
@@ -226,11 +231,12 @@ function localBash(
         finished = true;
         clearTimeout(timer);
         clearTimeout(idle);
-        signal.removeEventListener('abort', stop);
+        signal.removeEventListener('abort', onAbort);
         child.stdout?.destroy();
         child.stderr?.destroy();
         if (outcome) resolve(outcome);
         else if (timedOut) resolve({ status: 'failed', error: `超时（${timeout} 秒）` });
+        else if (aborted) resolve({ status: 'stopped', exitCode });
         else resolve({ status: exitCode === 0 ? 'completed' : 'failed', exitCode });
       };
       const settle = () => {
@@ -264,9 +270,21 @@ function startBash(
     const task = tasks.get(id);
     if (task) task.tail = (task.tail + chunk.toString()).slice(-TAIL_CHARS);
   };
+  const logClosed = finished(file, { cleanup: true });
+  const execution = (async () => {
+    try {
+      return await run(command, { signal: abort.signal, timeout, onData });
+    } finally {
+      file.end();
+    }
+  })();
   trackTask(
     { id, parent, kind: 'bash', label: command, stop: () => abort.abort(), log },
-    run(command, { signal: abort.signal, timeout, onData }).finally(() => file.end()),
+    Promise.allSettled([execution, logClosed]).then(([outcome, logResult]) => {
+      if (outcome.status === 'rejected') throw outcome.reason;
+      if (logResult.status === 'rejected') throw logResult.reason;
+      return outcome.value;
+    }),
   );
   return id;
 }
@@ -285,9 +303,10 @@ function readLog(log: string, offset: number | undefined) {
   return { text: buffer.toString(), start, end: start + length, size };
 }
 
-function ownTask(parentId: string, id: string): BackgroundTask {
+function ownTask(parentId: string, id: string, restricted = false): BackgroundTask {
   const task = tasks.get(id);
-  if (task?.parent.id !== parentId) throw new Error(`没有这个后台任务：${id}`);
+  if (task?.parent.id !== parentId || (restricted && task.kind !== 'subagent'))
+    throw new Error(`没有这个后台任务：${id}`);
   return task;
 }
 
@@ -295,6 +314,64 @@ const text = (value: string) => ({
   content: [{ type: 'text' as const, text: value }],
   details: undefined,
 });
+
+export function taskControls(parent: TaskParent, restricted = false): ToolDefinition[] {
+  return [
+    {
+      name: 'task_output',
+      label: 'task_output',
+      description: restricted
+        ? 'Inspect the status and final reply of a subagent in this chat.'
+        : 'Inspect the status and output of a background bash command or subagent. Bash returns status, exit code, and a chunk of output. Omit offset to read from the start, or the tail if the output is too long. Pass the previous nextOffset as offset to read new output. A subagent returns its status and final reply. Completion sends a notification, so polling is unnecessary.',
+      parameters: {
+        type: 'object',
+        properties: {
+          taskId: { type: 'string' },
+          offset: { type: 'number', description: 'Byte offset to start reading from in the log.' },
+        },
+        required: ['taskId'],
+      } as unknown as ToolDefinition['parameters'],
+      async execute(_id, params: { taskId: string; offset?: number }) {
+        const task = ownTask(parent.id, params.taskId, restricted);
+        const status = task.outcome ? statusText(task.outcome) : '运行中';
+        if (task.kind === 'subagent')
+          return text(
+            [
+              `状态：${status}`,
+              ...(task.outcome?.reply ? [`最终回复：\n${task.outcome.reply}`] : []),
+            ].join('\n'),
+          );
+        const output = readLog(task.log!, params.offset);
+        return text(
+          [
+            `状态：${status}`,
+            `输出（字节 ${output.start}–${output.end}，共 ${output.size}）：`,
+            output.text || '（没有输出）',
+            `nextOffset: ${output.end}`,
+          ].join('\n'),
+        );
+      },
+    },
+    {
+      name: 'task_stop',
+      label: 'task_stop',
+      description: restricted
+        ? 'Stop a background subagent in this chat.'
+        : 'Stop a background task and its running work.',
+      parameters: {
+        type: 'object',
+        properties: { taskId: { type: 'string' } },
+        required: ['taskId'],
+      } as unknown as ToolDefinition['parameters'],
+      async execute(_id, params: { taskId: string }) {
+        const task = ownTask(parent.id, params.taskId, restricted);
+        if (task.status !== 'running') return text(`任务已经结束：${statusText(task.outcome!)}`);
+        stopTask(task.id, 'model');
+        return text('已停止。');
+      },
+    },
+  ];
+}
 
 export async function backgroundTools(
   parent: TaskParent,
@@ -337,56 +414,6 @@ export async function backgroundTools(
         return text(`已在后台运行（taskId: ${id}）。结束时会自动通知你，不需要轮询。`);
       },
     } as ToolDefinition,
-    {
-      name: 'task_output',
-      label: 'task_output',
-      description:
-        'Inspect the status and output of a background bash command or subagent. Bash returns status, exit code, and a chunk of output. Omit offset to read from the start, or the tail if the output is too long. Pass the previous nextOffset as offset to read new output. A subagent returns its status and final reply. Completion sends a notification, so polling is unnecessary.',
-      parameters: {
-        type: 'object',
-        properties: {
-          taskId: { type: 'string' },
-          offset: { type: 'number', description: 'Byte offset to start reading from in the log.' },
-        },
-        required: ['taskId'],
-      } as unknown as ToolDefinition['parameters'],
-      async execute(_id, params: { taskId: string; offset?: number }) {
-        const task = ownTask(parent.id, params.taskId);
-        const status = task.outcome ? statusText(task.outcome) : '运行中';
-        if (task.kind === 'subagent')
-          return text(
-            [
-              `状态：${status}`,
-              ...(task.outcome?.reply ? [`最终回复：\n${task.outcome.reply}`] : []),
-            ].join('\n'),
-          );
-        const output = readLog(task.log!, params.offset);
-        return text(
-          [
-            `状态：${status}`,
-            `输出（字节 ${output.start}–${output.end}，共 ${output.size}）：`,
-            output.text || '（没有输出）',
-            `nextOffset: ${output.end}`,
-          ].join('\n'),
-        );
-      },
-    },
-    {
-      name: 'task_stop',
-      label: 'task_stop',
-      description:
-        "Stop a background task. This stops bash and its child processes, or aborts the subagent's current turn.",
-      parameters: {
-        type: 'object',
-        properties: { taskId: { type: 'string' } },
-        required: ['taskId'],
-      } as unknown as ToolDefinition['parameters'],
-      async execute(_id, params: { taskId: string }) {
-        const task = ownTask(parent.id, params.taskId);
-        if (task.status !== 'running') return text(`任务已经结束：${statusText(task.outcome!)}`);
-        stopTask(task.id, 'model');
-        return text('已停止。');
-      },
-    },
+    ...taskControls(parent),
   ];
 }

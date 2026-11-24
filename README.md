@@ -66,7 +66,7 @@ Delion Bot Harness 基于 Pi 构建，可以作为一款通用 agent 产品使�
 ![Vite](https://img.shields.io/badge/Vite-v8-646CFF?style=for-the-badge&logo=vite&logoColor=white&labelColor=1F2328)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white&labelColor=1F2328)
 ![Pi](https://img.shields.io/badge/Pi-v1.1-1E293B?style=for-the-badge&logoColor=white&labelColor=1F2328)
-![Go](https://img.shields.io/badge/Go-v1.22-00ADD8?style=for-the-badge&logo=go&logoColor=white&labelColor=1F2328)
+![Go](https://img.shields.io/badge/Go-v1.25-00ADD8?style=for-the-badge&logo=go&logoColor=white&labelColor=1F2328)
 
 ## 下载安装
 
@@ -77,6 +77,8 @@ Delion Bot Harness 基于 Pi 构建，可以作为一款通用 agent 产品使�
 从 `main` 创建功能分支，并向 `main` 提交 PR。详见 [贡献指南](CONTRIBUTING.md#分支与合并流程)。
 
 推荐使用 [`.node-version`](.node-version) 指定的 Node.js 与 [`package.json`](package.json) 的 `packageManager` 指定的 pnpm，兼容范围见 `engines`（本机可用 `. ./scripts/use-local-tools.ps1` 启用仓库内固定版本）：
+
+本地开发及打包需要 Go 1.25 或更高版本来构建文件隔离程序。
 
 ```sh
 pnpm install

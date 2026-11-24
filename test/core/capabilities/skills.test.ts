@@ -13,6 +13,7 @@ import { provideTestHostPorts } from '../host-mock';
 import { workspaceProjects } from '../../../src/modules/workspace';
 import { registerCommandDomain } from '../../../src/core/capabilities/commands';
 import { registerDocumentReader } from '../../../src/core/capabilities/documents';
+import { scopedSkillTool } from '../../../src/core/agent/sandbox/skill-tool';
 import {
   effectiveDisabledSkills,
   listSkills,
@@ -91,6 +92,32 @@ it('writes the document skill but excludes it until its dependencies are install
   expect((await byName('document-reading'))[0]?.enabled).toBe(false);
 });
 
+it('受限技能按已启用的名称读取，并隐藏目录路径', async () => {
+  const tool = scopedSkillTool({
+    id: 'chat',
+    project_id: null,
+    cwd: null,
+    file: '',
+    title: '',
+    title_temporary: 0,
+    archived: 0,
+    provider_id: null,
+    model: null,
+    effort: null,
+    parent_id: null,
+  });
+  const execute = (name?: string) =>
+    tool.execute('call', { name }, undefined, undefined, {} as never);
+  const listed = JSON.stringify(await execute());
+  expect(listed).toContain('custom');
+  expect(listed).not.toContain('document-reading');
+  expect(listed).not.toContain('SKILL.md');
+  expect(await execute('custom')).toMatchObject({
+    content: [{ text: expect.stringContaining('custom skill') }],
+  });
+  expect(await execute(join(home, 'SKILL.md'))).toMatchObject({ isError: true });
+});
+
 describe('分组', () => {
   it('按项目列出 .agents/skills，同名 Skill 各自开关、不碰全局名单', async () => {
     const alpha = addProject('p-alpha', 'alpha');
@@ -112,6 +139,11 @@ describe('分组', () => {
       label: 'beta',
     });
     expect(skills.some((skill) => skill.name === 'legacy' || skill.name === 'typo')).toBe(false);
+    expect(
+      (await listSkills('p-alpha'))
+        .filter(({ origin }) => origin === 'project')
+        .map(({ name }) => name),
+    ).toEqual(['lint']);
 
     await setSkillEnabled(lint[0]!.id, false);
     const after = await byName('lint');

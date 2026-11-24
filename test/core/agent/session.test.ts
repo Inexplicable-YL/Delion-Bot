@@ -105,6 +105,7 @@ vi.mock('../../../src/core/agent/environment', () => ({
 }));
 vi.mock('../../../src/core/agent/tasks', () => ({
   backgroundTools: async () => [],
+  taskControls: () => [],
   runningTasks: () => [],
   stopAllTasks: () => {},
   stopSessionTasks: () => {},
@@ -128,7 +129,7 @@ import {
   encodeMeta,
 } from '../../../src/core/agent/session/projection';
 import { askSession, invalidateSessions, cancelRun } from '../../../src/core/agent/session/run';
-import { listSessions } from '../../../src/core/agent/session/store';
+import { listSessions, writePermissionMode } from '../../../src/core/agent/session/store';
 import { readChatAttachment, stageChatMedia } from '../../../src/core/agent/media';
 import { loadPi, summarizeSessionTitle } from '../../../src/core/agent/pi';
 import * as changes from '../../../src/core/agent/changes';
@@ -366,6 +367,7 @@ it('sends document-only messages as file references instead of decoding binary b
   const attachment = readChatAttachment(document.id);
   if (!('path' in attachment)) throw new Error('expected document file');
   const chat = await newSession(null);
+  writePermissionMode(chat.sessionId!, 'full');
   const response = await askSession(chat.sessionId!, {
     text: '',
     attachments: [document.id],
@@ -395,13 +397,15 @@ it('文档附件按会话归属判断远程：本地路径落在远程项目根�
       "INSERT INTO workspace_entries (id, parent_id, name, kind, source_id, local_path, remote_id, updated_at) VALUES ('remote-project', NULL, '远程', 'project', NULL, ?, 'remote-id', 'x')",
     )
     .run(state.root.replace(/\\/g, '/'));
-  const ask = (sessionId: string) =>
-    askSession(sessionId, {
+  const ask = (sessionId: string) => {
+    writePermissionMode(sessionId, 'full');
+    return askSession(sessionId, {
       text: '',
       attachments: [stageChatMedia('汇报.pptx', Buffer.from([80, 75, 3, 4])).id],
       context: [],
       comments: [],
     });
+  };
   await ask((await newSession(null)).sessionId!);
   expect(state.prompts[0]).toContain('document-reading skill');
   await expect(ask((await newSession('remote-project')).sessionId!)).rejects.toThrow(
@@ -432,6 +436,7 @@ it('只带回复评论也能发送：评论进 prompt，历史消息还原为结
 it('# 引用的会话只把 id 交给模型，由它按需 session_read；历史消息带回引用', async () => {
   state.configured = true;
   const chat = await newSession(null);
+  writePermissionMode(chat.sessionId!, 'full');
   const sessions = [{ id: 's-1', title: '复习计划' }];
   const response = await askSession(chat.sessionId!, {
     text: '接着 #复习计划 做',

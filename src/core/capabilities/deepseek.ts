@@ -10,16 +10,23 @@ export class DeepSeekError extends Error {
   }
 }
 
-async function post<T>(path: string, body: unknown, apiKey: string): Promise<T> {
+async function post<T>(
+  path: string,
+  body: unknown,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<T> {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const response = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',
+    redirect: 'error',
     headers: {
       authorization: `Bearer ${apiKey}`,
       'content-type': 'application/json',
       accept: 'application/json',
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
@@ -69,11 +76,13 @@ export async function searchDeepSeek(
 export async function fetchDeepSeek(
   url: string,
   apiKey: string,
+  signal?: AbortSignal,
 ): Promise<{ title: string | null; text: string }> {
   const payload = await post<{ title?: string | null; content?: string | null }>(
     '/v1/tools/fetch',
     { url },
     apiKey,
+    signal,
   );
   return { title: compact(payload.title) || null, text: payload.content ?? '' };
 }

@@ -7,7 +7,7 @@ Delion Bot 在远端 Linux 主机上运行的常驻 runtime：远程项目的全
 
 共享 HOME 的节点可复用同一份可执行文件。每个节点将 `run.json`、`token`、`lock` 和 `helper.log` 放在版本目录下的 `runtime/<主机名>/`。
 
-- **不做沙箱**：权限就是启动它的 SSH 用户的权限，和 `ssh <host> <命令>` 一样。
+- **受限会话**：文件操作使用目录句柄约束。命令需要系统安装 `/usr/bin/bwrap` 并启用非特权用户命名空间，输入仅为显式提供的文件副本。完全访问按 SSH 用户的权限运行。
 - **只绑回环**：`127.0.0.1`，不对外监听；每个请求都要带 `Authorization: Bearer <token>`。
 - **只用标准库**：不拉任何 Go 依赖。
 
@@ -52,6 +52,8 @@ pnpm build:helper --all    # 同时出 linux/arm64
 | POST   | `/v1/fs/stat`                       | 批量状态（`exists`、`directory`、`readable`、size、mtime）      |
 | GET    | `/v1/fs/read?path=&offset=&length=` | 片段读取（二进制安全）                                          |
 | PUT    | `/v1/fs/write?path=&parents=1`      | 原子写（同目录临时文件 + rename）；`parents=1` 先建缺失的父目录 |
+| POST   | `/v1/fs/scoped`                     | 项目目录内的受限文件操作                                        |
+| POST   | `/v1/commands/scoped`               | 在 Linux 沙箱中运行一条命令，输入为文件副本                     |
 | POST   | `/v1/fs/glob`                       | 按 glob 找文件（相对路径）                                      |
 | POST   | `/v1/fs/search`                     | 按正则或字面量搜内容，返回结构化的匹配与上下文行                |
 | GET    | `/v1/ports`                         | 回环与通配地址上监听的 TCP 端口（helper 自身除外，带 pid/进程） |

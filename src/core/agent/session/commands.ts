@@ -1,14 +1,14 @@
 import { existsSync } from 'node:fs';
-import type { WorkspaceChat, MainSessionCommand } from '../../protocol/agent';
+import type { WorkspaceChat, MainSessionCommand, PermissionMode } from '../../protocol/agent';
 import { hostPorts } from '../../ports';
 import * as changes from '../changes';
 import { forkSessionFile, loadPi, resolveModel } from '../pi';
 import { usableLlmProviders } from '../providers';
-import { closeSidechat } from '../sidechat';
+import { closeSidechat, sidechatBusy } from '../sidechat';
 import { stopSessionTasks } from '../tasks';
 import { live, sessionBranch, type Live } from './live';
 import { COMPACTION_DETAILS, publish, snapshot } from './projection';
-import { disposeLive, ensureLive } from './run';
+import { disposeLive, ensureLive, sessionOpening, stopArchivedRun } from './run';
 import {
   adoptSessionFile,
   archiveProject,
@@ -18,10 +18,12 @@ import {
   modelAutoCompaction,
   modelChoice,
   preloadPi,
+  readPermissionMode,
   readySelection,
   removeSession,
   row,
   sessionCwd,
+  writePermissionMode,
   storeModel,
   storeProject,
   storeModelAutoCompaction,
@@ -29,6 +31,59 @@ import {
   storeTitle,
   storeVisibility,
 } from './store';
+
+const fullAccessRequests = new Map<string, AbortController>();
+
+export async function setSessionPermissionMode(
+  id: string,
+  mode: PermissionMode,
+): Promise<WorkspaceChat> {
+  const meta = row(id);
+  if (meta.parent_id) throw new Error('请在主会话切换权限');
+  if (mode === 'project-write' && !meta.project_id) throw new Error('请选择项目会话');
+  if (mode === 'full' && readPermissionMode(id) !== 'full') {
+    if (meta.archived || fullAccessRequests.has(id)) throw new Error('当前会话无法申请完全访问');
+    idleSessionIds(id);
+    const request = new AbortController();
+    fullAccessRequests.set(id, request);
+    try {
+      const confirmed = await hostPorts().desktop.confirmFullAccess?.({
+        session: id,
+        signal: request.signal,
+      });
+      if (!confirmed || request.signal.aborted) return snapshot(id);
+    } finally {
+      fullAccessRequests.delete(id);
+    }
+  }
+  closeSessionExecution(id);
+  writePermissionMode(id, mode);
+  return snapshot(id);
+}
+
+function idleSessionIds(id: string) {
+  const ids = [id, ...childSessionIds(id)];
+  if (
+    sidechatBusy(id) ||
+    ids.some((sessionId) => {
+      const entry = live.get(sessionId);
+      return sessionOpening(sessionId) || entry?.run || entry?.session.isCompacting;
+    })
+  )
+    throw new Error('请等待当前回答完成');
+  return ids;
+}
+
+function closeSessionExecution(id: string) {
+  const ids = idleSessionIds(id);
+  fullAccessRequests.get(id)?.abort();
+  void closeSidechat(id);
+  for (const sessionId of ids) {
+    stopSessionTasks(sessionId);
+    const entry = live.get(sessionId);
+    if (entry) disposeLive(sessionId, entry);
+  }
+}
 
 export async function newSession(projectId: string | null): Promise<WorkspaceChat> {
   if (projectId !== null) sessionCwd(projectId, null);
@@ -67,35 +122,37 @@ export function updateSessionVisibility(
   patch: { archived?: boolean; pinned?: boolean },
 ) {
   row(id);
-  if (patch.archived) {
-    stopSessionTasks(id);
-    void closeSidechat(id);
-  }
   storeVisibility(id, patch);
+  if (patch.archived) {
+    for (const sessionId of [id, ...childSessionIds(id)]) stopArchivedSession(sessionId);
+  }
+}
+
+function stopArchivedSession(id: string) {
+  fullAccessRequests.get(id)?.abort();
+  stopSessionTasks(id);
+  stopArchivedRun(id);
+  void closeSidechat(id);
 }
 
 export function moveSession(id: string, projectId: string | null) {
   const meta = row(id);
   if (meta.project_id === projectId) return;
   if (projectId !== null) sessionCwd(projectId, null);
-  const entry = live.get(id);
-  if (entry?.run || entry?.session.isCompacting) throw new Error('请等待当前回答完成后再移动');
-  if (entry) disposeLive(id, entry);
-  void closeSidechat(id);
+  if (meta.parent_id) throw new Error('请移动主会话');
+  closeSessionExecution(id);
   storeProject(id, projectId);
   publish(id);
 }
 
 export function archiveProjectSessions(projectId: string | null): string[] {
   const ids = archiveProject(projectId);
-  for (const id of ids) {
-    stopSessionTasks(id);
-    void closeSidechat(id);
-  }
+  for (const id of ids) stopArchivedSession(id);
   return ids;
 }
 
 export async function deleteSession(id: string) {
+  fullAccessRequests.get(id)?.abort();
   await closeSidechat(id);
   stopSessionTasks(id);
   const entry = live.get(id);

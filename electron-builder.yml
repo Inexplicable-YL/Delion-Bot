@@ -35,6 +35,8 @@ asarUnpack:
   # 引导开场的可选视频；文件不存在时该行无副作用
   - out/renderer/assets/*.mp4
 extraResources:
+  - from: .build/scopedfs
+    to: scopedfs
   # 远端 helper 的静态二进制：Delion Bot 上传到远端后经 ssh -L 隧道访问（主进程按 resources/delion-helper 探测）
   - from: vendor/delion-helper
     to: delion-helper

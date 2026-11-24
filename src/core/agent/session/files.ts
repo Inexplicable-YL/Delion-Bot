@@ -1,11 +1,14 @@
 import { hostPorts } from '../../ports';
 import * as changes from '../changes';
+import { executionMode } from '../sandbox/mode';
+import { scopedReferencePath } from '../sandbox/scoped-files';
 import { resolveSessionFile } from '../session-path';
 import { isRemoteSession, row, sessionCwd } from './store';
 
 function sessionFilePath(sessionId: string, rawPath: string): string {
   const meta = row(sessionId);
   if (isRemoteSession(meta)) throw new Error('远程项目的文件不在本机，请用远端方式打开');
+  if (executionMode(meta) !== 'full') return scopedReferencePath(meta, rawPath);
   return resolveSessionFile(sessionCwd(meta.project_id, meta.cwd), rawPath);
 }
 

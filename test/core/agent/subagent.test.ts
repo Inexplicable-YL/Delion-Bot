@@ -41,6 +41,7 @@ import {
 } from '../../../src/core/agent/session/commands';
 import { askSession, cancelRun, shutdownSessions } from '../../../src/core/agent/session/run';
 import { listSessions, preloadPi } from '../../../src/core/agent/session/store';
+import { hostPorts } from '../../../src/core/ports';
 import { provideTestHostPorts } from '../host-mock';
 import {
   askInput as input,
@@ -50,7 +51,10 @@ import {
   stopMockModel,
 } from '../mock-model';
 
-provideTestHostPorts({ database: () => state.db! });
+provideTestHostPorts({
+  database: () => state.db!,
+  desktop: { ...hostPorts().desktop, approveToolAction: async () => true },
+});
 
 const taskCalls = (...calls: object[]) => ({
   kind: 'sse' as const,

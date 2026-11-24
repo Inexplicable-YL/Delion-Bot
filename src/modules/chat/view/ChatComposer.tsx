@@ -33,6 +33,7 @@ import { formatBytes } from '../../../ui/format-bytes';
 import type { ComposerContext } from './composer-context';
 import { ChatComposerMenu } from './ChatComposerMenu';
 import { ChatModelPicker } from './ChatModelPicker';
+import { ChatPermissionPicker } from './ChatPermissionPicker';
 import { ReplyCommentRail } from './ReplyComment';
 import { formatDuration } from './ToolTimeline';
 import { openSubagent } from './ToolViews';
@@ -54,6 +55,7 @@ import type {
   ChatComment,
   ChatMediaView,
   ContextUsageView,
+  PermissionMode,
 } from '../../../core/protocol/agent';
 import type { LlmProviderView } from '../../../core/protocol/llm';
 import { SESSION_COMMANDS, type SessionCommandName } from '../../../core/protocol/agent';
@@ -268,11 +270,17 @@ export function ChatComposer({
   onWithdrawQueued,
   tasks = [],
   onStopTask,
+  permissionMode = null,
+  projectPermissions = false,
+  onPermissionMode,
 }: {
   queued?: string[];
   onWithdrawQueued?: () => void;
   tasks?: BackgroundTaskView[];
   onStopTask?: (taskId: string) => void;
+  permissionMode?: PermissionMode | null;
+  projectPermissions?: boolean;
+  onPermissionMode?: (mode: PermissionMode) => void;
   sidechat?: boolean;
   context?: ComposerContext | null;
   onSelectProject?: (projectId: string | null) => void;
@@ -766,6 +774,7 @@ export function ChatComposer({
           searchSelectedId={searchSelectedId}
           onRefreshSearch={() => void refreshSearch()}
           onSelectSearch={sidechat ? undefined : (id) => void selectSearchEntry(id)}
+          permissionMode={permissionMode}
         />
         <PromptInputToolbar className="ml-auto min-w-0 shrink-0 justify-end">
           {tasks.length > 0 && onStopTask && (
@@ -778,6 +787,14 @@ export function ChatComposer({
           )}
           {configured && contextUsage && (
             <ContextIndicator cacheHitRate={cacheHitRateText(contextUsage)} usage={contextUsage} />
+          )}
+          {permissionMode && onPermissionMode && !sidechat && (
+            <ChatPermissionPicker
+              mode={permissionMode}
+              project={projectPermissions}
+              onSelect={onPermissionMode}
+              side={hero ? 'bottom' : 'top'}
+            />
           )}
           {configured && !sidechat && (
             <ChatModelPicker
