@@ -110,6 +110,7 @@ afterEach(() => {
   state.scopedCommand.mockReset();
   state.scopedFile.mockReset();
   state.mcpDefinitions.mockReset();
+  vi.unstubAllGlobals();
   db?.close();
 });
 
@@ -326,11 +327,23 @@ describe('受限普通对话', () => {
       database();
       const host = hostPorts();
       const data = Uint8Array.of(0x50, 0x4b, 0, 255, 129);
-      const fetch = vi.fn(async () => new Response(data));
-      const approveToolAction = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(null, {
+            status: 302,
+            headers: { location: 'https://files.example.test/object' },
+          }),
+        )
+        .mockResolvedValueOnce(new Response(data));
+      vi.stubGlobal('fetch', fetch);
+      const approveToolAction = vi
+        .fn()
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(true);
       provideTestHostPorts({
         ...host,
-        network: { fetch },
         desktop: { ...host.desktop, approveToolAction },
       });
       const id = insertSession(null);
@@ -341,10 +354,16 @@ describe('受限普通对话', () => {
       );
       const download = customTools.find(({ name }) => name === 'download_file')!;
       const input = { url: 'https://drive.example.test/export', path: '/share/原件.docx' };
-      const execute = () => download.execute('1', input, undefined, undefined, {} as never);
+      const execute = (url = input.url) =>
+        download.execute('1', { ...input, url }, undefined, undefined, {} as never);
       expect(await execute()).toMatchObject({ isError: true });
       expect(fetch).not.toHaveBeenCalled();
-      expect(await execute()).toMatchObject({ content: [{ text: '/share/原件.docx' }] });
+      const redirected = 'https://files.example.test/object';
+      expect(await execute()).toMatchObject({
+        content: [{ text: JSON.stringify({ redirect: redirected }) }],
+      });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(await execute(redirected)).toMatchObject({ content: [{ text: '/share/原件.docx' }] });
       expect(readFileSync(join(chatShareDirectory(id), '原件.docx'))).toEqual(Buffer.from(data));
       expect(appendSystemPrompt.join('\n')).not.toContain(chatShareDirectory(id));
     },

@@ -183,7 +183,7 @@ export function downloadTool(meta: SessionRow): ToolDefinition | null {
         AbortSignal.timeout(15_000),
       ]);
       try {
-        const response = await hostPorts().network.fetch(url.toString(), {
+        const response = await fetch(url, {
           credentials: 'omit',
           redirect: 'manual',
           signal: cancellation,
