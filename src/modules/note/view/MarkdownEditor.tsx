@@ -41,6 +41,14 @@ const editorTheme = EditorView.theme({
     paddingLeft: '1.5rem',
   },
   '&.cm-source-file .cm-gutters': { borderRight: '1px solid var(--line)' },
+  '&.cm-document': { fontSize: '1rem' },
+  '&.cm-document .cm-scroller': {
+    fontFamily: 'var(--font-sans)',
+    lineHeight: '1.75',
+    padding: '3rem 2rem 8rem',
+    overflowX: 'hidden',
+  },
+  '&.cm-document .cm-content': { maxWidth: '48rem', minWidth: '0' },
   '.cm-lineNumbers .cm-gutterElement': { minWidth: '3ch', padding: '0 0.5rem 0 0.25rem' },
 });
 
@@ -105,6 +113,11 @@ export function lineSeparatorOf(text: string): '\r\n' | '\n' {
   return first > 0 && text[first - 1] === '\r' ? '\r\n' : '\n';
 }
 
+function layoutClass(language: ResolvedLanguage, documentLayout: boolean) {
+  if (language.kind !== 'markdown') return 'cm-source-file';
+  return documentLayout ? 'cm-document' : '';
+}
+
 function languageForFilename(filename: string | undefined): ResolvedLanguage {
   if (!filename) return { kind: 'markdown' };
   if (formatByName(filename) === 'markdown') return { kind: 'markdown' };
@@ -153,7 +166,9 @@ export function MarkdownEditor({
   const generatedKey = useId();
   const [instanceKey] = useState(editorStateKey ?? generatedKey);
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
-  const wordWrap = useEditorSettings((state) => state.wordWrap) || alwaysWrap;
+  const documentLayout =
+    livePreview !== undefined && languageForFilename(filename).kind === 'markdown';
+  const wordWrap = useEditorSettings((state) => state.wordWrap) || alwaysWrap || documentLayout;
   const callbacks = { onChange, onSave, onScroll };
   const [attachEditor] = useState(() => (element: HTMLDivElement | null) => {
     if (!element) return;
@@ -171,18 +186,16 @@ export function MarkdownEditor({
           : [],
       ),
       previewConf.of(
-        livePreview && initial.kind === 'markdown'
+        documentLayout
           ? markdownLivePreview(livePreview)
           : syntaxHighlighting(markdownHighlightStyle),
       ),
       readOnlyConf.of(EditorState.readOnly.of(readOnly)),
       ...extraExtensions,
-      ...(showLineNumbers ? [lineNumbers()] : []),
+      ...(showLineNumbers && !documentLayout ? [lineNumbers()] : []),
       wrappingConf.of(wordWrap ? EditorView.lineWrapping : []),
       layoutConf.of(
-        EditorView.editorAttributes.of({
-          class: initial.kind === 'markdown' ? '' : 'cm-source-file',
-        }),
+        EditorView.editorAttributes.of({ class: layoutClass(initial, documentLayout) }),
       ),
       placeholderConf.of(placeholder(placeholderText)),
       search({ top: true }),
@@ -338,7 +351,7 @@ export function MarkdownEditor({
       effects.push(
         layoutConf.reconfigure(
           EditorView.editorAttributes.of({
-            class: resolved.kind === 'markdown' ? '' : 'cm-source-file',
+            class: layoutClass(resolved, livePreview !== undefined),
           }),
         ),
         languageConf.reconfigure(
