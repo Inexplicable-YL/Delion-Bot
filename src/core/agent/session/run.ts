@@ -511,6 +511,7 @@ async function runTurn(
   liveThinking.set(id, new Map());
   runEvent(id, 'running');
   let status: TurnStatus = 'completed';
+  let awaitingAnswer = false;
   const startedAt = new Date().toISOString();
   let before: changes.DirectorySnapshot | null = null;
   let captureError: string | undefined;
@@ -536,6 +537,10 @@ async function runTurn(
     if (run.cancelled || (last?.role === 'assistant' && last.stopReason === 'aborted'))
       status = 'stopped';
     else if (last?.role === 'assistant' && last.stopReason === 'error') status = 'failed';
+    else if (last?.role === 'assistant') {
+      const final = last.content.at(-1);
+      awaitingAnswer = final?.type === 'toolCall' && final.name === askUserTool.name;
+    }
   } catch (error) {
     status = 'failed';
     throw error;
@@ -582,9 +587,10 @@ async function runTurn(
       liveThinking.delete(id);
       if (entry.session.sessionFile) storeSessionFile(id, entry.session.sessionFile);
       touch(id, entry);
-      runEvent(id, status, undefined, turnId, changesError);
+      runEvent(id, awaitingAnswer ? 'waiting_input' : status, undefined, turnId, changesError);
       publish(id);
-      if (status !== 'stopped' && !child) hostPorts().notifier.notifyRunFinished(id, status);
+      if (awaitingAnswer) hostPorts().notifier.notifyAwaitingAnswer(id);
+      else if (status !== 'stopped' && !child) hostPorts().notifier.notifyRunFinished(id, status);
       if (entry.stale) disposeLive(id, entry);
     } finally {
       finishRun();

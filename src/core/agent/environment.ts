@@ -8,6 +8,7 @@ import {
   executeDomainCommand,
   startDomainBridge,
 } from '../capabilities/command-server';
+import { ASK_USER_PROMPT } from '../capabilities/ask-user';
 import { commandPrompt } from '../capabilities/commands';
 import { contextDirectories } from './context-directories';
 import { getAgentInstruction, getProjectChatContext } from './instruction';
@@ -107,6 +108,7 @@ export function agentEnvironment() {
     ): Promise<Omit<OpenSessionInput, 'cwd' | 'file' | 'selection'>> {
       const instruction = getAgentInstruction();
       const meta = row(sessionId);
+      const asks = meta.parent_id ? '' : ASK_USER_PROMPT;
       const mode = executionMode(meta);
       if (mode !== 'full') {
         const automatic = mode === 'auto-approval';
@@ -135,6 +137,7 @@ export function agentEnvironment() {
               ? 'Use read or ls with an absolute local path to access ordinary local files outside the chat directories. Protected paths are excluded.'
               : '',
             access,
+            asks,
             instruction ? `## Additional user instructions\n${instruction}` : '',
           ].filter(Boolean),
           restricted: true,
@@ -152,6 +155,7 @@ export function agentEnvironment() {
       ensureBuiltinSkills();
       const remote = projectId ? hostPorts().projects.remoteOf(projectId) : null;
       const shared = [
+        asks,
         project,
         instruction && `## Additional user instructions\n${instruction}`,
         saved?.instruction && `## User instructions for this project\n${saved.instruction}`,

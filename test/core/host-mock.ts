@@ -30,6 +30,7 @@ const testPorts: HostPorts = {
   },
   notifier: {
     notifyRunFinished: vi.fn(),
+    notifyAwaitingAnswer: vi.fn(),
     show: vi.fn(),
   },
   broadcaster: {

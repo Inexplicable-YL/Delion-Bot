@@ -12,6 +12,7 @@ import { connectLocalWorkspaceQueries } from './navigation/remote-references';
 import { useNavigationStore } from './navigation/view';
 import { useShortcuts } from './shell/shortcuts';
 import { connectAppearance } from './shell/theme';
+import { installKeyboardFocus } from './shell/keyboard-focus';
 import { installTitleTooltips } from './shell/title-tooltip';
 import { useWorkspaceStore } from '../../modules/workspace/view';
 import './styles/globals.css';
@@ -32,6 +33,7 @@ window.delionBot?.window.onStateChange((state) =>
   queryClient.setQueryData(['window', 'state'], state),
 );
 installTitleTooltips();
+installKeyboardFocus();
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary title="应用遇到错误">

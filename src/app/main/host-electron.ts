@@ -30,7 +30,12 @@ import {
 import { getDatabase } from './database';
 import { agentContract } from '../../core/protocol/agent';
 import type { EventPayload } from '../../core/protocol/contract';
-import { chatContract, liveCompactionTranscript, requestChatPermission } from '../../modules/chat';
+import {
+  chatContract,
+  liveCompactionTranscript,
+  notifyAwaitingAnswer,
+  requestChatPermission,
+} from '../../modules/chat';
 import { withoutToolImages } from '../../core/agent/session/projection';
 import { workspaceWindow } from './window';
 import { notifyRunFinished } from '../../modules/settings';
@@ -201,6 +206,7 @@ export const electronPorts: HostPorts = {
   },
   notifier: {
     notifyRunFinished,
+    notifyAwaitingAnswer,
     show(title, body, onClick) {
       const window = workspaceWindow();
       if (!Notification.isSupported() || !window || window.isFocused()) return;

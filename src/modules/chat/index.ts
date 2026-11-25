@@ -79,6 +79,7 @@ function localProjectDirectory(projectId: string): string {
 
 export { chatContract };
 export { requestChatPermission } from './main/permission-requests';
+export { notifyAwaitingAnswer } from './main/awaiting-answer';
 
 export function liveCompactionTranscript(sessionId: string, streaming = false) {
   const session = live.get(sessionId)?.session;

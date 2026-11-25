@@ -1,7 +1,8 @@
-import { ShieldExclamationIcon } from '@heroicons/react/24/outline';
+import { QuestionMarkCircleIcon, ShieldExclamationIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { Button } from '../../../ui/Button';
 import { ToastCard } from '../../../ui/Toast';
+import { useRuns } from './runs';
 import { useSessions } from './sessions';
 
 const MAX_NOTICES = 3;
@@ -15,21 +16,31 @@ export function PermissionNotices({
 }) {
   const permissions = useSessions((state) => state.permissions);
   const lists = useSessions((state) => state.lists);
+  const runs = useRuns((state) => state.bySession);
   const [dismissed, setDismissed] = useState<readonly string[]>([]);
-  const notices = Object.entries(permissions)
-    .flatMap(([sessionId, requests]) => {
+  const waiting = [
+    ...Object.entries(permissions).flatMap(([sessionId, requests]) => {
       const request = requests?.[0];
-      if (!request || sessionId === activeSessionId || dismissed.includes(request.id)) return [];
+      return request ? [{ sessionId, id: request.id, detail: request.title, approval: true }] : [];
+    }),
+    ...Object.entries(runs).flatMap(([sessionId, run]) =>
+      run.status === 'waiting_input' && !permissions[sessionId]?.length
+        ? [{ sessionId, id: run.runId, detail: null, approval: false }]
+        : [],
+    ),
+  ];
+  const notices = waiting
+    .flatMap((notice) => {
+      if (notice.sessionId === activeSessionId || dismissed.includes(notice.id)) return [];
       const [pool, list] =
         Object.entries(lists).find(([, sessions]) =>
-          sessions.some((session) => session.id === sessionId),
+          sessions.some((session) => session.id === notice.sessionId),
         ) ?? [];
       return [
         {
-          sessionId,
-          request,
+          ...notice,
           pool,
-          title: list?.find((session) => session.id === sessionId)?.title ?? '对话',
+          title: list?.find((session) => session.id === notice.sessionId)?.title ?? '对话',
         },
       ];
     })
@@ -42,14 +53,14 @@ export function PermissionNotices({
       aria-live="polite"
       className="pointer-events-none fixed inset-x-0 bottom-app-inset z-toast flex flex-col items-end gap-2 px-app pb-3 max-md:bottom-toast-mobile max-md:items-center"
     >
-      {notices.map(({ sessionId, request, pool, title }) => (
+      {notices.map(({ sessionId, id, detail, approval, pool, title }) => (
         <ToastCard
-          key={request.id}
+          key={id}
           variant="neutral"
-          icon={ShieldExclamationIcon}
-          title="需要你的审批"
+          icon={approval ? ShieldExclamationIcon : QuestionMarkCircleIcon}
+          title={approval ? '需要你的审批' : '需要你的回答'}
           className="animate-toast-in items-center motion-reduce:animate-none"
-          onClose={() => setDismissed((ids) => [...ids, request.id])}
+          onClose={() => setDismissed((ids) => [...ids, id])}
           action={
             <Button
               size="sm"
@@ -65,12 +76,12 @@ export function PermissionNotices({
                 )
               }
             >
-              前往审批
+              {approval ? '前往审批' : '前往回答'}
             </Button>
           }
         >
           <p className="mt-0.5 truncate text-ui-subhead text-ink-2">
-            {title} · {request.title}
+            {detail ? `${title} · ${detail}` : title}
           </p>
         </ToastCard>
       ))}

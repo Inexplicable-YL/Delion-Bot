@@ -71,6 +71,7 @@ export interface SecretStore {
 
 export interface Notifier {
   notifyRunFinished(sessionId: string, status: 'completed' | 'failed'): void;
+  notifyAwaitingAnswer(sessionId: string): void;
   show(title: string, body: string, onClick?: () => void): void;
 }
 
