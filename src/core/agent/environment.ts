@@ -126,7 +126,7 @@ export function agentEnvironment() {
       if (mode !== 'full') {
         const owner = ownerRow(meta);
         const tools = scopedFileTools(meta);
-        const command = tools.length ? sandboxCommandTool(meta) : null;
+        const command = mode === 'approval' || tools.length ? sandboxCommandTool(meta) : null;
         const approval = mode === 'approval' ? await approvalTools(meta, owner.id) : null;
         const files =
           tools.length === 0
@@ -138,12 +138,15 @@ export function agentEnvironment() {
           mode === 'read-only'
             ? 'Mode: read-only.'
             : mode === 'approval'
-              ? 'Mode: request approval. The app asks the user to approve writes, commands, external requests, and tool calls whose effects may change data. Use download_file to save an original binary to an allowed directory. Use read_skill to load an enabled skill. Use the delion tool for Delion app commands when it is available.'
+              ? 'Mode: request approval. The app asks the user to approve writes, external requests, and tool calls whose effects may change data. Use sandbox_command for shell operations. Each approved command runs with the current execution account permissions, including file writes, subprocesses, and network. Use download_file to save an original binary to an allowed directory. Use read_skill to load an enabled skill. Use the delion tool for Delion app commands when it is available.'
               : 'Mode: project write. You can write and edit files in /project.';
         return {
           appendSystemPrompt: [
             RESTRICTED_PROMPT,
             files,
+            tools.length && !hostPorts().projects.remoteOf(owner.project_id ?? '')
+              ? 'Use read or ls with an absolute local path to access ordinary local files outside the chat directories. Protected paths are excluded.'
+              : '',
             access,
             askCards ? ASK_CARD_PROMPT : '',
             instruction ? `## Additional user instructions\n${instruction}` : '',

@@ -188,19 +188,22 @@ export type BashRunner = (
   options: { signal: AbortSignal; timeout?: number; onData: (chunk: Buffer) => void },
 ) => Promise<TaskOutcome>;
 
-function localBash(
+export function localBash(
   cwd: string,
-  shell: ReturnType<typeof getShellConfig>,
+  shell: ReturnType<typeof getShellConfig> & { windowsVerbatimArguments?: boolean },
   commandPrefix: string | undefined,
 ): BashRunner {
   return (command, { signal, timeout, onData }) => {
+    if (signal.aborted) return Promise.resolve({ status: 'stopped' });
     const script = commandPrefix ? `${commandPrefix}\n${command}` : command;
     const fromStdin = shell.commandTransport === 'stdin';
-    const child = spawn(shell.shell, fromStdin ? shell.args : [...shell.args, script], {
+    const argument = shell.windowsVerbatimArguments ? `"${script}"` : script;
+    const child = spawn(shell.shell, fromStdin ? shell.args : [...shell.args, argument], {
       cwd,
       detached: process.platform !== 'win32',
       stdio: [fromStdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       windowsHide: true,
+      windowsVerbatimArguments: shell.windowsVerbatimArguments,
     });
     if (fromStdin) {
       child.stdin?.on('error', () => {});

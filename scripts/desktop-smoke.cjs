@@ -89,6 +89,13 @@ async function run(window) {
   assert.equal(await mode(), 'approval');
   await requestFullAccess();
   await wait(() => js(`!!${modal}`), 'full access confirmation reopened');
+  assert.equal(
+    await js(
+      `[...${modal}.querySelectorAll('button')].find(button => button.textContent.trim() === '启用完全访问').disabled`,
+    ),
+    true,
+  );
+  await js(`${modal}.querySelector('input[type=checkbox]').click()`);
   await clickModalButton('启用完全访问');
   await wait(async () => (await mode()) === 'full', 'full access enabled after confirmation');
   await js(

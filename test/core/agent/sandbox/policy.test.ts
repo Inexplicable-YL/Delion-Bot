@@ -5,6 +5,8 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  renameSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -16,6 +18,8 @@ const state = vi.hoisted(() => ({
   bridge: vi.fn(() => ({ url: 'http://127.0.0.1:9/', token: 'token', close() {} })),
   scopedCommand: vi.fn(),
   scopedFile: vi.fn(),
+  remoteExec: vi.fn(),
+  writeRemoteFile: vi.fn(),
   mcpDefinitions:
     vi.fn<
       () => ReturnType<
@@ -44,7 +48,12 @@ vi.mock('../../../../src/core/capabilities/tools', () => ({
 }));
 vi.mock('../../../../src/core/remote/helper', async (original) => ({
   ...(await original<typeof import('../../../../src/core/remote/helper')>()),
-  helperSession: () => ({ scopedCommand: state.scopedCommand, scopedFile: state.scopedFile }),
+  helperSession: () => ({
+    scopedCommand: state.scopedCommand,
+    scopedFile: state.scopedFile,
+    exec: state.remoteExec,
+    writeFile: state.writeRemoteFile,
+  }),
 }));
 
 import { agentEnvironment } from '../../../../src/core/agent/environment';
@@ -54,6 +63,7 @@ import { fileLinkKey } from '../../../../src/modules/chat/view/reference-tokens'
 import { hostPorts } from '../../../../src/core/ports';
 import { provideTestHostPorts } from '../../host-mock';
 import {
+  chatSessionDirectory,
   chatShareDirectory,
   insertSession,
   row,
@@ -109,6 +119,8 @@ afterEach(() => {
   state.bridge.mockClear();
   state.scopedCommand.mockReset();
   state.scopedFile.mockReset();
+  state.remoteExec.mockReset();
+  state.writeRemoteFile.mockReset();
   state.mcpDefinitions.mockReset();
   vi.unstubAllGlobals();
   db?.close();
@@ -125,7 +137,7 @@ describe('路径契约', () => {
   });
 });
 
-it('远程受限命令只转交获批后读取的项目文件副本', async () => {
+it('远程命令获批后以 SSH 账户权限运行并接收项目文件副本', async () => {
   database();
   const approveSandboxCommand = vi
     .fn()
@@ -148,7 +160,12 @@ it('远程受限命令只转交获批后读取的项目文件副本', async () =
     },
   });
   state.scopedFile.mockResolvedValue({ data: Buffer.from('staged').toString('base64') });
-  state.scopedCommand.mockResolvedValue({ exitCode: 0, output: 'staged' });
+  const scratch = '/tmp/delion-command.a1B2c3D4e5';
+  state.remoteExec.mockImplementation(async (command, { onData }) => {
+    if (command.startsWith('mktemp')) onData(Buffer.from(scratch + '\n'));
+    if (command === 'exec /bin/cat inputs/1') onData(Buffer.from('staged'));
+    return { code: 0, state: 'exited', lost: 0 };
+  });
   const id = insertSession('p1');
   writePermissionMode(id, 'approval');
   const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
@@ -160,28 +177,28 @@ it('远程受限命令只转交获批后读取的项目文件副本', async () =
   const execute = () => tool.execute('call', params, undefined, undefined, {} as never);
   expect(await execute()).toMatchObject({ isError: true });
   expect(state.scopedFile).not.toHaveBeenCalled();
-  expect(state.scopedCommand).not.toHaveBeenCalled();
+  expect(state.remoteExec).not.toHaveBeenCalled();
   expect(await execute()).toMatchObject({
     content: [{ text: JSON.stringify({ exitCode: 0, output: 'staged' }) }],
   });
-  expect(approveSandboxCommand).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      ...params,
-      remote: target.host,
-      session: id,
-      grant: { keys: ['command:/bin/cat'], label: '运行 /bin/cat 命令' },
-    }),
-  );
+  expect(approveSandboxCommand).toHaveBeenLastCalledWith({
+    ...params,
+    remote: target.host,
+    session: id,
+    signal: expect.any(AbortSignal),
+    grant: { keys: ['host-command:/bin/cat'], label: '运行 /bin/cat 命令' },
+  });
   expect(state.scopedFile).toHaveBeenCalledWith(
     '/srv/project',
     expect.objectContaining({ action: 'read', path: 'note.txt' }),
     expect.any(AbortSignal),
   );
-  expect(state.scopedCommand).toHaveBeenCalledWith(
+  expect(state.writeRemoteFile).toHaveBeenCalledWith(`${scratch}/inputs/1`, Buffer.from('staged'));
+  expect(state.remoteExec).toHaveBeenCalledWith(
     params.command,
-    [Buffer.from('staged')],
-    expect.any(AbortSignal),
+    expect.objectContaining({ cwd: scratch, signal: expect.any(AbortSignal) }),
   );
+  expect(state.scopedCommand).not.toHaveBeenCalled();
 });
 
 it('请求批准提供联网和连接器，拒绝和取消均不调用连接器', async () => {
@@ -380,7 +397,11 @@ describe('受限普通对话', () => {
     },
   );
 
-  it.skipIf(commandTools.length === 0)('受限命令逐次审批，只接收当前会话的副本', async () => {
+  it.skipIf(
+    !existsSync(
+      join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
+    ),
+  )('命令获批后可运行子进程并读取会话输入副本', async () => {
     database();
     const approveSandboxCommand = vi
       .fn()
@@ -399,7 +420,7 @@ describe('受限普通对话', () => {
     ).customTools;
     const command = tools.find(({ name }) => name === 'sandbox_command')!;
     const params = {
-      command: process.platform === 'win32' ? 'type inputs\\1' : 'exec /bin/cat inputs/1',
+      command: process.platform === 'win32' ? 'cmd.exe /D /C type inputs\\1' : '/bin/cat inputs/1',
       files: ['/share/input.txt'],
     };
     const execute = () => command.execute('call', params, undefined, undefined, {} as never);
@@ -408,6 +429,102 @@ describe('受限普通对话', () => {
       content: [{ text: JSON.stringify({ exitCode: 0, output: 'approved input' }) }],
     });
     expect(approveSandboxCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('拒绝时不运行宿主命令，批准后可按原样列出宿主目录', async () => {
+    database();
+    const approveSandboxCommand = vi
+      .fn()
+      .mockResolvedValueOnce({ approved: false })
+      .mockResolvedValueOnce({ approved: true })
+      .mockResolvedValueOnce({ approved: false });
+    const host = hostPorts();
+    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    const id = insertSession(null);
+    const directory = mkdtempSync(join(root, 'approved command '));
+    writeFileSync(join(directory, 'listed.txt'), '');
+    const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+      askCards: false,
+      sessionId: id,
+    });
+    const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
+    const command =
+      process.platform === 'win32' ? `dir /b "${directory}"` : `/bin/ls "${directory}"`;
+    const execute = () => tool.execute('call', { command }, undefined, undefined, {} as never);
+    expect(await execute()).toMatchObject({ isError: true });
+    const result = await execute();
+    expect(result).toMatchObject({
+      content: [{ type: 'text', text: expect.stringMatching(/"exitCode":0.*listed\.txt/) }],
+    });
+    expect(await execute()).toMatchObject({ isError: true });
+    expect(approveSandboxCommand).toHaveBeenCalledTimes(3);
+  });
+
+  it('获批命令能在两个虚拟目录间复制文件并从子进程读取', async () => {
+    database();
+    const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: true });
+    const host = hostPorts();
+    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    const id = insertSession(null);
+    const share = chatShareDirectory(id);
+    const privacy = chatSessionDirectory(id);
+    const input = '01_原文.txt';
+    const output = '02_副本.txt';
+    writeFileSync(join(share, input), 'shared content');
+    const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+      askCards: false,
+      sessionId: id,
+    });
+    renameSync(privacy, join(root, `moved-${id}`));
+    const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
+    const copy =
+      process.platform === 'win32'
+        ? `copy /share\\${input} /privacy\\${output} >nul`
+        : `cp "/share/${input}" "/privacy/${output}"`;
+    const command = `${copy} && "${process.execPath}" -e "const fs=require('node:fs');process.stdout.write(fs.readFileSync('/privacy/${output}','utf8')+' '+fs.realpathSync('/privacy'))"`;
+    const result = await tool.execute('call', { command }, undefined, undefined, {} as never);
+    expect(result).toMatchObject({
+      content: [
+        { type: 'text', text: JSON.stringify({ exitCode: 0, output: 'shared content /privacy' }) },
+      ],
+    });
+    expect(approveSandboxCommand).toHaveBeenCalledWith(expect.objectContaining({ command }));
+    expect(readFileSync(join(privacy, output), 'utf8')).toBe('shared content');
+    expect(readFileSync(join(share, input), 'utf8')).toBe('shared content');
+  });
+
+  it.skipIf(
+    !existsSync(
+      join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
+    ),
+  )('外部普通文件可只读访问，凭据和其他会话目录保持隔离', async () => {
+    database();
+    const directory = mkdtempSync(join(realpathSync('.build'), 'ambient-read-'));
+    const file = join(directory, 'normal.txt');
+    const credential = join(directory, '.env');
+    const other = chatShareDirectory(insertSession(null));
+    const otherFile = join(other, 'private.txt');
+    try {
+      writeFileSync(file, 'ordinary file');
+      writeFileSync(credential, 'secret');
+      writeFileSync(otherFile, 'private');
+      const id = insertSession(null);
+      const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+        askCards: false,
+        sessionId: id,
+      });
+      const run = (name: string, path: string) =>
+        customTools
+          .find((tool) => tool.name === name)!
+          .execute('call', { path }, undefined, undefined, {} as never);
+      expect(await run('read', file)).toMatchObject({ content: [{ text: 'ordinary file' }] });
+      expect(await run('ls', directory)).toMatchObject({ content: [{ text: '["normal.txt"]' }] });
+      expect(await run('read', credential)).toMatchObject({ isError: true });
+      expect(await run('read', otherFile)).toMatchObject({ isError: true });
+      expect(await run('write', file)).toMatchObject({ isError: true });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it.skipIf(

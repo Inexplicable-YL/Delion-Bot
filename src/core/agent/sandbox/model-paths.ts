@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { ScopedDirectory } from './mode';
 
-export function virtualizeModelPaths(directories: ScopedDirectory[]) {
+export function redactModelPaths(directories: ScopedDirectory[]) {
   const paths = directories.flatMap(({ host, alias, name, remote }) => {
     const aliases = new Set<string>();
     for (const path of alias ? [host, alias] : [host]) {
@@ -32,17 +32,22 @@ export function virtualizeModelPaths(directories: ScopedDirectory[]) {
       ),
       name,
     }));
+  return (value: string) => {
+    let text = value;
+    for (const { match, name } of patterns) text = text.replace(match, name);
+    return text;
+  };
+}
+
+export function virtualizeModelPaths(directories: ScopedDirectory[]) {
+  const redact = redactModelPaths(directories);
   const walk = (value: unknown): unknown => {
-    if (typeof value === 'string') {
-      let text = value;
-      for (const { match, name } of patterns) text = text.replace(match, name);
-      return text;
-    }
+    if (typeof value === 'string') return redact(value);
     if (Array.isArray(value)) return value.map(walk);
     if (!value || typeof value !== 'object' || ('type' in value && value.type === 'image'))
       return value;
     return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, walk(child)]));
   };
   return (messages: AgentMessage[]) =>
-    patterns.length ? (walk(messages) as AgentMessage[]) : messages;
+    directories.length ? (walk(messages) as AgentMessage[]) : messages;
 }

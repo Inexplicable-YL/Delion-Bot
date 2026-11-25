@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { isAbsolute, join, posix, relative } from 'node:path';
+import { basename, dirname, isAbsolute, join, parse, posix, relative, sep } from 'node:path';
 import { realpathSync } from 'node:fs';
 import { isIP } from 'node:net';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
@@ -26,9 +26,94 @@ type FileRequest = {
 };
 type Action = Exclude<ScopedFileOperation['action'], 'stat'>;
 
+const virtualRoot = /^\/(privacy|share|project)(?:\/|$)/;
+const windowsDevice = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i;
+const sensitiveName =
+  /^(?:\.git|git~\d+|\.ssh|\.gnupg|\.aws|\.azure|\.kube|\.docker|\.config|\.netrc|\.npmrc|\.pypirc|\.git-credentials|\.password-store|\.vault-token|\.env(?:\..*)?|\.delion-bot|appdata|\$recycle\.bin|system volume information|ntuser\.dat(?:[.{].*)?|delion-command[-.].*|.*\.(?:key|pem|pfx|p12|kdbx))$/i;
+
+function absoluteLocalPath(input: string) {
+  return process.platform === 'win32'
+    ? /^[a-z]:[\\/]/i.test(input)
+    : /^\/(?!\/)/.test(input) && !virtualRoot.test(input);
+}
+
+async function externalRead(
+  input: string,
+  action: 'read' | 'ls',
+  limit: number,
+  signal: AbortSignal,
+): Promise<ScopedFileResponse> {
+  const windows = process.platform === 'win32';
+  const { paths } = hostPorts();
+  const system = windows ? parse(process.env.SystemRoot ?? 'C:\\Windows').root : '/';
+  const protectedPaths = [
+    paths.userData(),
+    paths.storage(),
+    paths.bundled('scopedfs'),
+    join(paths.temp(), 'delion-document-reading'),
+    join(paths.home(), 'Library'),
+    ...(windows
+      ? ['Windows', 'ProgramData'].map((name) => join(system, name))
+      : [
+          '/dev',
+          '/proc',
+          '/sys',
+          '/run',
+          '/etc',
+          '/private/etc',
+          '/root',
+          '/System',
+          '/Library',
+          '/private/var/db',
+          '/var/db',
+        ]),
+  ].flatMap((path) => {
+    try {
+      return [path, realpathSync.native(path)];
+    } catch {
+      return [path];
+    }
+  });
+  const protectedPath = (path: string) =>
+    path
+      .slice(parse(path).root.length)
+      .split(windows ? /[\\/]/ : '/')
+      .some(
+        (name) =>
+          sensitiveName.test(name) ||
+          (windows && windowsDevice.test(name)) ||
+          name === '..' ||
+          /[\\:<>|?*"\p{Cc}\p{Cf}]/u.test(name) ||
+          (name !== '.' && /[. ]$/.test(name)),
+      ) ||
+    protectedPaths.some((root) => {
+      const key =
+        process.platform === 'darwin'
+          ? relative(root.toLowerCase(), path.toLowerCase())
+          : relative(root, path);
+      return key === '' || (!isAbsolute(key) && key !== '..' && !key.startsWith(`..${sep}`));
+    });
+  try {
+    signal.throwIfAborted();
+    if (protectedPath(input)) throw new Error();
+    const path = realpathSync.native(input);
+    if (!absoluteLocalPath(path) || protectedPath(path)) throw new Error();
+    const result = await runLocalFileAction(
+      action === 'ls' ? path : dirname(path),
+      { action, path: action === 'ls' ? '.' : basename(path), limit },
+      signal,
+    );
+    if (action === 'ls' && result.entries)
+      result.entries = result.entries.filter((name) => !protectedPath(join(path, name)));
+    return result;
+  } catch {
+    return { error: '外部路径不可用或不允许读取' };
+  }
+}
+
 function targetPath(input: string, directories: ScopedDirectory[]) {
   const path = input.replaceAll('\\', '/');
-  const match = /^\/(privacy|share|project)(?:\/|$)/.exec(path);
+  const match = virtualRoot.exec(path);
   const root = match ? directories.find(({ name }) => name === `/${match[1]}`) : directories[0];
   const suffix = match ? path.slice(match[0].length) : path;
   const segments = suffix.split('/').filter((part) => part !== '.');
@@ -41,7 +126,7 @@ function targetPath(input: string, directories: ScopedDirectory[]) {
         /[:<>|?*"\p{Cc}\p{Cf}]/u.test(segment) ||
         /[. ]$/.test(segment) ||
         /^\.git$|^git~\d+$/i.test(segment) ||
-        /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i.test(segment),
+        windowsDevice.test(segment),
     )
   )
     throw new Error('路径超出聊天授权目录');
@@ -98,6 +183,14 @@ async function runFileAction(
       return { error: '远程文件沙箱无法完成操作' };
     }
   }
+  return runLocalFileAction(root.host, request, signal);
+}
+
+function runLocalFileAction(
+  directory: string,
+  request: ScopedFileOperation,
+  signal: AbortSignal,
+): Promise<ScopedFileResponse> {
   const binary = join(
     hostPorts().paths.bundled('scopedfs'),
     process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs',
@@ -105,7 +198,7 @@ async function runFileAction(
   return new Promise((resolve) => {
     const child = execFile(
       binary,
-      [root.host],
+      [directory],
       { env: {}, windowsHide: true, signal, timeout: 10_000, maxBuffer: 8 * 1024 * 1024 },
       (error, output) => {
         if (error || signal.aborted) {
@@ -146,6 +239,14 @@ const textResult = (text: string, isError = false) => ({
   details: undefined,
   ...(isError ? { isError: true } : {}),
 });
+
+const readResult = (result: ScopedFileResponse, mime: string | null | undefined) =>
+  mime && mime !== 'image/svg+xml'
+    ? {
+        content: [{ type: 'image' as const, data: result.data ?? '', mimeType: mime }],
+        details: undefined,
+      }
+    : textResult(Buffer.from(result.data ?? '', 'base64').toString('utf8'));
 
 export function downloadTool(meta: SessionRow): ToolDefinition | null {
   const directories = scopedDirectories(meta).filter(({ name }) => name !== '/privacy');
@@ -256,6 +357,23 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
     async execute(_id, params: FileRequest, signal) {
       const cancellation = signal ?? new AbortController().signal;
       if (cancellation.aborted) return textResult('操作已取消', true);
+      if (
+        params.path &&
+        !directories[0]?.remote &&
+        absoluteLocalPath(params.path) &&
+        (action === 'read' || action === 'ls')
+      ) {
+        const mime = action === 'read' ? imageMimeOf(params.path) : null;
+        const result = await externalRead(
+          params.path,
+          action,
+          mime ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES,
+          cancellation,
+        );
+        if (result.error) return textResult(result.error, true);
+        if (action === 'ls') return textResult(JSON.stringify(result.entries ?? []));
+        return readResult(result, mime);
+      }
       let target: ReturnType<typeof targetPath>;
       try {
         target = targetPath(params.path ?? '.', directories);
@@ -315,19 +433,24 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
               }));
         return textResult(JSON.stringify({ matches, limited: Boolean(result.limited) }));
       }
-      if (mime && mime !== 'image/svg+xml')
-        return {
-          content: [{ type: 'image', data: result.data ?? '', mimeType: mime }],
-          details: undefined,
-        };
-      return textResult(Buffer.from(result.data ?? '', 'base64').toString('utf8'));
+      return readResult(result, mime);
     },
   });
   const path = { type: 'string' };
   const string = { type: 'string' };
   const tools = [
-    createTool('read', 'Read a file in the current chat directories.', { path }, ['path']),
-    createTool('ls', 'List up to 1,000 entries in a current chat directory.', { path }, []),
+    createTool(
+      'read',
+      'Read a chat file or use an absolute local path to read an ordinary external file in a local session.',
+      { path },
+      ['path'],
+    ),
+    createTool(
+      'ls',
+      'List up to 1,000 directory entries. Local sessions also accept absolute local paths.',
+      { path },
+      [],
+    ),
     createTool(
       'find',
       'Find names by glob pattern inside a current chat directory.',

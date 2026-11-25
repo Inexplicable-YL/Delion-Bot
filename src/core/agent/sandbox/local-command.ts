@@ -1,16 +1,26 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
 import { helperSession, type ScopedCommandResult } from '../../remote/helper';
+import { shellQuote } from '../../remote/transport';
+import { notifyRemoteChange } from '../../remote/events';
 import type { SessionRow } from '../session/store';
+import { localBash } from '../tasks';
 import { deniedMessage } from './approve-tool';
 import { commandNames } from './command-names';
 import { macosSandboxLauncher, runMacosCommand } from './macos-command';
-import { executionMode, ownerRow, scopedDirectories } from './mode';
+import { redactModelPaths } from './model-paths';
+import {
+  executionMode,
+  launchPlan,
+  ownerRow,
+  scopedDirectories,
+  type ScopedDirectory,
+} from './mode';
 import { readScopedReference } from './scoped-files';
 
 const commandResult = (value: object, isError = false) => ({
@@ -18,6 +28,131 @@ const commandResult = (value: object, isError = false) => ({
   details: undefined,
   ...(isError ? { isError: true } : {}),
 });
+
+async function stageLocalInputs(directory: string, copies: readonly Buffer[]) {
+  const inputs = join(directory, 'inputs');
+  await mkdir(inputs, { mode: 0o700 });
+  for (const [index, bytes] of copies.entries())
+    await writeFile(join(inputs, String(index + 1)), bytes, { flag: 'wx', mode: 0o400 });
+}
+
+async function runApprovedCommand(
+  root: ScopedDirectory,
+  directories: ScopedDirectory[],
+  command: string,
+  copies: readonly Buffer[],
+  signal: AbortSignal,
+): Promise<ScopedCommandResult> {
+  const maxOutputBytes = 50 * 1024;
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  let truncated = false;
+  const onData = (chunk: Buffer) => {
+    const count = Math.min(chunk.length, maxOutputBytes - bytes);
+    if (count) chunks.push(chunk.subarray(0, count));
+    bytes += count;
+    truncated ||= count < chunk.length;
+  };
+  const output = (temporary?: string) => {
+    const text = Buffer.concat(chunks).toString('utf8');
+    return `${temporary ? text.replaceAll(temporary, '.') : text}${truncated ? '\n[输出已截断]' : ''}`;
+  };
+  const timeout = 120;
+  if (root.remote) {
+    const helper = helperSession(root.remote);
+    let scratch: string | undefined;
+    try {
+      signal.throwIfAborted();
+      if (copies.length) {
+        let path = '';
+        const prepared = await helper.exec('mktemp -d /tmp/delion-command.XXXXXXXXXX', {
+          cwd: root.host,
+          signal,
+          timeoutMs: 10_000,
+          onData: (chunk) => (path += chunk.toString('utf8')),
+        });
+        path = path.trim();
+        if (prepared.code !== 0 || !/^\/tmp\/delion-command\.[a-zA-Z0-9]{10}$/.test(path))
+          throw new Error('无法创建远端命令临时目录');
+        scratch = path;
+        const inputs = await helper.exec('mkdir -m 700 inputs', {
+          cwd: scratch,
+          signal,
+          timeoutMs: 10_000,
+          onData: () => {},
+        });
+        if (inputs.code !== 0) throw new Error('无法创建远端命令输入目录');
+        for (const [index, data] of copies.entries()) {
+          signal.throwIfAborted();
+          await helper.writeFile(`${scratch}/inputs/${index + 1}`, data);
+        }
+      }
+      signal.throwIfAborted();
+      const result = await helper.exec(command, {
+        cwd: scratch ?? root.host,
+        signal,
+        timeoutMs: timeout * 1000,
+        onData,
+      });
+      signal.throwIfAborted();
+      return result.state === 'timeout'
+        ? { exitCode: null, output: output(scratch), error: '命令执行超时' }
+        : { exitCode: result.code, output: output(scratch) };
+    } finally {
+      if (scratch)
+        await helper
+          .exec(`rm -rf -- ${shellQuote(scratch)}`, {
+            cwd: root.host,
+            timeoutMs: 10_000,
+            onData: () => {},
+          })
+          .catch(() => {});
+      notifyRemoteChange(root.host);
+    }
+  }
+
+  const windows = process.platform === 'win32';
+  const shell = windows
+    ? {
+        shell: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe'),
+        args: ['/D', '/Q', '/S', '/C'],
+        windowsVerbatimArguments: true,
+      }
+    : { shell: '/bin/bash', args: ['--noprofile', '--norc', '-c'] };
+  const scratch =
+    root.name !== '/project' || copies.length
+      ? await mkdtemp(join(await realpath(tmpdir()), 'delion-command-'))
+      : undefined;
+  try {
+    if (scratch && copies.length) await stageLocalInputs(scratch, copies);
+    const chatDirectories = root.name === '/privacy' ? directories : [];
+    if (scratch && chatDirectories.length) {
+      for (const { name, host } of chatDirectories)
+        await symlink(host, join(scratch, name.slice(1)), windows ? 'junction' : 'dir');
+      command = command.replace(
+        /(^|[\s"'=(,;<>|&])\/(privacy|share)(?=$|[\\/\s"'),;<>|&])/g,
+        '$1$2',
+      );
+    }
+    const result = await localBash(
+      scratch ?? root.host,
+      shell,
+      undefined,
+    )(command, {
+      signal,
+      timeout,
+      onData,
+    });
+    signal.throwIfAborted();
+    return {
+      exitCode: result.exitCode ?? null,
+      output: redactModelPaths(chatDirectories)(output(scratch)),
+      ...(result.error && { error: result.error }),
+    };
+  } finally {
+    if (scratch) await rm(scratch, { recursive: true, force: true });
+  }
+}
 
 export function runWindowsCommand(
   broker: string,
@@ -55,24 +190,41 @@ export function runWindowsCommand(
 
 export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   const mode = executionMode(meta);
+  if (mode === 'full') return null;
+  const approvalMode = mode === 'approval';
   const directories = scopedDirectories(meta);
-  const root = directories[0];
-  if (mode === 'full' || !root) return null;
+  const owner = ownerRow(meta);
+  const root: ScopedDirectory | undefined =
+    directories[0] ??
+    (approvalMode && owner.project_id
+      ? { name: '/project', host: launchPlan(meta).hostCwd }
+      : undefined);
+  if (!root) return null;
   const remote = root.remote;
   const windows = !remote && process.platform === 'win32';
   const launcher = windows
     ? join(hostPorts().paths.bundled('scopedfs'), 'scopedfs.exe')
     : macosSandboxLauncher;
-  if (!remote && ((!windows && process.platform !== 'darwin') || !existsSync(launcher)))
+  if (
+    !approvalMode &&
+    !remote &&
+    ((!windows && process.platform !== 'darwin') || !existsSync(launcher))
+  )
     return null;
-  const { id: session } = ownerRow(meta);
-  const runtime = windows
-    ? 'Run one Windows cmd.exe process using built-in commands such as type, dir and echo. Changes made inside the temporary working directory are discarded. Other processes and network are unavailable.'
-    : `Run one ${remote ? 'remote Linux' : 'macOS'} Bash process. Use built-ins or exec with cat, ls, awk, grep, sed, sort or wc. The temporary working directory is read-only. Other processes and network are unavailable.`;
+  const { id: session } = owner;
+  const chatPaths =
+    approvalMode && root.name === '/privacy'
+      ? ` In ordinary local chats, use /privacy and /share in command text. Scripts started from the initial working directory can use the relative paths privacy and share.${windows ? ' Use backslashes after the virtual root in cmd.exe built-in file arguments.' : ''}`
+      : '';
+  const runtime = approvalMode
+    ? `Run a ${windows ? 'Windows cmd.exe' : 'Bash'} command with the current ${remote ? 'SSH' : 'local'} account permissions after approval. Network and subprocesses are available. Project commands without input copies run in the project directory. Other commands run in a temporary directory.`
+    : windows
+      ? 'Run one Windows cmd.exe process using built-in commands such as type, dir and echo. Changes made inside the temporary working directory are discarded. Other processes and network are unavailable.'
+      : `Run one ${remote ? 'remote Linux' : 'macOS'} Bash process. Use built-ins or exec with cat, ls, awk, grep, sed, sort or wc. The temporary working directory is read-only. Other processes and network are unavailable.`;
   return {
     name: 'sandbox_command',
     label: 'Sandbox command',
-    description: `${runtime} Input copies are available as inputs/1, inputs/2, and so on, in the order supplied. Use stdout for results.`,
+    description: `${runtime}${chatPaths} Input copies are available as inputs/1, inputs/2, and so on, in the order supplied. Use stdout for results.`,
     parameters: {
       type: 'object',
       properties: {
@@ -83,9 +235,10 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
     } as unknown as ToolDefinition['parameters'],
     async execute(_id, { command, files = [] }: { command: string; files?: string[] }, signal) {
       const cancellation = signal ?? new AbortController().signal;
+      files = [...files];
       if (cancellation.aborted || command.includes('\0'))
         return commandResult({ error: '命令无效或已取消' }, true);
-      if (mode === 'approval') {
+      if (approvalMode) {
         const names = commandNames(command, windows ? 'cmd' : 'bash');
         const approval = await hostPorts().desktop.approveSandboxCommand?.({
           session,
@@ -95,7 +248,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
           ...(remote && { remote: remote.host }),
           ...(names && {
             grant: {
-              keys: names.map((name) => `command:${name}`),
+              keys: names.map((name) => `host-command:${name}`),
               label: `运行 ${names.join('、')} 命令`,
             },
           }),
@@ -105,17 +258,35 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
       }
       let directory: string | undefined;
       try {
+        const runDirectories =
+          approvalMode && root.name === '/privacy' ? scopedDirectories(meta) : directories;
         let remaining = 8 * 1024 * 1024;
         const copies = [];
         for (const path of files) {
           cancellation.throwIfAborted();
-          const { data } = await readScopedReference(meta, path, 'read', cancellation, directories);
+          const { data } = await readScopedReference(
+            meta,
+            path,
+            'read',
+            cancellation,
+            runDirectories,
+          );
           const bytes = Buffer.from(data ?? '', 'base64');
           remaining -= bytes.byteLength;
           if (remaining < 0) return commandResult({ error: '命令输入文件超过 8 MiB' }, true);
           copies.push(bytes);
         }
         cancellation.throwIfAborted();
+        if (approvalMode) {
+          const output = await runApprovedCommand(
+            root,
+            runDirectories,
+            command,
+            copies,
+            cancellation,
+          );
+          return commandResult(output, output.exitCode !== 0);
+        }
         if (remote) {
           const output = await helperSession(remote).scopedCommand(command, copies, cancellation);
           return commandResult(output, output.exitCode !== 0);
@@ -125,15 +296,15 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
           return commandResult(output, output.exitCode !== 0);
         }
         directory = await mkdtemp(join(await realpath(tmpdir()), 'delion-command-'));
-        const inputs = join(directory, 'inputs');
-        await mkdir(inputs, { mode: 0o700 });
-        for (const [index, bytes] of copies.entries())
-          await writeFile(join(inputs, String(index + 1)), bytes, { flag: 'wx', mode: 0o400 });
+        await stageLocalInputs(directory, copies);
         cancellation.throwIfAborted();
         const output = await runMacosCommand(directory, command, cancellation);
         return commandResult(output, output.exitCode !== 0);
       } catch {
-        return commandResult({ error: '无法在受限环境运行命令或读取输入' }, true);
+        return commandResult(
+          { error: cancellation.aborted ? '命令已取消' : '无法运行命令或读取输入文件' },
+          true,
+        );
       } finally {
         if (directory) await rm(directory, { recursive: true, force: true });
       }
