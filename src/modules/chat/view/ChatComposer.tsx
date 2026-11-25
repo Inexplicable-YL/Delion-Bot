@@ -271,7 +271,6 @@ export function ChatComposer({
   tasks = [],
   onStopTask,
   permissionMode = null,
-  projectPermissions = false,
   onPermissionMode,
 }: {
   queued?: string[];
@@ -279,7 +278,6 @@ export function ChatComposer({
   tasks?: BackgroundTaskView[];
   onStopTask?: (taskId: string) => void;
   permissionMode?: PermissionMode | null;
-  projectPermissions?: boolean;
   onPermissionMode?: (mode: PermissionMode) => void;
   sidechat?: boolean;
   context?: ComposerContext | null;
@@ -785,7 +783,6 @@ export function ChatComposer({
         {permissionMode && onPermissionMode && !sidechat && (
           <ChatPermissionPicker
             mode={permissionMode}
-            project={projectPermissions}
             onSelect={onPermissionMode}
             side={hero ? 'bottom' : 'top'}
           />

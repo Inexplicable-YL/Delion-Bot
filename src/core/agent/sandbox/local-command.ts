@@ -21,13 +21,53 @@ import {
   scopedDirectories,
   type ScopedDirectory,
 } from './mode';
-import { readScopedReference } from './scoped-files';
+import { readScopedReference, scopedFileTools } from './scoped-files';
 
 const commandResult = (value: object, isError = false) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(value) }],
   details: undefined,
   ...(isError ? { isError: true } : {}),
 });
+
+function brokerCommand(command: string, windows: boolean) {
+  if (/[\r\n|&;<>$`%!^()]/.test(command)) return null;
+  const input = command.trim();
+  const tokens = [
+    ...input.matchAll(
+      windows
+        ? /(?:^|[ \t]+)("[^"]*"|[^\s"]+)(?=[ \t]|$)/g
+        : /(?:^|[ \t]+)("[^"]*"|'[^']*'|[^\s"']+)(?=[ \t]|$)/g,
+    ),
+  ];
+  if (tokens.map(([match]) => match).join('') !== input) return null;
+  const [name, ...args] = tokens.map(([, part]) => part!.replace(/^(['"])(.*)\1$/, '$2'));
+  const program = windows ? name?.toLowerCase() : name;
+  if (windows ? program === 'dir' : program === 'ls' || program === '/bin/ls') {
+    const paths = args.filter((arg) => (windows ? arg.toLowerCase() !== '/b' : arg !== '--'));
+    if (paths.length <= 1 && !paths[0]?.startsWith('-'))
+      return { action: 'ls', params: { path: paths[0] } };
+  }
+  if (windows ? program === 'type' : program === 'cat' || program === '/bin/cat') {
+    const paths = args.filter((arg) => windows || arg !== '--');
+    if (paths.length === 1 && !paths[0]?.startsWith('-'))
+      return { action: 'read', params: { path: paths[0] } };
+  }
+  if (
+    !windows &&
+    (program === 'grep' || program === '/usr/bin/grep') &&
+    args.length === 2 &&
+    !args[0]?.startsWith('-')
+  )
+    return { action: 'grep', params: { pattern: args[0], path: args[1] } };
+  if (!windows && program === 'find' && args.length === 3 && args[1] === '-name')
+    return { action: 'find', params: { path: args[0], pattern: args[2] } };
+  if (program === 'mkdir' || (windows && program === 'md')) {
+    const paths = args.filter((arg) => windows || (arg !== '-p' && arg !== '--'));
+    if (paths.length === 1 && !paths[0]?.startsWith('-'))
+      return { action: 'mkdir', params: { path: paths[0] } };
+  }
+  return null;
+}
 
 async function stageLocalInputs(directory: string, copies: readonly Buffer[]) {
   const inputs = join(directory, 'inputs');
@@ -191,7 +231,8 @@ export function runWindowsCommand(
 export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   const mode = executionMode(meta);
   if (mode === 'full') return null;
-  const approvalMode = mode === 'approval';
+  const automatic = mode === 'auto-approval';
+  const approvalMode = mode === 'approval' || automatic;
   const directories = scopedDirectories(meta);
   const owner = ownerRow(meta);
   const root: ScopedDirectory | undefined =
@@ -212,6 +253,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   )
     return null;
   const { id: session } = owner;
+  const fileTools = automatic ? scopedFileTools(meta) : [];
   const chatPaths =
     approvalMode && root.name === '/privacy'
       ? ` In ordinary local chats, use /privacy and /share in command text. Scripts started from the initial working directory can use the relative paths privacy and share.${windows ? ' Use backslashes after the virtual root in cmd.exe built-in file arguments.' : ''}`
@@ -224,7 +266,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   return {
     name: 'sandbox_command',
     label: 'Sandbox command',
-    description: `${runtime}${chatPaths} Input copies are available as inputs/1, inputs/2, and so on, in the order supplied. Use stdout for results.`,
+    description: `${automatic ? 'Simple read-only commands and directory creation use the file broker. Use file tools for changes when possible. Other commands require approval. ' : ''}${runtime}${chatPaths} Input copies are available as inputs/1, inputs/2, and so on, in the order supplied. Use stdout for results.`,
     parameters: {
       type: 'object',
       properties: {
@@ -233,13 +275,30 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
       },
       required: ['command'],
     } as unknown as ToolDefinition['parameters'],
-    async execute(_id, { command, files = [] }: { command: string; files?: string[] }, signal) {
+    async execute(
+      id,
+      { command, files = [] }: { command: string; files?: string[] },
+      signal,
+      onUpdate,
+      context,
+    ) {
       const cancellation = signal ?? new AbortController().signal;
       files = [...files];
       if (cancellation.aborted || command.includes('\0'))
         return commandResult({ error: '命令无效或已取消' }, true);
+      const operation = automatic && brokerCommand(command, windows);
+      if (operation) {
+        const tool = fileTools.find(({ name }) => name === operation.action);
+        if (tool) {
+          const input =
+            operation.action !== 'mkdir' && /^inputs[\\/](\d+)$/.exec(operation.params.path ?? '');
+          const path = input ? files[Number(input[1]) - 1] : operation.params.path;
+          if (!input || path)
+            return tool.execute(id, { ...operation.params, path }, cancellation, onUpdate, context);
+        }
+      }
       if (approvalMode) {
-        const names = commandNames(command, windows ? 'cmd' : 'bash');
+        const names = mode === 'approval' && commandNames(command, windows ? 'cmd' : 'bash');
         const approval = await hostPorts().desktop.approveSandboxCommand?.({
           session,
           command,

@@ -195,6 +195,7 @@ export function ChatComposerMenu({
         {onSelectSearch &&
           (permissionMode === null ||
             permissionMode === 'approval' ||
+            permissionMode === 'auto-approval' ||
             permissionMode === 'full') && (
             <DropdownMenuSub onOpenChange={(open) => open && onRefreshSearch()}>
               <DropdownMenuSubTrigger>

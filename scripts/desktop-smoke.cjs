@@ -83,10 +83,10 @@ async function run(window) {
     );
   await requestFullAccess();
   await wait(() => js(`!!${modal}`), 'full access confirmation in workspace');
-  assert.equal(await mode(), 'approval');
+  assert.equal(await mode(), 'auto-approval');
   await clickModalButton('取消');
   await wait(() => js(`!${modal}`), 'full access confirmation declined');
-  assert.equal(await mode(), 'approval');
+  assert.equal(await mode(), 'auto-approval');
   await requestFullAccess();
   await wait(() => js(`!!${modal}`), 'full access confirmation reopened');
   assert.equal(

@@ -103,11 +103,11 @@ async function openLive(id: string): Promise<Live> {
     : [];
   if (delegates) delegatesTools.push(taskTool(parent, cwd, runSubagent, plan.mode !== 'full'));
   const extraTools =
-    plan.mode === 'approval'
+    plan.mode === 'approval' || plan.mode === 'auto-approval'
       ? delegatesTools.map((tool) => {
           switch (tool.name) {
             case 'task':
-              return approveTool(tool, id, '启动子 Agent');
+              return plan.mode === 'approval' ? approveTool(tool, id, '启动子 Agent') : tool;
             case 'task_stop':
               return approveTool(tool, id, '停止后台任务');
             default:

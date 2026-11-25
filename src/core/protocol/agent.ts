@@ -129,7 +129,7 @@ export const chatMessageSchema = z.object({
   task: taskNoticeDetailsSchema.optional(),
 });
 
-export const permissionModeSchema = z.enum(['read-only', 'approval', 'project-write', 'full']);
+export const permissionModeSchema = z.enum(['read-only', 'approval', 'auto-approval', 'full']);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
 
 export const workspaceChatSchema = z.object({

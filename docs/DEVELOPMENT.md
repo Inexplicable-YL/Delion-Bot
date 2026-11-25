@@ -159,7 +159,7 @@ Windows 与 macOS 共用一套：`electron-updater` + `electron-builder` 的 NSI
 
 - 数据保存在本机 SQLite，凭据经 Electron `safeStorage` 加密。
 - renderer 不接触文件系统、数据库与凭据，一切经受控 IPC 通信。
-- 普通聊天和项目聊天默认只读。受限工具经文件代理访问 `/privacy`、`/share` 或当前项目的 `/project`。请求批准逐次确认写入，项目内修改只允许直接写入项目目录。只有宿主弹窗确认后才开启完全访问。模型读取的内容可发送给配置的模型服务。
+- 普通聊天和项目聊天默认自动批准。受限工具经文件代理访问 `/privacy`、`/share` 或当前项目的 `/project`。自动批准放行本地会话或项目内的增改，删除和 SSH 写入需要批准。完全访问由宿主弹窗确认。模型读取的内容可发送给配置的模型服务。
 - Pi 的 auth / models / sessions / skills 放在 `userData/pi`，与用户的 `~/.pi` 隔离（bin 例外，见 §2.1）。模型密钥只在主进程内注册给 Pi 运行时，不写入 `auth.json`。
 - 应用启动**不读取仓库 `.env`**，凭据只能在应用内配置。
 

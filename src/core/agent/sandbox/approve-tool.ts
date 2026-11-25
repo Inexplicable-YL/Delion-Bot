@@ -6,13 +6,26 @@ export const deniedMessage = (message: string, approval: Approval | undefined) =
     ? `${message}。用户说明：${approval.note}`
     : message;
 
+export async function approveNonPublicRead(session: string, url: URL, signal: AbortSignal) {
+  const approval = await hostPorts().desktop.approveToolAction?.({
+    session,
+    title: '读取非公开网络地址',
+    fields: [{ label: '地址', value: url.toString() }],
+    signal,
+  });
+  if (!approval?.approved) throw new Error(deniedMessage('网络访问未获批准', approval));
+}
+
 export function approveTool(
   tool: ToolDefinition,
   session: string,
   title: string,
   fields?: { label: string; value: string }[],
   readOnly?: (input: unknown) => boolean,
-  grant: (input: unknown) => ApprovalGrant = () => ({ keys: [`tool:${tool.name}`], label: title }),
+  grant: (input: unknown) => ApprovalGrant | undefined = () => ({
+    keys: [`tool:${tool.name}`],
+    label: title,
+  }),
 ): ToolDefinition {
   return {
     ...tool,

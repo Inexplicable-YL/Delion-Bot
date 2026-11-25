@@ -53,6 +53,7 @@ export function composePrompt(
   if (
     mode !== 'full' &&
     mode !== 'approval' &&
+    mode !== 'auto-approval' &&
     attachments.some((attachment) => 'path' in attachment)
   )
     throw new Error('当前权限支持图片和文本附件。请添加图片或粘贴文档文本。');
@@ -66,7 +67,10 @@ export function composePrompt(
     const key = restricted ? scopedPromptPath(session, path) : path;
     return key ? [{ key, title: key }] : [];
   });
-  const sessions = mode === 'full' || mode === 'approval' ? (input.sessions ?? []) : [];
+  const sessions =
+    mode === 'full' || mode === 'approval' || mode === 'auto-approval'
+      ? (input.sessions ?? [])
+      : [];
   const meta = {
     turnId,
     body: userText,

@@ -478,7 +478,7 @@
                   "enum": [
                     "read-only",
                     "approval",
-                    "project-write",
+                    "auto-approval",
                     "full"
                   ]
                 }
@@ -1239,7 +1239,7 @@
               "enum": [
                 "read-only",
                 "approval",
-                "project-write",
+                "auto-approval",
                 "full"
               ]
             },

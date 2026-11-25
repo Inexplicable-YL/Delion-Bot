@@ -176,7 +176,6 @@ function ChatComposerArea({
         tasks={chat?.tasks}
         onStopTask={chatState.stopTask}
         permissionMode={chat?.subagent ? null : (chat?.permissionMode ?? null)}
-        projectPermissions={projectId !== null}
         onPermissionMode={chatState.selectPermissionMode}
         referenceOptions={referenceOptions}
         notice={error}

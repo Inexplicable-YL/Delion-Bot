@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { basename, dirname, isAbsolute, join, parse, posix, relative, sep } from 'node:path';
-import { realpathSync } from 'node:fs';
+import { lstatSync, realpathSync } from 'node:fs';
 import { isIP } from 'node:net';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
@@ -12,7 +12,8 @@ import {
 } from '../../remote/helper';
 import { executionMode, ownerRow, scopedDirectories, type ScopedDirectory } from './mode';
 import type { SessionRow } from '../session/store';
-import { deniedMessage } from './approve-tool';
+import { approveNonPublicRead, deniedMessage } from './approve-tool';
+import { fetchPublicWebPage } from '../../capabilities/public-web-fetch';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_TEXT_BYTES = 200_000;
@@ -24,7 +25,7 @@ type FileRequest = {
   newText?: string;
   pattern?: string;
 };
-type Action = Exclude<ScopedFileOperation['action'], 'stat'>;
+type Action = Exclude<ScopedFileOperation['action'], 'stat' | 'create'>;
 
 const virtualRoot = /^\/(privacy|share|project)(?:\/|$)/;
 const windowsDevice = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i;
@@ -37,19 +38,16 @@ function absoluteLocalPath(input: string) {
     : /^\/(?!\/)/.test(input) && !virtualRoot.test(input);
 }
 
-async function externalRead(
-  input: string,
-  action: 'read' | 'ls',
-  limit: number,
-  signal: AbortSignal,
-): Promise<ScopedFileResponse> {
+function externalPathPolicy(writable = false) {
   const windows = process.platform === 'win32';
   const { paths } = hostPorts();
   const system = windows ? parse(process.env.SystemRoot ?? 'C:\\Windows').root : '/';
+  const application = writable ? paths.applicationCode?.() : undefined;
   const protectedPaths = [
     paths.userData(),
     paths.storage(),
     paths.bundled('scopedfs'),
+    ...(application ? [application] : []),
     join(paths.temp(), 'delion-document-reading'),
     join(paths.home(), 'Library'),
     ...(windows
@@ -74,7 +72,7 @@ async function externalRead(
       return [path];
     }
   });
-  const protectedPath = (path: string) =>
+  return (path: string) =>
     path
       .slice(parse(path).root.length)
       .split(windows ? /[\\/]/ : '/')
@@ -93,6 +91,15 @@ async function externalRead(
           : relative(root, path);
       return key === '' || (!isAbsolute(key) && key !== '..' && !key.startsWith(`..${sep}`));
     });
+}
+
+async function externalRead(
+  input: string,
+  action: 'read' | 'ls',
+  limit: number,
+  signal: AbortSignal,
+): Promise<ScopedFileResponse> {
+  const protectedPath = externalPathPolicy();
   try {
     signal.throwIfAborted();
     if (protectedPath(input)) throw new Error();
@@ -248,14 +255,83 @@ const readResult = (result: ScopedFileResponse, mime: string | null | undefined)
       }
     : textResult(Buffer.from(result.data ?? '', 'base64').toString('utf8'));
 
+async function externalChange(
+  session: string,
+  action: 'write' | 'edit' | 'mkdir' | 'delete',
+  params: FileRequest & { path: string },
+  signal: AbortSignal,
+) {
+  const { path, content, oldText, newText } = params;
+  const protectedPath = externalPathPolicy(true);
+  let directory: string;
+  let key: string;
+  let operation: typeof action | 'create' = action;
+  try {
+    if (protectedPath(path) || /[\\/]$/.test(path)) throw new Error();
+    directory = realpathSync.native(dirname(path));
+    key = basename(path);
+    const target = join(directory, key);
+    if (!absoluteLocalPath(directory) || protectedPath(target)) throw new Error();
+    const current = lstatSync(target, { throwIfNoEntry: false });
+    if (action === 'mkdir') {
+      if (current?.isDirectory()) return textResult(path);
+      if (current) throw new Error();
+    } else if (!current && action === 'write') operation = 'create';
+    else if (!current?.isFile() || protectedPath(realpathSync.native(target))) throw new Error();
+  } catch {
+    return textResult('外部路径不可用或不允许修改', true);
+  }
+  const create = operation === 'create' || operation === 'mkdir';
+  const data = operation === 'edit' ? newText : content;
+  if (
+    Buffer.byteLength(data ?? '') > MAX_IMAGE_BYTES ||
+    Buffer.byteLength(oldText ?? '') > MAX_IMAGE_BYTES
+  )
+    return textResult('内容上限为 5 MB', true);
+  const approval = await hostPorts().desktop.approveToolAction?.({
+    session,
+    title: create ? '在外部目录新建' : action === 'delete' ? '删除外部文件' : '修改外部文件',
+    fields: [
+      { label: '路径', value: join(directory, key) },
+      ...(oldText === undefined ? [] : [{ label: '替换前', value: oldText }]),
+      ...(data === undefined ? [] : [{ label: '内容', value: data }]),
+    ],
+    ...(create && {
+      grant: {
+        keys: [
+          `auto-create-entry:${process.platform === 'win32' ? directory.toLowerCase() : directory}`,
+        ],
+        label: `在 ${directory} 新建文件或文件夹`,
+      },
+    }),
+    signal,
+  });
+  if (!approval?.approved || signal.aborted)
+    return textResult(deniedMessage('文件操作未获批准', approval), true);
+  const result = await runLocalFileAction(
+    directory,
+    {
+      action: operation,
+      path: key,
+      content: data,
+      oldText,
+      writable: true,
+    },
+    signal,
+  );
+  return result.error ? textResult(result.error, true) : textResult(path);
+}
+
 export function downloadTool(meta: SessionRow): ToolDefinition | null {
-  const directories = scopedDirectories(meta).filter(({ name }) => name !== '/privacy');
+  const automatic = executionMode(meta) === 'auto-approval';
+  const directories = scopedDirectories(meta).filter(
+    ({ name }) => automatic || name !== '/privacy',
+  );
   if (!directories.length) return null;
   return {
     name: 'download_file',
     label: 'Download file',
-    description:
-      'Download the original binary from an HTTPS URL to an explicit path in /share or /project. Maximum size is 5 MiB. This requires approval. If the server redirects, call this tool again with the returned URL.',
+    description: `Download the original binary from an HTTPS URL to ${automatic ? '/privacy, /share, or /project' : '/share or /project'}. Maximum size is 5 MiB. ${automatic && !directories[0]?.remote ? '' : 'This requires approval. '}If the server redirects, call this tool again with the returned URL.`,
     parameters: {
       type: 'object',
       properties: { url: { type: 'string', maxLength: 8192 }, path: { type: 'string' } },
@@ -285,11 +361,16 @@ export function downloadTool(meta: SessionRow): ToolDefinition | null {
         AbortSignal.timeout(15_000),
       ]);
       try {
-        const response = await fetch(url, {
+        const options: RequestInit = {
           credentials: 'omit',
           redirect: 'manual',
           signal: cancellation,
-        });
+        };
+        const response = automatic
+          ? await fetchPublicWebPage(url, options, (target) =>
+              approveNonPublicRead(ownerRow(meta).id, target, cancellation),
+            )
+          : await fetch(url, options);
         const location =
           response.status >= 300 && response.status < 400 && response.headers.get('location');
         if (location) {
@@ -374,6 +455,21 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
         if (action === 'ls') return textResult(JSON.stringify(result.entries ?? []));
         return readResult(result, mime);
       }
+      if (
+        mode === 'auto-approval' &&
+        params.path &&
+        !directories[0]?.remote &&
+        absoluteLocalPath(params.path) &&
+        (action === 'write' || action === 'edit' || action === 'mkdir' || action === 'delete')
+      ) {
+        const project = directories.find(({ name }) => name === '/project');
+        const key = project && relative(project.host, params.path);
+        if (project && key && !isAbsolute(key) && key !== '..' && !key.startsWith(`..${sep}`)) {
+          params = { ...params, path: `/project/${key.replaceAll('\\', '/')}` };
+        } else {
+          return externalChange(owner.id, action, { ...params, path: params.path }, cancellation);
+        }
+      }
       let target: ReturnType<typeof targetPath>;
       try {
         target = targetPath(params.path ?? '.', directories);
@@ -382,7 +478,8 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
       }
       const { root, key } = target;
       const visible = key === '.' ? root.name : `${root.name}/${key}`;
-      const writable = action === 'write' || action === 'edit';
+      const writable =
+        action === 'write' || action === 'edit' || action === 'mkdir' || action === 'delete';
       const content = action === 'edit' ? params.newText : params.content;
       if (
         writable &&
@@ -391,7 +488,7 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
           key === '.')
       )
         return textResult('请选择有名称的文件，内容上限为 5 MB', true);
-      if (writable && mode === 'approval') {
+      if (mode === 'approval' && (action === 'write' || action === 'edit')) {
         const approval = await hostPorts().desktop.approveFileChange?.({
           session: owner.id,
           action,
@@ -405,6 +502,23 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
         });
         if (!approval?.approved || cancellation.aborted)
           return textResult(deniedMessage('文件修改未获批准', approval), true);
+      }
+      if (writable && mode === 'auto-approval' && (root.remote || action === 'delete')) {
+        const approval = await hostPorts().desktop.approveToolAction?.({
+          session: owner.id,
+          title: action === 'delete' ? '删除文件' : '修改 SSH 项目文件',
+          fields: [
+            {
+              label: '路径',
+              value: root.remote ? `${root.remote.host}: ${posix.join(root.host, key)}` : visible,
+            },
+            ...(params.oldText === undefined ? [] : [{ label: '替换前', value: params.oldText }]),
+            ...(content === undefined ? [] : [{ label: '内容', value: content }]),
+          ],
+          signal: cancellation,
+        });
+        if (!approval?.approved || cancellation.aborted)
+          return textResult(deniedMessage('文件操作未获批准', approval), true);
       }
       const mime = action === 'read' ? imageMimeOf(key) : null;
       const result = await runFileAction(
@@ -464,7 +578,7 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
       ['pattern'],
     ),
   ];
-  if (mode === 'approval' || mode === 'project-write')
+  if (mode === 'approval' || mode === 'auto-approval')
     tools.push(
       createTool('write', 'Write a file in a current chat directory.', { path, content: string }, [
         'path',
@@ -480,6 +594,16 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
         },
         ['path', 'oldText', 'newText'],
       ),
+    );
+  if (mode === 'auto-approval')
+    tools.push(
+      createTool(
+        'mkdir',
+        'Create a directory. Outside the working directories, creation requires permission for the parent directory.',
+        { path },
+        ['path'],
+      ),
+      createTool('delete', 'Delete one file after approval.', { path }, ['path']),
     );
   return tools;
 }

@@ -13,7 +13,12 @@ interface DynamicToolDefinition {
   type: 'function';
   function: { name: string; description: string; parameters: unknown };
   source: { name: string; domain?: string };
-  execute(input: unknown, signal?: AbortSignal): ReturnType<typeof executeMcpTool>;
+  readOnly?: boolean;
+  execute(
+    input: unknown,
+    signal?: AbortSignal,
+    requireReadOnly?: boolean,
+  ): ReturnType<typeof executeMcpTool>;
 }
 
 const builtinToolNames = ['read', 'write', 'edit', 'bash', 'grep', 'find', 'ls'];
@@ -295,8 +300,9 @@ function findServer(id: string): ManagedServer {
 }
 
 export async function mcpToolDefinitions(): Promise<DynamicToolDefinition[]> {
+  let managedId: string | undefined;
   try {
-    const managedId = syncFromConfigs();
+    managedId = syncFromConfigs();
     if (managedId) {
       const entry = findServer(managedId);
       if (entry.status !== 'connected') await connectServer(entry);
@@ -312,6 +318,7 @@ export async function mcpToolDefinitions(): Promise<DynamicToolDefinition[]> {
     if (!entry.config.enabled || entry.status !== 'connected') continue;
     for (const { namespaced, tool } of entry.tools) {
       const config = entry.config;
+      const readOnly = config.id === managedId && declaredReadOnly(tool);
       definitions.push({
         type: 'function',
         function: {
@@ -323,12 +330,17 @@ export async function mcpToolDefinitions(): Promise<DynamicToolDefinition[]> {
           name: config.name,
           ...(config.transport === 'http' && { domain: new URL(config.url).hostname }),
         },
-        execute: (input, signal) => executeMcpTool(namespaced, input, config, signal),
+        readOnly,
+        execute: (input, signal, requireReadOnly) =>
+          executeMcpTool(namespaced, input, config, signal, requireReadOnly && tool),
       });
     }
   }
   return definitions;
 }
+
+const declaredReadOnly = (tool: Tool) =>
+  tool.annotations?.readOnlyHint === true && tool.annotations.destructiveHint !== true;
 
 function toolResultPayload(sdk: McpSdk, result: CallToolResult) {
   const blocks = sdk.toLlmContent(result);
@@ -353,6 +365,7 @@ export async function executeMcpTool(
   input: unknown,
   expectedConfig?: McpServerConfig,
   signal?: AbortSignal,
+  expectedReadOnlyTool?: Tool | false,
 ): Promise<
   | {
       ok: true;
@@ -362,8 +375,9 @@ export async function executeMcpTool(
     }
   | { ok: false; error: { code: string; message: string } }
 > {
+  let managedId: string | undefined;
   try {
-    syncFromConfigs();
+    managedId = syncFromConfigs();
   } catch (error) {
     return { ok: false, error: { code: 'NOT_CONFIGURED', message: errorMessage(error) } };
   }
@@ -404,6 +418,14 @@ export async function executeMcpTool(
         code: 'NOT_CONFIGURED',
         message: `MCP 服务器 ${entry.config.name} 未提供工具 ${name}`,
       },
+    };
+  if (
+    expectedReadOnlyTool &&
+    (tool !== expectedReadOnlyTool || ownerId !== managedId || !declaredReadOnly(tool))
+  )
+    return {
+      ok: false,
+      error: { code: 'NOT_CONFIGURED', message: '连接器工具已更改，请重新发起调用' },
     };
   if (input !== undefined && input !== null && (typeof input !== 'object' || Array.isArray(input)))
     return { ok: false, error: { code: 'INVALID_INPUT', message: '工具参数必须是对象' } };

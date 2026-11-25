@@ -222,7 +222,8 @@ export interface PortTunnel {
 }
 
 export interface ScopedFileOperation {
-  action: 'read' | 'ls' | 'write' | 'edit' | 'find' | 'grep' | 'stat';
+  action:
+    'read' | 'ls' | 'write' | 'create' | 'edit' | 'mkdir' | 'delete' | 'find' | 'grep' | 'stat';
   path: string;
   content?: string;
   data?: string;

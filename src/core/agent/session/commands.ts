@@ -40,7 +40,6 @@ export async function setSessionPermissionMode(
 ): Promise<WorkspaceChat> {
   const meta = row(id);
   if (meta.parent_id) throw new Error('请在主会话切换权限');
-  if (mode === 'project-write' && !meta.project_id) throw new Error('请选择项目会话');
   if (mode === 'full' && readPermissionMode(id) !== 'full') {
     if (meta.archived || fullAccessRequests.has(id)) throw new Error('当前会话无法申请完全访问');
     idleSessionIds(id);

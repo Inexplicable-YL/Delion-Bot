@@ -23,11 +23,12 @@ import { mcpToolDefinitions } from '../capabilities/mcp';
 import { readDisabledTools } from '../capabilities/tools';
 import { readWebSearchConfig, webSearch } from '../capabilities/web-search';
 import { fetchWebPage } from '../capabilities/web-fetch';
+import { fetchPublicWebPage } from '../capabilities/public-web-fetch';
 import { remoteTools } from './remote-tools';
 import { sessionTools } from './session-read';
 import { executionMode, ownerRow, scopedDirectories } from './sandbox/mode';
 import { virtualizeModelPaths } from './sandbox/model-paths';
-import { approveTool, deniedMessage } from './sandbox/approve-tool';
+import { approveNonPublicRead, approveTool, deniedMessage } from './sandbox/approve-tool';
 import { downloadTool, scopedFileTools } from './sandbox/scoped-files';
 import { sandboxCommandTool } from './sandbox/local-command';
 import { scopedSkillTool } from './sandbox/skill-tool';
@@ -124,22 +125,24 @@ export function agentEnvironment() {
       const meta = row(sessionId);
       const mode = executionMode(meta);
       if (mode !== 'full') {
+        const automatic = mode === 'auto-approval';
         const owner = ownerRow(meta);
         const tools = scopedFileTools(meta);
-        const command = mode === 'approval' || tools.length ? sandboxCommandTool(meta) : null;
-        const approval = mode === 'approval' ? await approvalTools(meta, owner.id) : null;
+        const command =
+          automatic || mode === 'approval' || tools.length ? sandboxCommandTool(meta) : null;
+        const approval =
+          automatic || mode === 'approval' ? await approvalTools(meta, owner.id, automatic) : null;
         const files =
           tools.length === 0
             ? 'Files are unavailable under the current permissions.'
             : owner.project_id
               ? 'Working directory: /project. Use /project paths for files in the current project.'
               : 'Working directory: /privacy. Keep intermediate files in /privacy and finished files in /share. Look in /share first for files the user provides.';
-        const access =
-          mode === 'read-only'
+        const access = automatic
+          ? 'Mode: automatic approval. Use read, ls, web_search, and web_fetch for reads. Use the file tools for changes so the app can check the target and operation. Local chat and project files can be created or edited. External creation requires directory permission. Deletions, SSH writes, and commands the app cannot verify as read-only require approval.'
+          : mode === 'read-only'
             ? 'Mode: read-only.'
-            : mode === 'approval'
-              ? 'Mode: request approval. The app asks the user to approve writes, external requests, and tool calls whose effects may change data. Use sandbox_command for shell operations. Each approved command runs with the current execution account permissions, including file writes, subprocesses, and network. Use download_file to save an original binary to an allowed directory. Use read_skill to load an enabled skill. Use the delion tool for Delion app commands when it is available.'
-              : 'Mode: project write. You can write and edit files in /project.';
+            : 'Mode: request approval. The app asks the user to approve writes, external requests, and tool calls whose effects may change data. Use sandbox_command for shell operations. Each approved command runs with the current execution account permissions, including file writes, subprocesses, and network. Use download_file to save an original binary to an allowed directory. Use read_skill to load an enabled skill. Use the delion tool for Delion app commands when it is available.';
         return {
           appendSystemPrompt: [
             RESTRICTED_PROMPT,
@@ -252,15 +255,28 @@ const text = (value: unknown) => ({
   details: undefined,
 });
 
-async function approvalTools(meta: ReturnType<typeof row>, session: string) {
+async function approvalTools(meta: ReturnType<typeof row>, session: string, automatic: boolean) {
   const remote = meta.project_id ? hostPorts().projects.remoteOf(meta.project_id) : null;
   const download = downloadTool(meta);
   return [
     scopedSkillTool(meta),
-    ...(download ? [approveTool(download, session, '下载文件')] : []),
-    approveTool(webSearchTool, session, '联网搜索'),
-    webFetchTool(session),
-    ...(await mcpTools(session)),
+    ...(download
+      ? [
+          automatic && !remote
+            ? download
+            : approveTool(
+                download,
+                session,
+                '下载文件',
+                undefined,
+                undefined,
+                automatic ? () => undefined : undefined,
+              ),
+        ]
+      : []),
+    automatic ? webSearchTool : approveTool(webSearchTool, session, '联网搜索'),
+    webFetchTool(session, automatic),
+    ...(await mcpTools(session, automatic)),
     ...(meta.project_id
       ? sessionTools(meta.project_id)
       : sessionTools(null).map((tool) => approveTool(tool, session, '读取其他会话'))),
@@ -271,8 +287,15 @@ async function approvalTools(meta: ReturnType<typeof row>, session: string) {
             session,
             '运行 Delion 操作',
             undefined,
-            (input) => (input as { command: string }).command === 'help',
             (input) => {
+              const { command } = input as { command: string };
+              return (
+                command === 'help' ||
+                (automatic && ['query_todos', 'list_workspace_entries'].includes(command))
+              );
+            },
+            (input) => {
+              if (automatic) return undefined;
               const { command } = input as { command: string };
               return { keys: [`delion:${command}`], label: `运行 Delion 操作 ${command}` };
             },
@@ -314,7 +337,7 @@ const webSearchTool: ToolDefinition = {
     text(await webSearch(params.query, params.count, params.freshness)),
 };
 
-function webFetchTool(approvalSession?: string): ToolDefinition {
+function webFetchTool(approvalSession?: string, automatic = false): ToolDefinition {
   return {
     name: 'web_fetch',
     label: 'web_fetch',
@@ -328,33 +351,41 @@ function webFetchTool(approvalSession?: string): ToolDefinition {
     execute: async (_id, params: { url: string; offset?: number }, signal) => {
       const config = readWebSearchConfig();
       const deepseek =
-        config?.provider === 'deepseek' && config.useForFetch
+        !automatic && config?.provider === 'deepseek' && config.useForFetch
           ? { apiKey: config.apiKey }
           : undefined;
       const cancellation = signal ?? new AbortController().signal;
       return text(
         await fetchWebPage(params.url, params.offset, deepseek, {
           signal: cancellation,
-          ...(approvalSession && {
-            approve: async (url: string, service?: 'DeepSeek') => {
-              const { host } = new URL(url);
-              const approval = await hostPorts().desktop.approveToolAction?.({
-                session: approvalSession,
-                title: '读取网页',
-                fields: [
-                  { label: '网页地址', value: url },
-                  ...(service ? [{ label: '服务', value: service }] : []),
-                ],
-                grant: {
-                  keys: [`web-fetch:${host}${service ? `@${service}` : ''}`],
-                  label: service ? `通过 ${service} 读取 ${host} 的网页` : `读取 ${host} 的网页`,
-                },
-                signal: cancellation,
-              });
-              if (approval?.approved) return true;
-              throw new Error(deniedMessage('网页读取未获批准', approval));
-            },
-          }),
+          ...(approvalSession &&
+            automatic && {
+              fetchPage: (url: URL, options: RequestInit) =>
+                fetchPublicWebPage(url, options, (target) =>
+                  approveNonPublicRead(approvalSession, target, cancellation),
+                ),
+            }),
+          ...(approvalSession &&
+            !automatic && {
+              approve: async (url: string, service?: 'DeepSeek') => {
+                const { host } = new URL(url);
+                const approval = await hostPorts().desktop.approveToolAction?.({
+                  session: approvalSession,
+                  title: '读取网页',
+                  fields: [
+                    { label: '网页地址', value: url },
+                    ...(service ? [{ label: '服务', value: service }] : []),
+                  ],
+                  grant: {
+                    keys: [`web-fetch:${host}${service ? `@${service}` : ''}`],
+                    label: service ? `通过 ${service} 读取 ${host} 的网页` : `读取 ${host} 的网页`,
+                  },
+                  signal: cancellation,
+                });
+                if (approval?.approved) return true;
+                throw new Error(deniedMessage('网页读取未获批准', approval));
+              },
+            }),
         }),
       );
     },
@@ -363,15 +394,18 @@ function webFetchTool(approvalSession?: string): ToolDefinition {
 
 const webTools = [webSearchTool, webFetchTool()];
 
-async function mcpTools(approvalSession?: string): Promise<ToolDefinition[]> {
-  return (await mcpToolDefinitions()).map(({ function: definition, source, execute }) => {
+async function mcpTools(approvalSession?: string, automatic = false): Promise<ToolDefinition[]> {
+  return (await mcpToolDefinitions()).map(({ function: definition, source, execute, readOnly }) => {
+    const verifiedRead = automatic && readOnly === true;
     const tool: ToolDefinition = {
       name: definition.name,
       label: definition.name,
       description: definition.description,
       parameters: definition.parameters as ToolDefinition['parameters'],
       async execute(_id, params, signal) {
-        const result = await execute(params, signal);
+        const result = verifiedRead
+          ? await execute(params, signal, true)
+          : await execute(params, signal);
         if (!result.ok)
           return {
             content: [{ type: 'text', text: result.error.message }],
@@ -393,7 +427,7 @@ async function mcpTools(approvalSession?: string): Promise<ToolDefinition[]> {
         };
       },
     };
-    return approvalSession
+    return approvalSession && !verifiedRead
       ? approveTool(
           tool,
           approvalSession,
@@ -406,10 +440,13 @@ async function mcpTools(approvalSession?: string): Promise<ToolDefinition[]> {
             { label: '工具', value: definition.name },
           ],
           undefined,
-          () => ({
-            keys: [`connector:${source.name}/${definition.name}`],
-            label: `调用 ${source.name} 的 ${definition.name}`,
-          }),
+          () =>
+            automatic
+              ? undefined
+              : {
+                  keys: [`connector:${source.name}/${definition.name}`],
+                  label: `调用 ${source.name} 的 ${definition.name}`,
+                },
         )
       : tool;
   });

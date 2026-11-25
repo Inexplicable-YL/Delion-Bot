@@ -45,6 +45,7 @@ vi.mock('../../../../src/core/capabilities/command-server', () => ({
 }));
 vi.mock('../../../../src/core/capabilities/tools', () => ({
   readDisabledTools: () => new Set<string>(),
+  setBuiltinCapabilities: () => {},
 }));
 vi.mock('../../../../src/core/remote/helper', async (original) => ({
   ...(await original<typeof import('../../../../src/core/remote/helper')>()),
@@ -57,6 +58,7 @@ vi.mock('../../../../src/core/remote/helper', async (original) => ({
 }));
 
 import { agentEnvironment } from '../../../../src/core/agent/environment';
+import { saveWebSearchEntry } from '../../../../src/core/capabilities/web-search';
 import { launchPlan, scopedDirectories } from '../../../../src/core/agent/sandbox/mode';
 import { referenceFilePath } from '../../../../src/modules/chat/main/reference-file';
 import { fileLinkKey } from '../../../../src/modules/chat/view/reference-tokens';
@@ -258,6 +260,182 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
   );
 });
 
+it('自动批准直接联网搜索和调用已分类的读取工具，非公开网络和未分类工具请求审批', async () => {
+  database();
+  const host = hostPorts();
+  const approveToolAction = vi.fn().mockResolvedValue({ approved: false });
+  const fetch = vi.fn(async () =>
+    Response.json({
+      results: [{ title: 'Result', url: 'https://page.example/', content: 'Text' }],
+    }),
+  );
+  vi.stubGlobal('fetch', fetch);
+  provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveToolAction } });
+  saveWebSearchEntry({ name: 'Search', provider: 'custom', url: 'https://search.example/' });
+  const execute = vi.fn().mockResolvedValue({
+    ok: true,
+    result: { text: 'read result' },
+    source: { name: 'Connector' },
+    links: [],
+  });
+  state.mcpDefinitions.mockResolvedValue(
+    ['read_item', 'update_item'].map((name) => ({
+      type: 'function',
+      function: { name, description: name, parameters: {} },
+      source: { name: 'Connector' },
+      readOnly: name === 'read_item',
+      execute,
+    })),
+  );
+  const id = insertSession(null);
+  writePermissionMode(id, 'auto-approval');
+  const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+    askCards: false,
+    sessionId: id,
+  });
+  const run = (name: string, input: unknown) =>
+    customTools
+      .find((tool) => tool.name === name)!
+      .execute('call', input, undefined, undefined, {} as never);
+  await expect(run('web_search', { query: 'Delion Bot' })).resolves.toMatchObject({
+    content: [{ text: expect.stringContaining('Result') }],
+  });
+  await expect(run('read_item', {})).resolves.toMatchObject({ content: [{ text: 'read result' }] });
+  expect(execute).toHaveBeenCalledExactlyOnceWith({}, undefined, true);
+  expect(approveToolAction).not.toHaveBeenCalled();
+  await expect(run('update_item', {})).resolves.toMatchObject({ isError: true });
+  await expect(run('web_fetch', { url: 'http://127.0.0.1/' })).rejects.toThrow('网络访问未获批准');
+  expect(approveToolAction).toHaveBeenCalledTimes(2);
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it.skipIf(
+  !existsSync(
+    join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
+  ),
+)('自动批准工作目录增改和只读命令，外部授权只能新建，删除需要审批', async () => {
+  database();
+  const host = hostPorts();
+  const external = mkdtempSync(join(realpathSync('.build'), 'auto-approval-'));
+  const existing = join(external, 'existing.txt');
+  const created = join(external, 'created.txt');
+  const competing = join(external, 'competing.txt');
+  writeFileSync(existing, 'original');
+  const grants = new Set<string>();
+  const approveToolAction = vi.fn<NonNullable<typeof host.desktop.approveToolAction>>(
+    async ({ grant, fields }) => {
+      const key = grant?.keys[0];
+      if (!key) return { approved: false };
+      if (fields[0]?.value === competing) writeFileSync(competing, 'concurrent');
+      grants.add(key);
+      return { approved: true };
+    },
+  );
+  const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: false });
+  provideTestHostPorts({
+    ...host,
+    desktop: { ...host.desktop, approveToolAction, approveSandboxCommand },
+  });
+  const id = insertSession(null);
+  writePermissionMode(id, 'auto-approval');
+  const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+    askCards: false,
+    sessionId: id,
+  });
+  const run = (name: string, input: unknown) =>
+    customTools
+      .find((tool) => tool.name === name)!
+      .execute('call', input, undefined, undefined, {} as never);
+  try {
+    await expect(
+      run('write', { path: '/share/a.txt', content: 'original' }),
+    ).resolves.toMatchObject({ content: [{ text: '/share/a.txt' }] });
+    await expect(
+      run('edit', { path: '/share/a.txt', oldText: 'original', newText: 'changed' }),
+    ).resolves.toMatchObject({ content: [{ text: '/share/a.txt' }] });
+    await expect(run('mkdir', { path: '/privacy/subfolder' })).resolves.toMatchObject({
+      content: [{ text: '/privacy/subfolder' }],
+    });
+    const command = process.platform === 'win32' ? 'type /share\\a.txt' : 'cat /share/a.txt';
+    await expect(run('sandbox_command', { command })).resolves.toMatchObject({
+      content: [{ text: 'changed' }],
+    });
+    expect(approveSandboxCommand).not.toHaveBeenCalled();
+    expect(approveToolAction).not.toHaveBeenCalled();
+    await expect(
+      run('sandbox_command', { command: `${command} > output.txt` }),
+    ).resolves.toMatchObject({ isError: true });
+    expect(approveSandboxCommand).toHaveBeenCalledOnce();
+    await expect(run('delete', { path: '/share/a.txt' })).resolves.toMatchObject({ isError: true });
+    expect(readFileSync(join(chatShareDirectory(id), 'a.txt'), 'utf8')).toBe('changed');
+    await expect(run('write', { path: existing, content: 'overwrite' })).resolves.toMatchObject({
+      isError: true,
+    });
+    await expect(run('write', { path: created, content: 'new' })).resolves.toMatchObject({
+      content: [{ text: created }],
+    });
+    await expect(run('write', { path: competing, content: 'overwrite' })).resolves.toMatchObject({
+      isError: true,
+    });
+    expect(grants.size).toBe(1);
+    expect(readFileSync(existing, 'utf8')).toBe('original');
+    expect(readFileSync(created, 'utf8')).toBe('new');
+    expect(readFileSync(competing, 'utf8')).toBe('concurrent');
+  } finally {
+    rmSync(external, { recursive: true, force: true });
+  }
+});
+
+it('自动批准允许 SSH 项目只读操作，写入和删除在批准前不会发给远端', async () => {
+  database();
+  const host = hostPorts();
+  const approveToolAction = vi.fn().mockResolvedValue({ approved: false });
+  provideTestHostPorts({
+    ...host,
+    desktop: { ...host.desktop, approveToolAction },
+    projects: {
+      ...host.projects,
+      remoteOf: () => ({
+        id: 'p1',
+        label: 'remote',
+        path: '/srv/project',
+        remoteId: 'ssh',
+        target: { host: 'user@remote' },
+      }),
+    },
+  });
+  const id = insertSession('p1');
+  const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
+    askCards: false,
+    sessionId: id,
+  });
+  state.scopedFile.mockResolvedValue({ entries: ['source.txt'] });
+  const run = (name: string, input: unknown) =>
+    customTools
+      .find((tool) => tool.name === name)!
+      .execute('call', input, undefined, undefined, {} as never);
+  await expect(run('ls', { path: '/project' })).resolves.toMatchObject({
+    content: [{ text: '["source.txt"]' }],
+  });
+  for (const name of ['write', 'edit', 'delete']) {
+    await expect(
+      run(name, {
+        path: '/project/source.txt',
+        content: 'after',
+        oldText: 'before',
+        newText: 'after',
+      }),
+    ).resolves.toMatchObject({ isError: true });
+  }
+  expect(approveToolAction).toHaveBeenCalledTimes(3);
+  expect(state.scopedFile).toHaveBeenCalledExactlyOnceWith(
+    '/srv/project',
+    expect.objectContaining({ action: 'ls' }),
+    expect.any(AbortSignal),
+  );
+});
+
 describe('受限普通对话', () => {
   it('默认受限，共享目录名不是会话 id，子会话共用父目录', async () => {
     database();
@@ -271,8 +449,8 @@ describe('受限普通对话', () => {
     const parentPlan = launchPlan(row(id));
     const childPlan = launchPlan(row(child));
     const parentRoots = scopedDirectories(row(id));
-    expect(parentPlan).toMatchObject({ mode: 'approval', piCwd: '/privacy' });
-    expect(childPlan.piCwd).toBe('/privacy');
+    expect(parentPlan).toMatchObject({ mode: 'auto-approval', piCwd: '/privacy' });
+    expect(childPlan).toMatchObject({ mode: 'auto-approval', piCwd: '/privacy' });
     expect(parentRoots[1]?.host).toBe(realpathSync(share));
     expect(scopedDirectories(row(child))).toEqual(parentRoots);
   });
@@ -313,20 +491,14 @@ describe('受限普通对话', () => {
     ).run(join(root, 'project'));
     mkdirSync(join(root, 'project'), { recursive: true });
     const projectId = insertSession('p1');
-    expect(launchPlan(row(projectId)).mode).toBe('project-write');
+    expect(launchPlan(row(projectId)).mode).toBe('auto-approval');
     const writable = await agentEnvironment().sessionOptions('p1', '/project', {
       askCards: false,
       sessionId: projectId,
     });
-    expect(writable.customTools.map((tool) => tool.name)).toEqual([
-      'read',
-      'ls',
-      'find',
-      'grep',
-      'write',
-      'edit',
-      ...commandTools,
-    ]);
+    expect(writable.customTools.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(['read', 'write', 'edit', 'delete', 'web_search', 'sandbox_command']),
+    );
     expect(scopedDirectories(row(projectId)).map(({ name }) => name)).toEqual(['/project']);
   });
 
@@ -375,6 +547,7 @@ describe('受限普通对话', () => {
         desktop: { ...host.desktop, approveToolAction },
       });
       const id = insertSession(null);
+      writePermissionMode(id, 'approval');
       const { customTools, appendSystemPrompt } = await agentEnvironment().sessionOptions(
         null,
         '/privacy',
@@ -441,6 +614,7 @@ describe('受限普通对话', () => {
     const host = hostPorts();
     provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
     const id = insertSession(null);
+    writePermissionMode(id, 'approval');
     const directory = mkdtempSync(join(root, 'approved command '));
     writeFileSync(join(directory, 'listed.txt'), '');
     const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
@@ -571,13 +745,14 @@ describe('受限普通对话', () => {
     !existsSync(
       join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
     ),
-  )('项目内修改可直接写入项目，无法访问普通聊天目录', async () => {
+  )('默认权限可直接写入本地项目，无法访问普通聊天目录', async () => {
     const approve = vi.fn().mockResolvedValue({ approved: false });
-    database(approve);
+    database();
+    const host = hostPorts();
+    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveToolAction: approve } });
     const project = join(root, 'project');
     mkdirSync(project, { recursive: true });
     const id = insertSession('p1');
-    writePermissionMode(id, 'project-write');
     const options = await agentEnvironment().sessionOptions('p1', '/project', {
       askCards: false,
       sessionId: id,

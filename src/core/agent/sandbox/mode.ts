@@ -31,9 +31,7 @@ export function ownerRow(meta: SessionRow): SessionRow {
 }
 
 export function executionMode(meta: SessionRow): ExecutionMode {
-  const owner = ownerRow(meta);
-  const mode = readPermissionMode(owner.id);
-  return mode === 'project-write' && !owner.project_id ? 'read-only' : mode;
+  return readPermissionMode(ownerRow(meta).id);
 }
 
 export function launchPlan(meta: SessionRow): LaunchPlan {
