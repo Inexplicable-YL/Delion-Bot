@@ -11,7 +11,7 @@ import { notifyRemoteChange } from '../../remote/events';
 import type { SessionRow } from '../session/store';
 import { localBash } from '../tasks';
 import { deniedMessage } from './approve-tool';
-import { commandNames } from './command-names';
+import { commandNames, readOnlyCommand } from './command-names';
 import { macosSandboxLauncher, runMacosCommand } from './macos-command';
 import { redactModelPaths } from './model-paths';
 import {
@@ -243,6 +243,8 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   if (!root) return null;
   const remote = root.remote;
   const windows = !remote && process.platform === 'win32';
+  const shell = windows ? 'cmd' : 'bash';
+  const virtualRoots = root.name === '/privacy' ? ['/privacy', '/share'] : [];
   const launcher = windows
     ? join(hostPorts().paths.bundled('scopedfs'), 'scopedfs.exe')
     : macosSandboxLauncher;
@@ -266,7 +268,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   return {
     name: 'sandbox_command',
     label: 'Sandbox command',
-    description: `${automatic ? 'Simple read-only commands and directory creation use the file broker. Use file tools for changes when possible. Other commands require approval. ' : ''}${runtime}${chatPaths} Input copies are available as inputs/1, inputs/2, and so on, in the order supplied. Use stdout for results.`,
+    description: `${automatic ? 'Simple read-only commands with relative paths, such as ls, cat, head, grep, find and wc, and directory creation run without approval. Use file tools for changes when possible. Other commands require approval. ' : ''}${runtime}${chatPaths} Input copies are available as inputs/1, inputs/2, and so on, in the order supplied. Use stdout for results.`,
     parameters: {
       type: 'object',
       properties: {
@@ -297,8 +299,8 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
             return tool.execute(id, { ...operation.params, path }, cancellation, onUpdate, context);
         }
       }
-      if (approvalMode) {
-        const names = mode === 'approval' && commandNames(command, windows ? 'cmd' : 'bash');
+      if (approvalMode && !(automatic && readOnlyCommand(command, shell, virtualRoots))) {
+        const names = commandNames(command, shell);
         const approval = await hostPorts().desktop.approveSandboxCommand?.({
           session,
           command,

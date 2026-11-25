@@ -515,6 +515,7 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
             ...(params.oldText === undefined ? [] : [{ label: '替换前', value: params.oldText }]),
             ...(content === undefined ? [] : [{ label: '内容', value: content }]),
           ],
+          ...(action !== 'delete' && { grant: { keys: ['file-change'], label: '修改文件' } }),
           signal: cancellation,
         });
         if (!approval?.approved || cancellation.aborted)

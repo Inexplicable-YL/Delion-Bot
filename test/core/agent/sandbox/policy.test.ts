@@ -203,6 +203,50 @@ it('远程命令获批后以 SSH 账户权限运行并接收项目文件副本',
   expect(state.scopedCommand).not.toHaveBeenCalled();
 });
 
+it('自动批准直接运行只读命令，其他命令可按子命令始终允许', async () => {
+  database();
+  const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: false });
+  const host = hostPorts();
+  provideTestHostPorts({
+    ...host,
+    desktop: { ...host.desktop, approveSandboxCommand },
+    projects: {
+      ...host.projects,
+      remoteOf: () => ({
+        id: 'p1',
+        label: 'remote',
+        path: '/srv/project',
+        remoteId: 'ssh',
+        target: { host: 'user@remote' },
+      }),
+    },
+  });
+  state.remoteExec.mockImplementation(async (_command, { onData }) => {
+    onData(Buffer.from('src/a.ts:1:TODO'));
+    return { code: 0, state: 'exited', lost: 0 };
+  });
+  const id = insertSession('p1');
+  writePermissionMode(id, 'auto-approval');
+  const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
+    askCards: false,
+    sessionId: id,
+  });
+  const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
+  const execute = (command: string) =>
+    tool.execute('call', { command }, undefined, undefined, {} as never);
+  expect(await execute('grep -rn TODO src | head -n 5')).toMatchObject({
+    content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO' }) }],
+  });
+  expect(approveSandboxCommand).not.toHaveBeenCalled();
+  expect(await execute('pnpm test')).toMatchObject({ isError: true });
+  expect(approveSandboxCommand).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      grant: { keys: ['host-command:pnpm test'], label: '运行 pnpm test 命令' },
+    }),
+  );
+  expect(state.remoteExec).toHaveBeenCalledOnce();
+});
+
 it('请求批准提供联网和连接器，拒绝和取消均不调用连接器', async () => {
   database();
   const host = hostPorts();
