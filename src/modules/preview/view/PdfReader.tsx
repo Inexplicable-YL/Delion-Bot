@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import {
   AnnotationMode,
   getDocument,
@@ -9,16 +9,19 @@ import {
 import { EventBus, PDFViewer } from 'pdfjs-dist/web/pdf_viewer.mjs';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import {
-  ArrowsRightLeftIcon as MoveHorizontal,
   ChevronLeftIcon as ChevronLeft,
   ChevronRightIcon as ChevronRight,
-  MinusIcon as Minus,
-  PlusIcon as Plus,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../../ui/Button';
+import {
+  DocumentToolbarButton,
+  DocumentToolbarDivider,
+  DocumentZoomControls,
+} from '../../../ui/DocumentToolbar';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import { ErrorText } from '../../../ui/Alert';
 import { errorMessage } from '../../../core/protocol/contract';
+import { fitPageScale } from './page-fit';
+import { wheelZoomFactor } from './use-pinch-zoom';
 
 declare const __PDF_ASSET_DIR__: string;
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -29,12 +32,18 @@ export function PdfReader({
   url,
   initialScroll,
   onScroll,
+  toolbar,
 }: {
   url: string;
   initialScroll: () => number;
   onScroll?: (top: number) => void;
+  toolbar: (controls: ReactNode) => ReactNode;
 }) {
-  const viewer = useRef<PDFViewer | null>(null);
+  const viewer = useRef<{
+    instance: PDFViewer;
+    fit: () => void;
+    release: () => void;
+  } | null>(null);
   const [position] = useState(() => {
     let top = initialScroll();
     return {
@@ -48,7 +57,7 @@ export function PdfReader({
   const [attempt, setAttempt] = useState(0);
   const [pageCount, setPageCount] = useState(0);
   const [current, setCurrent] = useState(1);
-  const [pageInput, setPageInput] = useState('1');
+  const [pageDraft, setPageDraft] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const attachViewer = (pages: HTMLDivElement | null) => {
     if (!pages) return;
@@ -69,7 +78,22 @@ export function PdfReader({
       abortSignal: lifecycle.signal,
     };
     const instance = new PDFViewer(options);
-    viewer.current = instance;
+    let fitting = true;
+    const fit = () => {
+      const page = instance.getPageView(0);
+      if (page)
+        instance.currentScale = fitPageScale(element.clientWidth, page.viewport.width / page.scale);
+    };
+    viewer.current = {
+      instance,
+      fit: () => {
+        fitting = true;
+        fit();
+      },
+      release: () => {
+        fitting = false;
+      },
+    };
     let task: PDFDocumentLoadingTask | undefined;
     const fail = (error: unknown) => {
       if (controller.signal.aborted) return;
@@ -95,7 +119,7 @@ export function PdfReader({
     };
     eventBus.on('pagesinit', () => {
       if (controller.signal.aborted) return;
-      instance.currentScaleValue = 'page-width';
+      fit();
       const index = Math.min(instance.pagesCount - 1, Math.floor(position.read()));
       instance.currentPageNumber = index + 1;
       const page = instance.getPageView(index).div;
@@ -106,7 +130,6 @@ export function PdfReader({
     });
     eventBus.on('pagechanging', ({ pageNumber }: { pageNumber: number }) => {
       setCurrent(pageNumber);
-      setPageInput(String(pageNumber));
     });
     eventBus.on('scalechanging', ({ scale }: { scale: number }) => setZoom(scale));
     eventBus.on('updateviewarea', savePosition);
@@ -115,19 +138,18 @@ export function PdfReader({
     });
     const resize = new ResizeObserver(() => {
       if (!initialized) return;
-      if (instance.currentScaleValue === 'page-width') instance.currentScaleValue = 'page-width';
+      if (fitting) fit();
       instance.update();
     });
     resize.observe(element);
     const wheel = (event: WheelEvent) => {
       if (!event.ctrlKey || !initialized) return;
       event.preventDefault();
+      fitting = false;
       instance.update();
       const bounds = element.getBoundingClientRect();
       instance.updateScale({
-        ...(event.deltaMode === WheelEvent.DOM_DELTA_PIXEL
-          ? { scaleFactor: Math.exp(-event.deltaY / 100) }
-          : { steps: -Math.sign(event.deltaY) }),
+        scaleFactor: wheelZoomFactor(event),
         drawingDelay: DRAWING_DELAY,
         origin: [
           event.clientX - bounds.left + element.offsetLeft,
@@ -190,85 +212,83 @@ export function PdfReader({
   };
   const go = (page: number) => {
     if (viewer.current && Number.isFinite(page) && pageCount)
-      viewer.current.currentPageNumber = Math.min(pageCount, Math.max(1, Math.trunc(page)));
+      viewer.current.instance.currentPageNumber = Math.min(
+        pageCount,
+        Math.max(1, Math.trunc(page)),
+      );
+  };
+  const rescale = (change: (instance: PDFViewer) => void) => {
+    if (!viewer.current) return;
+    viewer.current.release();
+    change(viewer.current.instance);
   };
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center justify-center-safe gap-2 overflow-x-auto border-b px-3 py-1 text-ui-subhead">
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label="上一页"
-          disabled={!pageCount || current === 1}
-          onClick={() => go(current - 1)}
-        >
-          <ChevronLeft />
-        </Button>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            go(Number(pageInput));
-          }}
-        >
-          <input
-            aria-label="PDF 页码"
-            className="w-12 rounded border border-line bg-surface px-1 text-center"
-            value={pageInput}
-            onChange={(e) => setPageInput(e.target.value)}
+      {toolbar(
+        <>
+          <DocumentToolbarButton
+            label="上一页"
+            disabled={!pageCount || current === 1}
+            onClick={() => go(current - 1)}
+          >
+            <ChevronLeft />
+          </DocumentToolbarButton>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              go(Number(pageDraft));
+              e.currentTarget.querySelector('input')?.blur();
+            }}
+          >
+            <label className="group flex h-6 min-w-14 cursor-text items-center justify-center gap-1 rounded-pill bg-surface px-2.5 tabular-nums shadow-hairline focus-within:shadow-focus">
+              <input
+                aria-label="PDF 页码"
+                className="min-w-2 bg-transparent text-center text-ink outline-none [field-sizing:content]"
+                inputMode="numeric"
+                value={pageDraft ?? String(current)}
+                onChange={(e) => setPageDraft(e.target.value)}
+                onFocus={(e) => {
+                  setPageDraft(String(current));
+                  e.currentTarget.select();
+                }}
+                onBlur={() => setPageDraft(null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') e.currentTarget.blur();
+                }}
+              />
+              <span aria-hidden className="text-ink group-focus-within:hidden">
+                / {pageCount || '…'}
+              </span>
+            </label>
+          </form>
+          <DocumentToolbarButton
+            label="下一页"
+            disabled={!pageCount || current === pageCount}
+            onClick={() => go(current + 1)}
+          >
+            <ChevronRight />
+          </DocumentToolbarButton>
+          <DocumentToolbarDivider />
+          <DocumentZoomControls
+            zoom={zoom}
+            disabled={!pageCount}
+            zoomOutLabel="缩小 PDF"
+            zoomInLabel="放大 PDF"
+            onZoomOut={() =>
+              rescale((instance) => instance.decreaseScale({ drawingDelay: DRAWING_DELAY }))
+            }
+            onZoomIn={() =>
+              rescale((instance) => instance.increaseScale({ drawingDelay: DRAWING_DELAY }))
+            }
+            onReset={() =>
+              rescale((instance) => {
+                instance.currentScaleValue = '1';
+              })
+            }
+            onFit={() => viewer.current?.fit()}
           />
-          <span className="ml-2 text-ink-2">/ {pageCount || '…'}</span>
-        </form>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label="下一页"
-          disabled={!pageCount || current === pageCount}
-          onClick={() => go(current + 1)}
-        >
-          <ChevronRight />
-        </Button>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label="缩小 PDF"
-          disabled={!pageCount}
-          onClick={() => viewer.current?.decreaseScale({ drawingDelay: DRAWING_DELAY })}
-        >
-          <Minus />
-        </Button>
-        <button
-          title="重置缩放到 100%"
-          aria-label="重置缩放到 100%"
-          disabled={!pageCount}
-          className="rounded-control px-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          onClick={() => {
-            if (viewer.current) viewer.current.currentScaleValue = '1';
-          }}
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          title="适合宽度"
-          aria-label="适合宽度"
-          disabled={!pageCount}
-          onClick={() => {
-            if (viewer.current) viewer.current.currentScaleValue = 'page-width';
-          }}
-        >
-          <MoveHorizontal />
-        </Button>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label="放大 PDF"
-          disabled={!pageCount}
-          onClick={() => viewer.current?.increaseScale({ drawingDelay: DRAWING_DELAY })}
-        >
-          <Plus />
-        </Button>
-      </div>
+        </>,
+      )}
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-0 overflow-auto overscroll-contain [overflow-anchor:none] [scrollbar-gutter:stable]">
           <div

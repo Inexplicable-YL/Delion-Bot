@@ -1,9 +1,9 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { Button } from '../../../ui/Button';
 import { Card } from '../../../ui/Card';
-import { DocumentToolbar } from '../../../ui/DocumentToolbar';
+import { DocumentToolbar, type DocumentMode } from '../../../ui/DocumentToolbar';
 import { useRootFontSize } from '../../../ui/root-font-size';
 import { sanitizeHtml, sanitizeHtmlWithAssets } from './sanitize-html';
 import { showToast } from '../../../ui/Toast';
@@ -122,7 +122,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
     );
 
   const branch = previewBranchOf(doc);
-  const path = branch === 'html' && entryId ? workspaceEntryPath(entries, entryId) : [];
+  const path = entryId ? workspaceEntryPath(entries, entryId) : [];
   const openInFolder =
     entryId && !parseRemoteNodeId(entryId)
       ? () => {
@@ -144,6 +144,22 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
     load();
     loader.onExported?.(tabId);
   };
+  const toolbar = (controls?: ReactNode) => (
+    <DocumentToolbar
+      path={path.length ? path : [content.title]}
+      {...(branch === 'html' && {
+        mode: htmlMode,
+        onModeChange: (mode: DocumentMode) => useHtmlPreviewModes.setState({ [tabId]: mode }),
+        previewLabel: '返回安全预览',
+      })}
+      onOpenInFolder={openInFolder}
+      onReload={load}
+      controls={controls}
+    />
+  );
+  const viewerOwnsToolbar =
+    ((branch === 'pdf' || branch === 'docx' || branch === 'xlsx') && !!content.previewUrl) ||
+    (branch === 'pptx' && !!exported?.previewUrl);
 
   return (
     <section
@@ -159,16 +175,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
           sourceId={doc.source!.id}
         />
       )}
-      {branch === 'html' && (
-        <DocumentToolbar
-          path={path.length ? path : [content.title]}
-          mode={htmlMode}
-          onModeChange={(mode) => useHtmlPreviewModes.setState({ [tabId]: mode })}
-          previewLabel="返回安全预览"
-          onOpenInFolder={openInFolder}
-          onReload={load}
-        />
-      )}
+      {branch !== 'source' && !viewerOwnsToolbar && toolbar()}
       {branch === 'html' && htmlMode === 'source' && (
         <CodeViewer
           value={content.text ?? ''}
@@ -213,6 +220,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
               url={content.previewUrl}
               initialScroll={initialScroll}
               onScroll={onScroll}
+              toolbar={toolbar}
             />
           </Suspense>
         ) : (
@@ -230,9 +238,9 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
         (content.previewUrl ? (
           <Suspense fallback={<p className="p-4 text-ui-body text-ink-2">正在加载预览…</p>}>
             {branch === 'docx' ? (
-              <DocxPreview key={content.previewUrl} url={content.previewUrl} />
+              <DocxPreview key={content.previewUrl} url={content.previewUrl} toolbar={toolbar} />
             ) : (
-              <SheetPreview key={content.previewUrl} url={content.previewUrl} />
+              <SheetPreview key={content.previewUrl} url={content.previewUrl} toolbar={toolbar} />
             )}
           </Suspense>
         ) : (
@@ -240,13 +248,6 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
         ))}
       {branch === 'pptx' && (
         <div className="flex min-h-0 flex-1 flex-col">
-          {exported && (
-            <OfficeExportBanner
-              exported={exported}
-              officeRef={doc.officeRef}
-              onExported={onOfficeRefresh}
-            />
-          )}
           {exported?.previewUrl ? (
             <Suspense fallback={<p className="p-4 text-ui-body text-ink-2">正在加载阅读器…</p>}>
               <PdfReader
@@ -254,6 +255,16 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
                 url={exported.previewUrl}
                 initialScroll={initialScroll}
                 onScroll={onScroll}
+                toolbar={(controls) => (
+                  <>
+                    {toolbar(controls)}
+                    <OfficeExportBanner
+                      exported={exported}
+                      officeRef={doc.officeRef}
+                      onExported={onOfficeRefresh}
+                    />
+                  </>
+                )}
               />
             </Suspense>
           ) : (

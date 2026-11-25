@@ -1,8 +1,8 @@
-import { MinusIcon as Minus, PlusIcon as Plus } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { Button } from '../../../ui/Button';
+import { DocumentZoomControls } from '../../../ui/DocumentToolbar';
 import { pinchZoomRef } from './use-pinch-zoom';
 import { ErrorText } from '../../../ui/Alert';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -49,7 +49,13 @@ function sheetTruncated(sheet: XLSX.WorkSheet): boolean {
   return !!range && range.e.r + 1 >= SHEET_ROW_LIMIT;
 }
 
-export function SheetPreview({ url }: { url: string }) {
+export function SheetPreview({
+  url,
+  toolbar,
+}: {
+  url: string;
+  toolbar: (controls: ReactNode) => ReactNode;
+}) {
   const [active, setActive] = useState(0);
   const [zoom, setZoom] = useState(1);
   const workbook = useQuery({
@@ -77,25 +83,19 @@ export function SheetPreview({ url }: { url: string }) {
   const current = sheets[active];
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center justify-center-safe gap-2 overflow-x-auto border-b px-3 py-1 text-ui-subhead">
-        <Button size="icon-sm" variant="ghost" aria-label="缩小表格" onClick={() => step(-1)}>
-          <Minus />
-        </Button>
-        <button
-          title="重置缩放到 100%"
-          aria-label="重置缩放到 100%"
-          className="rounded-control px-2 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          onClick={() => setZoom(1)}
-        >
-          {Math.round(zoom * 100)}%
-        </button>
-        <Button size="icon-sm" variant="ghost" aria-label="放大表格" onClick={() => step(1)}>
-          <Plus />
-        </Button>
-      </div>
+      {toolbar(
+        <DocumentZoomControls
+          zoom={zoom}
+          zoomOutLabel="缩小表格"
+          zoomInLabel="放大表格"
+          onZoomOut={() => step(-1)}
+          onZoomIn={() => step(1)}
+          onReset={() => setZoom(1)}
+        />,
+      )}
       <div className="relative min-h-0 flex-1">
         <div
-          ref={pinchZoomRef(setZoom, MIN_ZOOM, MAX_ZOOM, ZOOM_STEP)}
+          ref={pinchZoomRef(setZoom, MIN_ZOOM, MAX_ZOOM)}
           className="absolute inset-0 overflow-auto overscroll-contain [overflow-anchor:none] [scrollbar-gutter:stable]"
         >
           {loaded && !sheets.length && (
