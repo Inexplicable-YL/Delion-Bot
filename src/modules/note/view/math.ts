@@ -47,11 +47,15 @@ function wrapCjk(tex: string): string {
   return result + tex.slice(last).replace(cjkRun, (run) => `\\text{${run}}`);
 }
 
-export function renderMath(tex: string, display: boolean): string {
+export function renderMath(
+  tex: string,
+  display: boolean,
+  output: 'html' | 'mathml' = 'html',
+): string {
   return katex.renderToString(wrapCjk(tex), {
     displayMode: display,
     throwOnError: false,
     strict: 'ignore',
-    output: 'html',
+    output,
   });
 }

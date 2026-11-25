@@ -7,6 +7,7 @@ import { useWorkspaceStore, workspaceClient, workspaceEntryPath } from '../../wo
 import { DocumentToolbar } from '../../../ui/DocumentToolbar';
 import { useNoteDraftSource } from './DraftSource';
 import { MarkdownEditor } from './MarkdownEditor';
+import { ExportMenu } from './ExportMenu';
 import {
   noteScrollOf,
   rememberNoteMode,
@@ -155,6 +156,15 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
         dirty={dirty}
         failed={draft.error !== null || error !== null}
         onOpenInFolder={parseRemoteNodeId(entryId) ? undefined : openInFolder}
+        actions={
+          markdown && mode === 'live' ? (
+            <ExportMenu
+              filename={draft.content.title}
+              text={draft.text}
+              resolveImage={(src) => source.resolveImage(entryId, src)}
+            />
+          ) : undefined
+        }
         onReload={() => {
           if (dirty) setConfirmReload(true);
           else runReload();

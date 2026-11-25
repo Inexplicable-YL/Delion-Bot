@@ -4,6 +4,7 @@ import type { Contract } from '../core/protocol/contract';
 import { llmContract } from '../core/protocol/llm';
 import { chatContract } from '../modules/chat/contract';
 import { connectorsContract } from '../modules/connectors/contract';
+import { noteContract } from '../modules/note/contract';
 import { notificationsContract } from '../modules/notifications/contract';
 import { onboardingContract } from '../modules/onboarding/contract';
 import { remotesContract } from '../modules/remotes/contract';
@@ -19,6 +20,7 @@ export const contracts: Contract[] = [
   llmContract,
   capabilitiesContract,
   workspaceContract,
+  noteContract,
   remotesContract,
   terminalContract,
   chatContract,

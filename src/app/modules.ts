@@ -1,6 +1,7 @@
 import type { ModuleDefinition } from './module';
 import { chatModule } from '../modules/chat';
 import { connectorsModule } from '../modules/connectors';
+import { noteModule } from '../modules/note';
 import { notificationsModule } from '../modules/notifications';
 import { onboardingModule } from '../modules/onboarding';
 import { previewModule } from '../modules/preview';
@@ -15,6 +16,7 @@ import { workspaceModule } from '../modules/workspace';
 export const modules: ModuleDefinition[] = [
   workspaceModule,
   previewModule,
+  noteModule,
   remotesModule,
   terminalModule,
   chatModule,
