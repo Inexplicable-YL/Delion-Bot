@@ -33,9 +33,11 @@ export async function fetchWebPage(
   {
     approve,
     signal,
+    fetchPage = fetch,
   }: {
     approve?: (url: string, service?: 'DeepSeek') => Promise<boolean>;
     signal?: AbortSignal;
+    fetchPage?: (url: URL, options: RequestInit) => Promise<Response>;
   } = {},
 ): Promise<WebPageContent> {
   const fetchedAt = new Date().toISOString();
@@ -84,7 +86,7 @@ export async function fetchWebPage(
   for (let hop = 0; ; hop += 1) {
     await authorize(url);
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-    response = await fetch(url, {
+    response = await fetchPage(url, {
       credentials: 'omit',
       redirect: 'manual',
       headers: {
