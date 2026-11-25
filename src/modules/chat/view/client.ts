@@ -18,6 +18,12 @@ export function onPermissionRequestsChanged(
   return subscribe(chatContract, bridge, 'permissionRequestsChanged', listener);
 }
 
+export function onPermissionRequestOpened(
+  listener: (payload: EventPayload<typeof chatContract, 'permissionRequestOpened'>) => void,
+) {
+  return subscribe(chatContract, bridge, 'permissionRequestOpened', listener);
+}
+
 export function onCompactionChanged(
   listener: (payload: EventPayload<typeof chatContract, 'compactionChanged'>) => void,
 ) {

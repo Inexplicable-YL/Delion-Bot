@@ -33,7 +33,7 @@ export function showSystemNotice(
   hostPorts().notifier.show(title, body, () => emit(notificationsContract, 'open', { id, target }));
 }
 
-export function systemNotifyToast(title: string, body: string): void {
+export function systemNotifyToast(title: string, body: string, onClick?: () => void): void {
   if (!armed || snoozed()) return;
-  hostPorts().notifier.show(title, body);
+  hostPorts().notifier.show(title, body, onClick);
 }

@@ -11,7 +11,13 @@ import type { SearchHit } from '../../../modules/search/contract';
 import type { NavTarget, PageDrawer } from '../../module';
 import { pageOf, views } from '../../views';
 import type { NavSessionSummary } from '../navigation/ProjectSessionNav';
-import { useSessions, updateSession, onAgentEvent } from '../../../modules/chat/view';
+import {
+  onAgentEvent,
+  onPermissionRequestOpened,
+  PermissionNotices,
+  updateSession,
+  useSessions,
+} from '../../../modules/chat/view';
 import { closeTabEverywhere, useWorkbenchLayout } from '../workbench/layout-store';
 import { walkGroups } from '../workbench/layout-schema';
 import { importFromDialog } from '../workspace/entry-actions';
@@ -102,6 +108,9 @@ export function connectAppEvents() {
       event.preventDefault();
   };
   window.addEventListener('beforeunload', beforeUnload);
+  onPermissionRequestOpened(({ sessionId, projectId }) =>
+    useNavigationStore.getState().openChat(sessionId, projectId),
+  );
   window.delionBot?.window.onTrayAction((action) => {
     const navigation = useNavigationStore.getState();
     if (action === 'new-chat') navigation.openGeneralChat(true);
@@ -272,6 +281,14 @@ export default function App() {
         />
       )}
       {appVisible && <RestoreDialog />}
+      {appVisible && (
+        <PermissionNotices
+          activeSessionId={activeSessionId}
+          onOpen={(sessionId, projectId) =>
+            void useNavigationStore.getState().openChat(sessionId, projectId)
+          }
+        />
+      )}
       {onboarding.data && !appVisible && (
         <OnboardingFlow views={views} onWizardDone={() => setWizardFinished(true)} />
       )}
