@@ -38,7 +38,7 @@ const ask = (sessionId: string, keys: string[]) =>
 
 describe('审批请求', () => {
   it('只接受所属会话对同一条请求的一次决定', async () => {
-    const sessionId = randomUUID();
+    const sessionId = session(null);
     const requested = requestChatPermission(
       sessionId,
       { kind: 'full', title: 'Approve', fields: [] },
@@ -55,7 +55,7 @@ describe('审批请求', () => {
   });
 
   it('取消操作后立即撤回审批', async () => {
-    const sessionId = randomUUID();
+    const sessionId = session(null);
     const cancellation = new AbortController();
     const requested = requestChatPermission(
       sessionId,

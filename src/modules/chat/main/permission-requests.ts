@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { row } from '../../../core/agent/session/store';
 import { emit, hostPorts, type Approval, type ApprovalGrant } from '../../../core/ports';
+import { systemNotifyToast } from '../../notifications';
 import { chatContract, type PermissionRequest } from '../contract';
 
 type Decision = { decision: 'once' | 'always' | 'deny'; note?: string };
@@ -78,6 +79,7 @@ export function requestChatPermission(
     (projectId ? { scope: 'project', id: projectId } : { scope: 'session', id: sessionId });
   if (grant && target && covers(target, grant.keys)) return Promise.resolve({ approved: true });
   const id = randomUUID();
+  const waiting = permissionRequests(sessionId).length > 0;
   return new Promise((resolve) => {
     const notify = () =>
       emit(chatContract, 'permissionRequestsChanged', {
@@ -108,5 +110,13 @@ export function requestChatPermission(
     });
     signal.addEventListener('abort', abort, { once: true });
     notify();
+    if (waiting) return;
+    const session = row(sessionId);
+    systemNotifyToast('需要你的审批', `${session.title} · ${request.title}`, () =>
+      emit(chatContract, 'permissionRequestOpened', {
+        sessionId,
+        projectId: session.project_id,
+      }),
+    );
   });
 }

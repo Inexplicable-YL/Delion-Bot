@@ -154,6 +154,7 @@ const procedures = {
 
 export const chatContract = defineContract('chat', procedures, {
   permissionRequestsChanged: z.object({ sessionId, requests: z.array(permissionRequest) }),
+  permissionRequestOpened: z.object({ sessionId, projectId: projectId.nullable() }),
   compactionChanged: compactionTranscript.extend({ sessionId }),
   compactionStream: z.object({ sessionId, entryId: z.string(), message: chatMessageSchema }),
 });

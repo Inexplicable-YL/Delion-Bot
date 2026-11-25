@@ -6,6 +6,7 @@ export {
   chatClient,
   llmClient,
   onAgentEvent,
+  onPermissionRequestOpened,
   onWebSearchChanged,
 } from './client';
 export { ArchivedSection } from './ArchivedSection';
@@ -19,6 +20,7 @@ export {
 } from './ChatSource';
 export { registerChatAttachmentCheck, saveChatDrafts, useChatDrafts } from './drafts';
 export { referenceEntryCandidates } from './reference-tokens';
+export { PermissionNotices } from './PermissionNotices';
 export { ProjectChanges, ProjectChangeTabStatus } from './review/ProjectChanges';
 export { reviewTabTitle } from './review/tab-id';
 export { runBadge, useRuns, useSessionRunStatus } from './runs';
