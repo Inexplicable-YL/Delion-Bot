@@ -261,18 +261,7 @@ async function approvalTools(meta: ReturnType<typeof row>, session: string, auto
   return [
     scopedSkillTool(meta),
     ...(download
-      ? [
-          automatic && !remote
-            ? download
-            : approveTool(
-                download,
-                session,
-                '下载文件',
-                undefined,
-                undefined,
-                automatic ? () => undefined : undefined,
-              ),
-        ]
+      ? [automatic && !remote ? download : approveTool(download, session, '下载文件')]
       : []),
     automatic ? webSearchTool : approveTool(webSearchTool, session, '联网搜索'),
     webFetchTool(session, automatic),
@@ -295,7 +284,6 @@ async function approvalTools(meta: ReturnType<typeof row>, session: string, auto
               );
             },
             (input) => {
-              if (automatic) return undefined;
               const { command } = input as { command: string };
               return { keys: [`delion:${command}`], label: `运行 Delion 操作 ${command}` };
             },
