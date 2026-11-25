@@ -192,6 +192,7 @@ export function localBash(
   cwd: string,
   shell: ReturnType<typeof getShellConfig> & { windowsVerbatimArguments?: boolean },
   commandPrefix: string | undefined,
+  env?: NodeJS.ProcessEnv,
 ): BashRunner {
   return (command, { signal, timeout, onData }) => {
     if (signal.aborted) return Promise.resolve({ status: 'stopped' });
@@ -204,6 +205,7 @@ export function localBash(
       stdio: [fromStdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
       windowsHide: true,
       windowsVerbatimArguments: shell.windowsVerbatimArguments,
+      env,
     });
     if (fromStdin) {
       child.stdin?.on('error', () => {});

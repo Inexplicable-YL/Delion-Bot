@@ -26,7 +26,7 @@ import { fetchWebPage } from '../capabilities/web-fetch';
 import { fetchPublicWebPage } from '../capabilities/public-web-fetch';
 import { remoteTools } from './remote-tools';
 import { sessionTools } from './session-read';
-import { executionMode, ownerRow, scopedDirectories } from './sandbox/mode';
+import { executionMode, ownerRow, scopedDirectories, type ExecutionMode } from './sandbox/mode';
 import { virtualizeModelPaths } from './sandbox/model-paths';
 import { approveNonPublicRead, approveTool, deniedMessage } from './sandbox/approve-tool';
 import { downloadTool, scopedFileTools } from './sandbox/scoped-files';
@@ -96,28 +96,6 @@ This session is connected to a remote Linux host.
 - The read, write, edit, bash, grep, find, and ls tools run on that host. Pass absolute remote paths for path arguments, such as /root/proj/src/main.ts. Do not use Windows paths.
 - The remote host has no delion command or access to local workspace files or notes. Inspect the remote environment with commands such as uname, git status, or ls.`;
 
-const ASK_CARD_PROMPT = `## Ask cards
-When progress requires the user to choose among clear options, end your reply with one \`ask\` code block and wait for the answer. Use the reply language for questions, options, and descriptions.
-Start each group with one question followed by 2 to 4 concise options. Write each option as \`- Option | Short description\`. The description is optional and appears only on hover, so make the option understandable on its own. Put all groups in the same block and separate them with a blank line.
-A group is single-choice by default, and its options must be mutually exclusive. If the user may pick several options, end the question line with \`[multi]\`.
-The app adds option letters and a free-text Other option. Omit them from the block. The app sends confirmed answers as the next message. If the user skips a question, use your judgment. Use an ask card only when you cannot reasonably decide on your own.
-
-Example:
-\`\`\`ask
-Which database should we use?
-- PostgreSQL | Supports complex queries
-- SQLite | A single file with no setup
-
-Should users sign in?
-- Require sign-in
-- Allow access without sign-in
-
-Which platforms should we support? [multi]
-- Web
-- iOS
-- Android
-\`\`\``;
-
 const BUILTIN_TOOL_NAMES = ['read', 'write', 'edit', 'bash', 'grep', 'find', 'ls'];
 
 export function agentEnvironment() {
@@ -125,7 +103,7 @@ export function agentEnvironment() {
     async sessionOptions(
       projectId: string | null,
       cwd: string,
-      { askCards, sessionId }: { askCards: boolean; sessionId: string },
+      { sessionId }: { sessionId: string },
     ): Promise<Omit<OpenSessionInput, 'cwd' | 'file' | 'selection'>> {
       const instruction = getAgentInstruction();
       const meta = row(sessionId);
@@ -134,20 +112,20 @@ export function agentEnvironment() {
         const automatic = mode === 'auto-approval';
         const owner = ownerRow(meta);
         const tools = scopedFileTools(meta);
-        const command =
-          automatic || mode === 'approval' || tools.length ? sandboxCommandTool(meta) : null;
-        const approval =
-          automatic || mode === 'approval' ? await approvalTools(meta, owner.id, automatic) : null;
+        const command = sandboxCommandTool(meta);
+        const capabilities = await restrictedTools(meta, owner.id, mode);
         const files =
           tools.length === 0
             ? 'Files are unavailable under the current permissions.'
             : owner.project_id
               ? 'Working directory: /project. Use /project paths for files in the current project.'
-              : 'Working directory: /privacy. Keep intermediate files in /privacy and finished files in /share. Look in /share first for files the user provides.';
+              : mode === 'read-only'
+                ? 'Working directory: /privacy. Read existing files from /privacy and /share. Look in /share first for files the user provides.'
+                : 'Working directory: /privacy. Keep intermediate files in /privacy and finished files in /share. Look in /share first for files the user provides.';
         const access = automatic
           ? 'Mode: automatic approval. Use read, ls, web_search, and web_fetch for reads. Use the file tools for changes so the app can check the target and operation. Local chat and project files can be created or edited. External creation requires directory permission. Deletions, SSH writes, and commands the app cannot verify as read-only require approval.'
           : mode === 'read-only'
-            ? 'Mode: read-only.'
+            ? 'Mode: read-only. Use file tools, sandbox_command, web search and fetch, read-only connectors, and read_skill to gather information. Commands and app operations must have verified read-only effects. File writes, downloads to disk, and other changes are disabled.'
             : 'Mode: request approval. The app asks the user to approve writes, external requests, and tool calls whose effects may change data. Use sandbox_command for shell operations. Each approved command runs with the current execution account permissions, including file writes, subprocesses, and network. Use download_file to save an original binary to an allowed directory. Use read_skill to load an enabled skill. Use the delion tool for Delion app commands when it is available.';
         return {
           appendSystemPrompt: [
@@ -157,7 +135,6 @@ export function agentEnvironment() {
               ? 'Use read or ls with an absolute local path to access ordinary local files outside the chat directories. Protected paths are excluded.'
               : '',
             access,
-            askCards ? ASK_CARD_PROMPT : '',
             instruction ? `## Additional user instructions\n${instruction}` : '',
           ].filter(Boolean),
           restricted: true,
@@ -167,7 +144,7 @@ export function agentEnvironment() {
           globalSkillDirs: [],
           disabledSkills: new Set(),
           disabledTools: [...readDisabledTools()],
-          customTools: [...tools, ...(command ? [command] : []), ...(approval ?? [])],
+          customTools: [...tools, ...(command ? [command] : []), ...capabilities],
         };
       }
       const project = projectContext(projectId, cwd);
@@ -175,7 +152,6 @@ export function agentEnvironment() {
       ensureBuiltinSkills();
       const remote = projectId ? hostPorts().projects.remoteOf(projectId) : null;
       const shared = [
-        askCards && ASK_CARD_PROMPT,
         project,
         instruction && `## Additional user instructions\n${instruction}`,
         saved?.instruction && `## User instructions for this project\n${saved.instruction}`,
@@ -261,40 +237,46 @@ const text = (value: unknown) => ({
   details: undefined,
 });
 
-async function approvalTools(meta: ReturnType<typeof row>, session: string, automatic: boolean) {
+async function restrictedTools(
+  meta: ReturnType<typeof row>,
+  session: string,
+  mode: Exclude<ExecutionMode, 'full'>,
+) {
+  const readOnly = mode === 'read-only';
+  const automatic = mode === 'auto-approval';
+  const directReads = automatic || readOnly;
   const remote = meta.project_id ? hostPorts().projects.remoteOf(meta.project_id) : null;
-  const download = downloadTool(meta);
+  const download = readOnly ? null : downloadTool(meta);
   return [
     scopedSkillTool(meta),
     ...(download
       ? [automatic && !remote ? download : approveTool(download, session, '下载文件')]
       : []),
-    automatic ? webSearchTool : approveTool(webSearchTool, session, '联网搜索'),
-    webFetchTool(session, automatic),
-    ...(await mcpTools(session, automatic)),
+    directReads ? webSearchTool : approveTool(webSearchTool, session, '联网搜索'),
+    webFetchTool(session, directReads),
+    ...(await mcpTools(session, mode)),
     ...(meta.project_id
       ? sessionTools(meta.project_id)
       : sessionTools(null).map((tool) => approveTool(tool, session, '读取其他会话'))),
     ...(!remote
-      ? [
-          approveTool(
-            domainTool,
-            session,
-            '运行 Delion 操作',
-            undefined,
-            (input) => {
-              const { command } = input as { command: string };
-              return (
-                command === 'help' ||
-                (automatic && ['query_todos', 'list_workspace_entries'].includes(command))
-              );
-            },
-            (input) => {
-              const { command } = input as { command: string };
-              return { keys: [`delion:${command}`], label: `运行 Delion 操作 ${command}` };
-            },
-          ),
-        ]
+      ? readOnly
+        ? [readOnlyDomainTool]
+        : [
+            approveTool(
+              domainTool,
+              session,
+              '运行 Delion 操作',
+              undefined,
+              (input) => {
+                const { command } = input as { command: string };
+                return command === 'help' || (automatic && readOnlyDomainCommands.has(command));
+              },
+              (input) => {
+                const { command } = input as { command: string };
+                return { keys: [`delion:${command}`], label: `运行 Delion 操作 ${command}` };
+              },
+            ),
+          ]
       : []),
   ];
 }
@@ -311,6 +293,26 @@ const domainTool: ToolDefinition = {
   } as unknown as ToolDefinition['parameters'],
   execute: async (_id, { command, input = {} }: { command: string; input?: object }) =>
     text(await executeDomainCommand(command, input)),
+};
+
+const readOnlyDomainCommands = new Set([
+  'help',
+  'query_todos',
+  'list_workspace_entries',
+  'read_resource',
+]);
+const readOnlyDomainTool: ToolDefinition = {
+  ...domainTool,
+  description: 'Read Delion data using query_todos, list_workspace_entries, or read_resource.',
+  async execute(id, input, signal, onUpdate, context) {
+    if (readOnlyDomainCommands.has((input as { command: string }).command))
+      return domainTool.execute(id, input, signal, onUpdate, context);
+    return {
+      content: [{ type: 'text', text: '只读模式下只能执行已确认无修改的 Delion 操作' }],
+      details: undefined,
+      isError: true,
+    };
+  },
 };
 
 const webSearchTool: ToolDefinition = {
@@ -388,9 +390,15 @@ function webFetchTool(approvalSession?: string, automatic = false): ToolDefiniti
 
 const webTools = [webSearchTool, webFetchTool()];
 
-async function mcpTools(approvalSession?: string, automatic = false): Promise<ToolDefinition[]> {
-  return (await mcpToolDefinitions()).map(({ function: definition, source, execute, readOnly }) => {
-    const verifiedRead = automatic && readOnly === true;
+async function mcpTools(
+  approvalSession?: string,
+  mode?: Exclude<ExecutionMode, 'full'>,
+): Promise<ToolDefinition[]> {
+  const definitions = (await mcpToolDefinitions()).filter(
+    ({ readOnly }) => mode !== 'read-only' || readOnly === true,
+  );
+  return definitions.map(({ function: definition, source, execute, readOnly }) => {
+    const verifiedRead = (mode === 'auto-approval' || mode === 'read-only') && readOnly === true;
     const tool: ToolDefinition = {
       name: definition.name,
       label: definition.name,
@@ -435,7 +443,7 @@ async function mcpTools(approvalSession?: string, automatic = false): Promise<To
           ],
           undefined,
           () =>
-            automatic
+            mode === 'auto-approval'
               ? undefined
               : {
                   keys: [`connector:${source.name}/${definition.name}`],

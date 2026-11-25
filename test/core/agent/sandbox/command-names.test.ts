@@ -20,6 +20,12 @@ it('多子命令工具按子命令区分授权', () => {
   ]);
   expect(commandNames('git -C .. push', 'bash')).toBeNull();
   expect(commandNames('git', 'bash')).toBeNull();
+  expect(commandNames('GH.EXE pr comment 12 --body test', 'cmd')).toEqual(['gh pr comment']);
+  expect(commandNames('gh pr merge 12', 'bash')).toEqual(['gh pr merge']);
+  expect(commandNames('gh api repos/a/b/issues -X POST', 'bash')).toBeNull();
+  expect(commandNames('gh pr view 12 --json title -qenv', 'bash')).toBeNull();
+  expect(commandNames('git branch -D example', 'bash')).toBeNull();
+  expect(commandNames('git push --delete origin example', 'bash')).toBeNull();
 });
 
 it('引号和转义里的分隔符不会藏起程序', () => {
@@ -66,9 +72,14 @@ it('只读命令仅在不写入、不执行、不越出工作目录时免审批'
     'cat a 2> err.txt',
     'find . -name x -delete',
     'find . -exec cat {} +',
+    'find *',
     'sort -o out.txt a',
     'sort --compress-program=sh a',
+    'sort -T scratch a',
+    'wc --files0-from=list.txt',
+    'printf -v PATH . && grep example file.txt',
     'uniq a out.txt',
+    'uniq -- a -out.txt',
     'cd .. && ls',
     'ls && touch x',
     'git status',

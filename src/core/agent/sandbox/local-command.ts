@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, join } from 'node:path';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
 import { helperSession, type ScopedCommandResult } from '../../remote/helper';
@@ -22,6 +22,7 @@ import {
   type ScopedDirectory,
 } from './mode';
 import { readScopedReference, scopedFileTools } from './scoped-files';
+import { runVcsReads, vcsReadCommands } from './read-vcs';
 
 const commandResult = (value: object, isError = false) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(value) }],
@@ -42,12 +43,21 @@ function brokerCommand(command: string, windows: boolean) {
   if (tokens.map(([match]) => match).join('') !== input) return null;
   const [name, ...args] = tokens.map(([, part]) => part!.replace(/^(['"])(.*)\1$/, '$2'));
   const program = windows ? name?.toLowerCase() : name;
-  if (windows ? program === 'dir' : program === 'ls' || program === '/bin/ls') {
+  if (windows && (program === 'get-childitem' || program === 'get-content')) {
+    const [option, value] = args;
+    const path = args.length === 2 && /^-(?:literal)?path$/i.test(option ?? '') ? value : option;
+    if (path?.startsWith('-') || args.length > (path === option ? 1 : 2)) return null;
+    if (program === 'get-childitem') return { action: 'ls', params: { path } };
+    if (path) return { action: 'read', params: { path } };
+  }
+  if (windows ? program === 'dir' || program === 'ls' : program === 'ls' || program === '/bin/ls') {
     const paths = args.filter((arg) => (windows ? arg.toLowerCase() !== '/b' : arg !== '--'));
     if (paths.length <= 1 && !paths[0]?.startsWith('-'))
       return { action: 'ls', params: { path: paths[0] } };
   }
-  if (windows ? program === 'type' : program === 'cat' || program === '/bin/cat') {
+  if (
+    windows ? program === 'type' || program === 'cat' : program === 'cat' || program === '/bin/cat'
+  ) {
     const paths = args.filter((arg) => windows || arg !== '--');
     if (paths.length === 1 && !paths[0]?.startsWith('-'))
       return { action: 'read', params: { path: paths[0] } };
@@ -58,6 +68,8 @@ function brokerCommand(command: string, windows: boolean) {
     args.length === 2 &&
     !args[0]?.startsWith('-')
   )
+    return { action: 'grep', params: { pattern: args[0], path: args[1] } };
+  if (program === 'rg' && args.length >= 1 && args.length <= 2 && !args[0]!.startsWith('-'))
     return { action: 'grep', params: { pattern: args[0], path: args[1] } };
   if (!windows && program === 'find' && args.length === 3 && args[1] === '-name')
     return { action: 'find', params: { path: args[0], pattern: args[2] } };
@@ -82,6 +94,7 @@ async function runApprovedCommand(
   command: string,
   copies: readonly Buffer[],
   signal: AbortSignal,
+  verifiedRead = false,
 ): Promise<ScopedCommandResult> {
   const maxOutputBytes = 50 * 1024;
   const chunks: Buffer[] = [];
@@ -128,12 +141,18 @@ async function runApprovedCommand(
         }
       }
       signal.throwIfAborted();
-      const result = await helper.exec(command, {
-        cwd: scratch ?? root.host,
-        signal,
-        timeoutMs: timeout * 1000,
-        onData,
-      });
+      const result = await helper.exec(
+        verifiedRead
+          ? `/usr/bin/env -i PATH=/usr/bin:/bin /bin/bash --noprofile --norc -c ${shellQuote(command)}`
+          : command,
+        {
+          cwd: scratch ?? root.host,
+          signal,
+          timeoutMs: timeout * 1000,
+          onData,
+          ...(verifiedRead && { env: { BASH_ENV: '' } }),
+        },
+      );
       signal.throwIfAborted();
       return result.state === 'timeout'
         ? { exitCode: null, output: output(scratch), error: '命令执行超时' }
@@ -147,15 +166,16 @@ async function runApprovedCommand(
             onData: () => {},
           })
           .catch(() => {});
-      notifyRemoteChange(root.host);
+      if (!verifiedRead) notifyRemoteChange(root.host);
     }
   }
 
   const windows = process.platform === 'win32';
+  const system = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
   const shell = windows
     ? {
-        shell: join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe'),
-        args: ['/D', '/Q', '/S', '/C'],
+        shell: join(system, 'cmd.exe'),
+        args: ['/D', '/Q', '/S', ...(verifiedRead ? ['/V:OFF'] : []), '/C'],
         windowsVerbatimArguments: true,
       }
     : { shell: '/bin/bash', args: ['--noprofile', '--norc', '-c'] };
@@ -174,10 +194,23 @@ async function runApprovedCommand(
         '$1$2',
       );
     }
+    const environment = verifiedRead
+      ? {
+          ...(windows
+            ? {
+                SystemRoot: process.env.SystemRoot ?? 'C:\\Windows',
+                PATH: [system, join(system, '..')].join(delimiter),
+                PATHEXT: '.COM;.EXE',
+                NoDefaultCurrentDirectoryInExePath: '1',
+              }
+            : { PATH: '/usr/bin:/bin', LANG: process.env.LANG }),
+        }
+      : undefined;
     const result = await localBash(
       scratch ?? root.host,
       shell,
       undefined,
+      environment,
     )(command, {
       signal,
       timeout,
@@ -244,31 +277,29 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   const remote = root.remote;
   const windows = !remote && process.platform === 'win32';
   const shell = windows ? 'cmd' : 'bash';
-  const virtualRoots = root.name === '/privacy' ? ['/privacy', '/share'] : [];
+  const directReads = mode !== 'approval' && directories.length > 0;
+  const virtualRoots = root.name === '/privacy' ? ['/privacy', '/share'] : ['/project'];
   const launcher = windows
     ? join(hostPorts().paths.bundled('scopedfs'), 'scopedfs.exe')
     : macosSandboxLauncher;
-  if (
-    !approvalMode &&
-    !remote &&
-    ((!windows && process.platform !== 'darwin') || !existsSync(launcher))
-  )
-    return null;
   const { id: session } = owner;
-  const fileTools = automatic ? scopedFileTools(meta) : [];
+  const fileTools = mode !== 'approval' ? scopedFileTools(meta) : [];
   const chatPaths =
-    approvalMode && root.name === '/privacy'
+    root.name === '/privacy'
       ? ` In ordinary local chats, use /privacy and /share in command text. Scripts started from the initial working directory can use the relative paths privacy and share.${windows ? ' Use backslashes after the virtual root in cmd.exe built-in file arguments.' : ''}`
       : '';
-  const runtime = approvalMode
-    ? `Run a ${windows ? 'Windows cmd.exe' : 'Bash'} command with the current ${remote ? 'SSH' : 'local'} account permissions after approval. Network and subprocesses are available. Project commands without input copies run in the project directory. Other commands run in a temporary directory.`
-    : windows
-      ? 'Run one Windows cmd.exe process using built-in commands such as type, dir and echo. Changes made inside the temporary working directory are discarded. Other processes and network are unavailable.'
-      : `Run one ${remote ? 'remote Linux' : 'macOS'} Bash process. Use built-ins or exec with cat, ls, awk, grep, sed, sort or wc. The temporary working directory is read-only. Other processes and network are unavailable.`;
+  const reads =
+    mode !== 'approval'
+      ? 'Verified reads run directly, including file inspection and supported git and gh queries. Run git and gh on their own or join verified Git and GitHub queries with &&. '
+      : '';
+  const runtime =
+    mode === 'read-only'
+      ? `Commands that may modify data are disabled. Use ${windows ? 'cmd.exe syntax or Get-Content and Get-ChildItem for file reads' : 'Bash syntax'}. Use the file tools for absolute local file reads.`
+      : `Run a ${windows ? 'Windows cmd.exe' : 'Bash'} command on the ${remote ? 'SSH host' : 'local computer'}. ${automatic ? 'Use file tools for changes when possible. Unverified commands require approval. ' : ''}Approved commands run with the current account permissions, including network and subprocesses. Project commands without input copies run in the project directory. Other commands run in a temporary directory.`;
   return {
     name: 'sandbox_command',
     label: 'Sandbox command',
-    description: `${automatic ? 'Simple read-only commands with relative paths, such as ls, cat, head, grep, find and wc, and directory creation run without approval. Use file tools for changes when possible. Other commands require approval. ' : ''}${runtime}${chatPaths} Input copies are available as inputs/1, inputs/2, and so on, in the order supplied. Use stdout for results.`,
+    description: `${reads}${runtime}${chatPaths} Input copies are available as inputs/1, inputs/2, and so on, in the order supplied. Use stdout for results.`,
     parameters: {
       type: 'object',
       properties: {
@@ -288,7 +319,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
       files = [...files];
       if (cancellation.aborted || command.includes('\0'))
         return commandResult({ error: '命令无效或已取消' }, true);
-      const operation = automatic && brokerCommand(command, windows);
+      const operation = mode !== 'approval' && brokerCommand(command, windows);
       if (operation) {
         const tool = fileTools.find(({ name }) => name === operation.action);
         if (tool) {
@@ -299,7 +330,34 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
             return tool.execute(id, { ...operation.params, path }, cancellation, onUpdate, context);
         }
       }
-      if (approvalMode && !(automatic && readOnlyCommand(command, shell, virtualRoots))) {
+      const vcs = directReads && !files.length && vcsReadCommands(command, shell, root);
+      if (vcs) {
+        try {
+          const output = await runVcsReads(vcs, root, cancellation);
+          return commandResult(
+            { ...output, output: redactModelPaths(directories)(output.output) },
+            output.exitCode !== 0,
+          );
+        } catch {
+          return commandResult({ error: '无法完成命令读取' }, true);
+        }
+      }
+      const verifiedRead =
+        directReads &&
+        readOnlyCommand(
+          command,
+          shell,
+          root.name === '/project' && files.length ? [] : virtualRoots,
+        );
+      const isolatedInputRead =
+        mode === 'read-only' &&
+        !windows &&
+        files.length > 0 &&
+        /^(?:exec\s+)?(?:\/(?:bin|usr\/bin)\/)?(?:awk|sed)\s/.test(command) &&
+        (remote || (process.platform === 'darwin' && existsSync(launcher)));
+      if (mode === 'read-only' && !verifiedRead && !isolatedInputRead)
+        return commandResult({ error: '只读模式下只能运行已确认无修改的命令' }, true);
+      if (approvalMode && !verifiedRead) {
         const names = commandNames(command, shell);
         const approval = await hostPorts().desktop.approveSandboxCommand?.({
           session,
@@ -319,8 +377,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
       }
       let directory: string | undefined;
       try {
-        const runDirectories =
-          approvalMode && root.name === '/privacy' ? scopedDirectories(meta) : directories;
+        const runDirectories = root.name === '/privacy' ? scopedDirectories(meta) : directories;
         let remaining = 8 * 1024 * 1024;
         const copies = [];
         for (const path of files) {
@@ -338,22 +395,23 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
           copies.push(bytes);
         }
         cancellation.throwIfAborted();
-        if (approvalMode) {
+        if (approvalMode || verifiedRead) {
+          const script =
+            verifiedRead && root.name === '/project'
+              ? command.replace(/(^|[\s"'=])\/project(?=$|[\\/\s"'])/g, '$1.')
+              : command;
           const output = await runApprovedCommand(
             root,
             runDirectories,
-            command,
+            script,
             copies,
             cancellation,
+            verifiedRead,
           );
           return commandResult(output, output.exitCode !== 0);
         }
         if (remote) {
           const output = await helperSession(remote).scopedCommand(command, copies, cancellation);
-          return commandResult(output, output.exitCode !== 0);
-        }
-        if (windows) {
-          const output = await runWindowsCommand(launcher, command, copies, cancellation);
           return commandResult(output, output.exitCode !== 0);
         }
         directory = await mkdtemp(join(await realpath(tmpdir()), 'delion-command-'));

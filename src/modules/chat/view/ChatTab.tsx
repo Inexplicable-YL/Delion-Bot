@@ -14,6 +14,8 @@ import { Button } from '../../../ui/Button';
 import { IconButton } from '../../../ui/IconButton';
 import { ChatComposer } from './ChatComposer';
 import { ChatPermissionRequest } from './ChatPermissionRequest';
+import { AskCard } from '../../../ui/agent/AskCard';
+import { formatAskAnswer, pendingAsk } from './ask-card';
 import { composerContext } from './composer-context';
 import { ChatSessions } from './ChatSessions';
 import { ChatThread } from './ChatThread';
@@ -128,10 +130,21 @@ function ChatComposerArea({
     onError: (cause) =>
       showToast({ variant: 'error', title: '切换项目失败', description: errorMessage(cause) }),
   });
+  const ask = chat && !chatState.busy ? pendingAsk(chat.messages) : null;
   if (request?.kind === 'operation')
     return (
       <div className="mx-auto w-full max-w-reading shrink-0">
         <ChatPermissionRequest key={request.id} request={request} sessionId={sessionId} />
+      </div>
+    );
+  if (ask)
+    return (
+      <div className="mx-auto w-full max-w-reading shrink-0">
+        <AskCard
+          groups={ask.groups}
+          key={ask.id}
+          onSubmit={(answers) => chatState.askAbout(formatAskAnswer(ask.groups, answers), [])}
+        />
       </div>
     );
   return (
@@ -334,7 +347,6 @@ function ChatSessionView({
           compactionHistory={compacted ? transcript?.history : undefined}
           messagesAfterCompaction={compacted ? (messagesAfterCompaction ?? undefined) : undefined}
           onAskImage={subagent ? undefined : askAbout}
-          onAnswer={subagent ? undefined : (text) => askAbout(text, [])}
           onEditLast={subagent ? undefined : editLast}
           onFork={subagent ? undefined : fork}
           onSidechat={subagent ? undefined : sidechatFromQuote}

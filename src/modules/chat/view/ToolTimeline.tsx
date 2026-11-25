@@ -8,6 +8,7 @@ import {
   LinkIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
+  QuestionMarkCircleIcon,
   SquaresPlusIcon,
   UserGroupIcon,
   WrenchScrewdriverIcon,
@@ -36,6 +37,7 @@ const verbs: Record<string, { doing: string; done: string; noun: string }> = {
   web_search: { doing: '正在搜索网页', done: '搜索网页', noun: '次' },
   web_fetch: { doing: '正在读取网页', done: '读取网页', noun: '个' },
   task: { doing: '子 Agent 正在处理', done: '子 Agent', noun: '个任务' },
+  ask_user: { doing: '正在询问', done: '询问', noun: '次' },
 };
 
 function verbOf(name: string) {
@@ -55,6 +57,7 @@ const icons: Record<string, ReactNode> = {
   web_search: <GlobeAltIcon className="size-4" />,
   web_fetch: <LinkIcon className="size-4" />,
   task: <UserGroupIcon className="size-4" />,
+  ask_user: <QuestionMarkCircleIcon className="size-4" />,
 };
 const connectorIcon = <SquaresPlusIcon className="size-4" />;
 const toolIcon = <WrenchScrewdriverIcon className="size-4" />;

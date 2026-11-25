@@ -177,7 +177,7 @@ SQLite 在独立的应用数据目录中保存数据。Schema 2 为会话增加�
 
 node-pty + xterm.js。本地终端跟随用户自己的 shell：Windows 优先 PowerShell 7（PATH 上或默认安装目录），没有时用系统自带的 Windows PowerShell 5.1；macOS 以登录模式启动用户的默认 shell（通常是 zsh），加载用户自己的配置。终端不注入 delion 命令桥。
 
-终端属于项目。Agent 在完全访问模式获得通用 bash 工具。本机完全访问命令通过 delion 命令桥获得领域工具。受限本机命令使用单进程隔离，Windows 使用 AppContainer，macOS 使用 Seatbelt。命令按需接收文件副本，通过标准输出返回结果。
+终端属于项目。Agent 在完全访问模式获得通用 bash 工具，本机命令通过 delion 命令桥获得领域工具。聊天里的受限命令按会话权限判断。已确认的读取在只读和自动批准模式下直接执行。命令按需接收文件副本，通过标准输出返回结果。
 
 - **Git Bash 探测顺序：系统 Git for Windows → 随包 MinGit**，都缺失说明安装包被破坏，Agent 报错提示安装 Git for Windows 后重启，**不回退 PowerShell**。
 - 随包 MinGit 由打包前脚本 `prepare-runtime.ts` 按写死的版本与 SHA256 下载校验，仓库不提交这份约 40MB 的产物。MinGit 只以 `sh.exe` 名义带 bash 本体，脚本要复制出 `bash.exe`——**argv[0] 决定 bash 是否走完整模式**。

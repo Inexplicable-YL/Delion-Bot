@@ -153,7 +153,6 @@ async function createSide(parentId: string): Promise<Side> {
     inMemory,
     selection,
     ...(await agentEnvironment().sessionOptions(meta.project_id, piCwd, {
-      askCards: false,
       sessionId: parentId,
     })),
   });

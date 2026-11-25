@@ -19,7 +19,11 @@ import {
 } from '../../../ui/DropdownMenu';
 
 const permissions = {
-  'read-only': { label: '只读模式', detail: '读取聊天目录中的文件。', icon: EyeIcon },
+  'read-only': {
+    label: '只读模式',
+    detail: '可读取文件、联网查询和使用只读连接器。',
+    icon: EyeIcon,
+  },
   approval: {
     label: '请求批准',
     detail: '联网、连接器和有副作用的操作逐次批准。',

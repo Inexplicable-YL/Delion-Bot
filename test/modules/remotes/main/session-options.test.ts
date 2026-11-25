@@ -92,7 +92,6 @@ beforeEach(() => {
 describe('远程会话环境', () => {
   it('给七个远程工具加本机工具，且不带 delion 命令桥', async () => {
     const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj', {
-      askCards: true,
       sessionId: 'remote-chat',
     });
     expect(names(options.customTools)).toEqual(
@@ -120,7 +119,6 @@ describe('远程会话环境', () => {
 
   it('用户关掉的能力名单不会波及七个工具名', async () => {
     const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj', {
-      askCards: true,
       sessionId: 'remote-chat',
     });
     expect([...options.disabledTools]).toEqual(['web_fetch']);
@@ -128,7 +126,6 @@ describe('远程会话环境', () => {
 
   it('远端 AGENTS.md 的内容与远端路径一起注入，本地全局上下文不丢', async () => {
     const options = await agentEnvironment().sessionOptions('p-remote', '/root/proj', {
-      askCards: true,
       sessionId: 'remote-chat',
     });
     const base = [{ path: 'C:\\data\\AGENTS.md', content: '全局' }];
@@ -142,7 +139,6 @@ describe('本地会话环境', () => {
   it('保留 delion 命令桥与内置工具，不给远程工具', async () => {
     state.remote = false;
     const options = await agentEnvironment().sessionOptions('p-local', 'E:\\proj', {
-      askCards: true,
       sessionId: 'local-chat',
     });
     expect(names(options.customTools)).toEqual([

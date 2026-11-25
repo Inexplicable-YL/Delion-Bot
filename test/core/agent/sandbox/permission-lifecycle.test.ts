@@ -201,17 +201,21 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
       ?.tools ?? []
   ).map((tool) => tool.function.name);
   expect(names.sort()).toEqual([
+    'ask_user',
+    'delion',
     'find',
     'grep',
     'ls',
     'read',
-    ...(process.platform === 'darwin' ||
-    (process.platform === 'win32' && existsSync(join('.build', 'scopedfs', 'scopedfs.exe')))
-      ? ['sandbox_command']
-      : []),
+    'read_skill',
+    'sandbox_command',
+    'session_read',
+    'session_search',
     'task',
     'task_output',
     'task_stop',
+    'web_fetch',
+    'web_search',
   ]);
   expect(JSON.stringify(restrictedRequests.at(-1)?.body)).toContain('/privacy');
   stopRestricted();

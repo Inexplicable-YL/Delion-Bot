@@ -33,6 +33,7 @@ function OptionLetter({ index, checked }: { index: number; checked: boolean }) {
 }
 
 function OptionRow({
+  autoFocus,
   index,
   option,
   checked,
@@ -40,6 +41,7 @@ function OptionRow({
   disabled,
   onSelect,
 }: {
+  autoFocus: boolean;
   index: number;
   option: AskCardOption;
   checked: boolean;
@@ -50,6 +52,7 @@ function OptionRow({
   const row = (
     <button
       aria-checked={checked}
+      autoFocus={autoFocus}
       className={cn(
         rowClass,
         'enabled:hover:bg-hover enabled:aria-checked:bg-selected disabled:cursor-default',
@@ -137,25 +140,16 @@ function StepDots({ count, current }: { count: number; current: number }) {
   );
 }
 
-function answeredChoice(group: AskCardGroup, answer: string[]): [Choice, string] {
-  const labels = group.options.map(({ label }) => label);
-  const custom = answer.filter((item) => !labels.includes(item)).join('、');
-  const picked = labels.flatMap((label, index) => (answer.includes(label) ? [index] : []));
-  return [custom ? [...picked, 'other'] : picked, custom];
-}
-
 function replaced<T>(list: T[], length: number, index: number, value: T): T[] {
   return Array.from({ length }, (_, at) => (at === index ? value : (list[at] as T)));
 }
 
 export function AskCard({
   groups,
-  answers,
   onSubmit,
 }: {
   groups: AskCardGroup[];
-  answers: string[][] | undefined;
-  onSubmit: ((answers: string[][]) => Promise<void>) | undefined;
+  onSubmit: (answers: string[][]) => Promise<void>;
 }) {
   const id = useId();
   const [page, setPage] = useState(0);
@@ -163,15 +157,12 @@ export function AskCard({
   const [customs, setCustoms] = useState<string[]>([]);
   const [skipped, setSkipped] = useState<boolean[]>([]);
   const [sending, setSending] = useState(false);
-  const readOnly = answers !== undefined || onSubmit === undefined;
-  const locked = readOnly || sending;
   const current = Math.min(page, groups.length - 1);
   const group = groups[current]!;
   const last = current === groups.length - 1;
   const multiple = group.multiple === true;
-  const [choice, custom] = answers
-    ? answeredChoice(group, answers[current] ?? [])
-    : [choices[current] ?? [], customs[current] ?? ''];
+  const choice = choices[current] ?? [];
+  const custom = customs[current] ?? '';
   const pickedAt = (index: number) => {
     const picked = choices[index] ?? [];
     if (skipped[index]) return [];
@@ -188,7 +179,7 @@ export function AskCard({
     setSkipped(replaced(skipped, groups.length, current, false));
   };
   const submit = (finalSkipped: boolean[]) => {
-    if (!onSubmit) return;
+    if (sending) return;
     setSending(true);
     const result = groups.map((_, index) => (finalSkipped[index] ? [] : pickedAt(index)));
     void onSubmit(result).finally(() => setSending(false));
@@ -200,11 +191,18 @@ export function AskCard({
     else setPage(current + 1);
   };
   const questionId = `${id}-question`;
-  const showFooter = !readOnly || groups.length > 1;
 
   return (
     <Card asChild variant="surface">
-      <section aria-label="询问" className="my-3 grid gap-3">
+      <section
+        aria-label="询问"
+        className="grid gap-3"
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          event.preventDefault();
+          submit(groups.map(() => true));
+        }}
+      >
         <div className="grid gap-1">
           <div className="whitespace-pre-wrap text-ui-headline text-ink" id={questionId}>
             {group.question}
@@ -219,8 +217,9 @@ export function AskCard({
         >
           {group.options.map((option, index) => (
             <OptionRow
+              autoFocus={current === 0 && index === 0}
               checked={choice.includes(index)}
-              disabled={locked}
+              disabled={sending}
               index={index}
               key={option.label}
               multiple={multiple}
@@ -228,50 +227,34 @@ export function AskCard({
               option={option}
             />
           ))}
-          {(!readOnly || custom) && (
-            <OtherRow
-              checked={choice.includes('other')}
-              disabled={locked}
-              index={group.options.length}
-              onChange={(value) => {
-                setCustoms(replaced(customs, groups.length, current, value));
-                choose('other', value.trim() !== '');
-              }}
-              value={custom}
-            />
-          )}
+          <OtherRow
+            checked={choice.includes('other')}
+            disabled={sending}
+            index={group.options.length}
+            onChange={(value) => {
+              setCustoms(replaced(customs, groups.length, current, value));
+              choose('other', value.trim() !== '');
+            }}
+            value={custom}
+          />
         </div>
-        {showFooter && (
-          <div className="flex items-center gap-2 pt-1">
-            {groups.length > 1 && <StepDots count={groups.length} current={current} />}
-            <div className="ml-auto flex items-center gap-2">
-              {current > 0 && (
-                <Button disabled={sending} onClick={() => setPage(current - 1)} variant="secondary">
-                  返回
-                </Button>
-              )}
-              {readOnly ? (
-                !last && (
-                  <Button onClick={() => setPage(current + 1)} variant="secondary">
-                    下一步
-                  </Button>
-                )
-              ) : (
-                <>
-                  <Button disabled={sending} onClick={() => advance(true)} variant="secondary">
-                    跳过
-                  </Button>
-                  <Button
-                    disabled={sending || !pickedAt(current).length}
-                    onClick={() => advance(false)}
-                  >
-                    {last ? '发送' : '下一步'}
-                  </Button>
-                </>
-              )}
-            </div>
+        <div className="flex items-center gap-2 pt-1">
+          {groups.length > 1 && <StepDots count={groups.length} current={current} />}
+          <span className="text-ui-caption text-ink-2">Esc 全部跳过</span>
+          <div className="ml-auto flex items-center gap-2">
+            {current > 0 && (
+              <Button disabled={sending} onClick={() => setPage(current - 1)} variant="secondary">
+                返回
+              </Button>
+            )}
+            <Button disabled={sending} onClick={() => advance(true)} variant="secondary">
+              跳过
+            </Button>
+            <Button disabled={sending || !pickedAt(current).length} onClick={() => advance(false)}>
+              {last ? '发送' : '下一步'}
+            </Button>
           </div>
-        )}
+        </div>
       </section>
     </Card>
   );

@@ -10,6 +10,7 @@ import {
   type TaskNoticeDetails,
   type WorkspaceChat,
 } from '../../protocol/agent';
+import { askUserTool } from '../../capabilities/ask-user';
 import { emit, hostPorts } from '../../ports';
 import { remoteBackend } from '../../remote/operations';
 import * as changes from '../changes';
@@ -80,7 +81,6 @@ async function openLive(id: string): Promise<Live> {
   const plan = launchPlan(meta);
   const cwd = plan.hostCwd;
   const options = await agentEnvironment().sessionOptions(meta.project_id, plan.piCwd, {
-    askCards: !meta.parent_id,
     sessionId: id,
   });
   const delegates = !meta.parent_id;
@@ -101,7 +101,8 @@ async function openLive(id: string): Promise<Live> {
         )
       : taskControls(parent, true)
     : [];
-  if (delegates) delegatesTools.push(taskTool(parent, cwd, runSubagent, plan.mode !== 'full'));
+  if (delegates)
+    delegatesTools.push(taskTool(parent, cwd, runSubagent, plan.mode !== 'full'), askUserTool);
   const extraTools =
     plan.mode === 'approval' || plan.mode === 'auto-approval'
       ? delegatesTools.map((tool) => {

@@ -171,7 +171,6 @@ it('远程命令获批后以 SSH 账户权限运行并接收项目文件副本',
   const id = insertSession('p1');
   writePermissionMode(id, 'approval');
   const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
-    askCards: false,
     sessionId: id,
   });
   const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
@@ -203,7 +202,7 @@ it('远程命令获批后以 SSH 账户权限运行并接收项目文件副本',
   expect(state.scopedCommand).not.toHaveBeenCalled();
 });
 
-it('自动批准直接运行只读命令，其他命令可按子命令始终允许', async () => {
+it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并拦截写入', async (mode) => {
   database();
   const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: false });
   const host = hostPorts();
@@ -226,25 +225,37 @@ it('自动批准直接运行只读命令，其他命令可按子命令始终允�
     return { code: 0, state: 'exited', lost: 0 };
   });
   const id = insertSession('p1');
-  writePermissionMode(id, 'auto-approval');
+  writePermissionMode(id, mode);
   const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
-    askCards: false,
     sessionId: id,
   });
   const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
   const execute = (command: string) =>
     tool.execute('call', { command }, undefined, undefined, {} as never);
-  expect(await execute('grep -rn TODO src | head -n 5')).toMatchObject({
+  expect(await execute('grep -rn TODO /project/src | head -n 5')).toMatchObject({
+    content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO' }) }],
+  });
+  expect(await execute('git log --oneline -5')).toMatchObject({
+    content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO' }) }],
+  });
+  expect(await execute('gh pr checks 123')).toMatchObject({
     content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO' }) }],
   });
   expect(approveSandboxCommand).not.toHaveBeenCalled();
-  expect(await execute('pnpm test')).toMatchObject({ isError: true });
-  expect(approveSandboxCommand).toHaveBeenLastCalledWith(
-    expect.objectContaining({
-      grant: { keys: ['host-command:pnpm test'], label: '运行 pnpm test 命令' },
-    }),
-  );
-  expect(state.remoteExec).toHaveBeenCalledOnce();
+  expect(await execute('gh pr merge 123')).toMatchObject({ isError: true });
+  expect(await execute('git push')).toMatchObject({ isError: true });
+  expect(await execute('git diff --output=report.txt')).toMatchObject({ isError: true });
+  if (mode === 'auto-approval') {
+    expect(approveSandboxCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        grant: { keys: ['host-command:gh pr merge'], label: '运行 gh pr merge 命令' },
+      }),
+    );
+    expect(approveSandboxCommand).toHaveBeenCalledTimes(3);
+  } else {
+    expect(approveSandboxCommand).not.toHaveBeenCalled();
+  }
+  expect(state.remoteExec).toHaveBeenCalledTimes(3);
 });
 
 it('请求批准提供联网和连接器，拒绝和取消均不调用连接器', async () => {
@@ -277,7 +288,6 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
   const id = insertSession(null);
   writePermissionMode(id, 'approval');
   const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
-    askCards: false,
     sessionId: id,
   });
   expect(customTools.map((tool) => tool.name)).toEqual(
@@ -304,55 +314,63 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
   );
 });
 
-it('自动批准直接联网搜索和调用已分类的读取工具，非公开网络和未分类工具请求审批', async () => {
-  database();
-  const host = hostPorts();
-  const approveToolAction = vi.fn().mockResolvedValue({ approved: false });
-  const fetch = vi.fn(async () =>
-    Response.json({
-      results: [{ title: 'Result', url: 'https://page.example/', content: 'Text' }],
-    }),
-  );
-  vi.stubGlobal('fetch', fetch);
-  provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveToolAction } });
-  saveWebSearchEntry({ name: 'Search', provider: 'custom', url: 'https://search.example/' });
-  const execute = vi.fn().mockResolvedValue({
-    ok: true,
-    result: { text: 'read result' },
-    source: { name: 'Connector' },
-    links: [],
-  });
-  state.mcpDefinitions.mockResolvedValue(
-    ['read_item', 'update_item'].map((name) => ({
-      type: 'function',
-      function: { name, description: name, parameters: {} },
+it.each(['auto-approval', 'read-only'] as const)(
+  '%s 直接联网搜索和调用已分类的读取工具',
+  async (mode) => {
+    database();
+    const host = hostPorts();
+    const approveToolAction = vi.fn().mockResolvedValue({ approved: false });
+    const fetch = vi.fn(async () =>
+      Response.json({
+        results: [{ title: 'Result', url: 'https://page.example/', content: 'Text' }],
+      }),
+    );
+    vi.stubGlobal('fetch', fetch);
+    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveToolAction } });
+    saveWebSearchEntry({ name: 'Search', provider: 'custom', url: 'https://search.example/' });
+    const execute = vi.fn().mockResolvedValue({
+      ok: true,
+      result: { text: 'read result' },
       source: { name: 'Connector' },
-      readOnly: name === 'read_item',
-      execute,
-    })),
-  );
-  const id = insertSession(null);
-  writePermissionMode(id, 'auto-approval');
-  const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
-    askCards: false,
-    sessionId: id,
-  });
-  const run = (name: string, input: unknown) =>
-    customTools
-      .find((tool) => tool.name === name)!
-      .execute('call', input, undefined, undefined, {} as never);
-  await expect(run('web_search', { query: 'Delion Bot' })).resolves.toMatchObject({
-    content: [{ text: expect.stringContaining('Result') }],
-  });
-  await expect(run('read_item', {})).resolves.toMatchObject({ content: [{ text: 'read result' }] });
-  expect(execute).toHaveBeenCalledExactlyOnceWith({}, undefined, true);
-  expect(approveToolAction).not.toHaveBeenCalled();
-  await expect(run('update_item', {})).resolves.toMatchObject({ isError: true });
-  await expect(run('web_fetch', { url: 'http://127.0.0.1/' })).rejects.toThrow('网络访问未获批准');
-  expect(approveToolAction).toHaveBeenCalledTimes(2);
-  expect(execute).toHaveBeenCalledTimes(1);
-  expect(fetch).toHaveBeenCalledTimes(1);
-});
+      links: [],
+    });
+    state.mcpDefinitions.mockResolvedValue(
+      ['read_item', 'update_item'].map((name) => ({
+        type: 'function',
+        function: { name, description: name, parameters: {} },
+        source: { name: 'Connector' },
+        readOnly: name === 'read_item',
+        execute,
+      })),
+    );
+    const id = insertSession(null);
+    writePermissionMode(id, mode);
+    const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+      sessionId: id,
+    });
+    const run = (name: string, input: unknown) =>
+      customTools
+        .find((tool) => tool.name === name)!
+        .execute('call', input, undefined, undefined, {} as never);
+    await expect(run('web_search', { query: 'Delion Bot' })).resolves.toMatchObject({
+      content: [{ text: expect.stringContaining('Result') }],
+    });
+    await expect(run('read_item', {})).resolves.toMatchObject({
+      content: [{ text: 'read result' }],
+    });
+    expect(execute).toHaveBeenCalledExactlyOnceWith({}, undefined, true);
+    expect(approveToolAction).not.toHaveBeenCalled();
+    if (mode === 'auto-approval')
+      await expect(run('update_item', {})).resolves.toMatchObject({ isError: true });
+    else expect(customTools.some(({ name }) => name === 'update_item')).toBe(false);
+    await expect(run('web_fetch', { url: 'http://127.0.0.1/' })).rejects.toThrow(
+      '网络访问未获批准',
+    );
+    expect(approveToolAction).toHaveBeenCalledTimes(mode === 'auto-approval' ? 2 : 1);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  },
+);
 
 it.skipIf(
   !existsSync(
@@ -384,7 +402,6 @@ it.skipIf(
   const id = insertSession(null);
   writePermissionMode(id, 'auto-approval');
   const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
-    askCards: false,
     sessionId: id,
   });
   const run = (name: string, input: unknown) =>
@@ -451,7 +468,6 @@ it('自动批准允许 SSH 项目只读操作，写入和删除在批准前不�
   });
   const id = insertSession('p1');
   const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
-    askCards: false,
     sessionId: id,
   });
   state.scopedFile.mockResolvedValue({ entries: ['source.txt'] });
@@ -499,21 +515,41 @@ describe('受限普通对话', () => {
     expect(scopedDirectories(row(child))).toEqual(parentRoots);
   });
 
-  it('工具列表没有网络、MCP、会话读取和命令桥，提示词不含会话 id', async () => {
+  it('只读模式提供读取工具并保持会话路径虚拟化', async () => {
     database();
     const id = insertSession(null);
     writePermissionMode(id, 'read-only');
     const options = await agentEnvironment().sessionOptions(null, '/privacy', {
-      askCards: false,
       sessionId: id,
     });
     const names = options.customTools.map((tool) => tool.name).sort();
-    expect(names).toEqual(['find', 'grep', 'ls', 'read', ...commandTools]);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'find',
+        'grep',
+        'ls',
+        'read',
+        'read_skill',
+        'sandbox_command',
+        'session_read',
+        'session_search',
+        'delion',
+        'web_search',
+        'web_fetch',
+      ]),
+    );
+    expect(
+      names.some((name) => ['write', 'edit', 'mkdir', 'delete', 'download_file'].includes(name)),
+    ).toBe(false);
+    const delion = options.customTools.find(({ name }) => name === 'delion')!;
+    await expect(
+      delion.execute('call', { command: 'delete_todo' }, undefined, undefined, {} as never),
+    ).resolves.toMatchObject({ isError: true });
     expect(options.commandPrefix).toBeUndefined();
     const prompt = options.appendSystemPrompt.join('\n');
     expect(prompt).toContain('/privacy');
     expect(prompt).toContain('/share');
-    expect(prompt).toContain('finished files in /share');
+    expect(prompt).toContain('Read existing files from /privacy and /share');
     expect(prompt).not.toContain(id);
     expect(prompt).not.toContain('DELION_COMMAND');
     expect(prompt).not.toContain(join(root, 'storage', 'chat-sessions'));
@@ -525,7 +561,6 @@ describe('受限普通对话', () => {
     const id = insertSession(null);
     writePermissionMode(id, 'full');
     const full = await agentEnvironment().sessionOptions(null, row(id).cwd!, {
-      askCards: false,
       sessionId: id,
     });
     expect(full.commandPrefix).toContain('DELION_COMMAND_TOKEN');
@@ -537,7 +572,6 @@ describe('受限普通对话', () => {
     const projectId = insertSession('p1');
     expect(launchPlan(row(projectId)).mode).toBe('auto-approval');
     const writable = await agentEnvironment().sessionOptions('p1', '/project', {
-      askCards: false,
       sessionId: projectId,
     });
     expect(writable.customTools.map((tool) => tool.name)).toEqual(
@@ -551,7 +585,6 @@ describe('受限普通对话', () => {
     const id = insertSession(null);
     writePermissionMode(id, 'approval');
     const options = await agentEnvironment().sessionOptions(null, '/privacy', {
-      askCards: false,
       sessionId: id,
     });
     const write = options.customTools.find((tool) => tool.name === 'write')!;
@@ -595,7 +628,7 @@ describe('受限普通对话', () => {
       const { customTools, appendSystemPrompt } = await agentEnvironment().sessionOptions(
         null,
         '/privacy',
-        { askCards: false, sessionId: id },
+        { sessionId: id },
       );
       const download = customTools.find(({ name }) => name === 'download_file')!;
       const input = { url: 'https://drive.example.test/export', path: '/share/原件.docx' };
@@ -631,7 +664,6 @@ describe('受限普通对话', () => {
     writeFileSync(join(chatShareDirectory(id), 'input.txt'), 'approved input');
     const tools = (
       await agentEnvironment().sessionOptions(null, '/privacy', {
-        askCards: false,
         sessionId: id,
       })
     ).customTools;
@@ -662,7 +694,6 @@ describe('受限普通对话', () => {
     const directory = mkdtempSync(join(root, 'approved command '));
     writeFileSync(join(directory, 'listed.txt'), '');
     const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
-      askCards: false,
       sessionId: id,
     });
     const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
@@ -690,7 +721,6 @@ describe('受限普通对话', () => {
     const output = '02_副本.txt';
     writeFileSync(join(share, input), 'shared content');
     const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
-      askCards: false,
       sessionId: id,
     });
     renameSync(privacy, join(root, `moved-${id}`));
@@ -728,7 +758,6 @@ describe('受限普通对话', () => {
       writeFileSync(otherFile, 'private');
       const id = insertSession(null);
       const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
-        askCards: false,
         sessionId: id,
       });
       const run = (name: string, path: string) =>
@@ -759,7 +788,6 @@ describe('受限普通对话', () => {
     writePermissionMode(id, 'approval');
     const tools = (
       await agentEnvironment().sessionOptions(null, '/privacy', {
-        askCards: false,
         sessionId: id,
       })
     ).customTools;
@@ -798,7 +826,6 @@ describe('受限普通对话', () => {
     mkdirSync(project, { recursive: true });
     const id = insertSession('p1');
     const options = await agentEnvironment().sessionOptions('p1', '/project', {
-      askCards: false,
       sessionId: id,
     });
     const write = options.customTools.find(({ name }) => name === 'write')!;

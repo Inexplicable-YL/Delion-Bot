@@ -353,7 +353,6 @@ function AssistantMessage({
   onRetry,
   onOpenFile,
   fileMenu,
-  asks,
 }: {
   message: ThreadMessage;
   foldedTrace: ReplyTraceData | null | undefined;
@@ -368,7 +367,6 @@ function AssistantMessage({
   onRetry: (() => void) | undefined;
   onOpenFile: ((path: string) => void) | undefined;
   fileMenu: { sessionId: string; remote: boolean } | undefined;
-  asks: { answer?: string; onAnswer?: (text: string) => Promise<void> } | undefined;
 }) {
   const reduced = useMediaQuery('(prefers-reduced-motion: reduce)');
   if (message.localCommand) {
@@ -412,7 +410,6 @@ function AssistantMessage({
               isAnimating={live && !activeTool}
               animated={live && animate && !reduced ? textAnimation : false}
               references={onOpenFile && { onOpen: onOpenFile, fileMenu }}
-              asks={asks}
               replyImages
             >
               {text}
@@ -503,7 +500,6 @@ export function ChatThread({
   onFork,
   onSidechat,
   onAskImage,
-  onAnswer,
   draftKey,
   fileSessionId = chat.sessionId,
   compactionHistory,
@@ -515,7 +511,6 @@ export function ChatThread({
   compactionHistory?: CompactionHistoryMessage[];
   messagesAfterCompaction?: WorkspaceChat['messages'];
   onAskImage?: (text: string, context: string[]) => Promise<void>;
-  onAnswer?: (text: string) => Promise<void>;
   onSidechat?: (quote: string) => void;
   draftKey?: string | null;
   fileSessionId?: string | null;
@@ -749,17 +744,6 @@ export function ChatThread({
                   onOpenFile={openFile}
                   fileMenu={
                     fileSessionId ? { sessionId: fileSessionId, remote: remoteProject } : undefined
-                  }
-                  asks={
-                    onAnswer &&
-                    (index > lastUserIndex
-                      ? { onAnswer: streaming ? undefined : onAnswer }
-                      : {
-                          answer: messages.find(
-                            (next, nextIndex) =>
-                              nextIndex > index && next.role === 'user' && !next.localCommand,
-                          )?.content,
-                        })
                   }
                 />
               ),
