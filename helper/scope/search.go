@@ -16,6 +16,48 @@ type Match struct {
 	Text string `json:"text"`
 }
 
+func grepFile(ctx context.Context, root *os.Root, name string, input Request) Response {
+	if input.Pattern == "" || len(input.Pattern) > 512 {
+		return Response{Error: "搜索模式必须为 1 至 512 字节"}
+	}
+	expression, err := regexp.Compile(input.Pattern)
+	if err != nil {
+		return Response{Error: "无效的搜索模式"}
+	}
+	data, err := readFile(root, name, 200_000)
+	if err != nil {
+		return Response{Error: "无法读取文件或文件超出大小限制"}
+	}
+	if ctx.Err() != nil {
+		return Response{Error: "操作已取消"}
+	}
+	var reply Response
+	appendMatches(&reply, expression, input.Path, data)
+	return reply
+}
+
+func appendMatches(reply *Response, expression *regexp.Regexp, name string, data []byte) {
+	if bytes.ContainsRune(data, '\x00') {
+		return
+	}
+	lineNumber := 0
+	for line := range bytes.SplitSeq(data, []byte{'\n'}) {
+		lineNumber++
+		if !expression.Match(line) {
+			continue
+		}
+		reply.Matches = append(reply.Matches, Match{
+			Path: name,
+			Line: lineNumber,
+			Text: string(line[:min(len(line), 512)]),
+		})
+		if len(reply.Matches) == 200 {
+			reply.Limited = true
+			return
+		}
+	}
+}
+
 func search(ctx context.Context, root *os.Root, input Request) Response {
 	if input.Pattern == "" || len(input.Pattern) > 512 {
 		return Response{Error: "搜索模式必须为 1 至 512 字节"}
@@ -75,24 +117,12 @@ func search(ctx context.Context, root *os.Root, input Request) Response {
 		}
 		remaining -= int(info.Size())
 		data, err := readFile(root, name, max(1, info.Size()))
-		if err != nil || bytes.ContainsRune(data, '\x00') {
+		if err != nil {
 			return nil
 		}
-		lineNumber := 0
-		for line := range bytes.SplitSeq(data, []byte{'\n'}) {
-			lineNumber++
-			if !expression.Match(line) {
-				continue
-			}
-			reply.Matches = append(reply.Matches, Match{
-				Path: visible,
-				Line: lineNumber,
-				Text: string(line[:min(len(line), 512)]),
-			})
-			if len(reply.Matches) == 200 {
-				reply.Limited = true
-				return fs.SkipAll
-			}
+		appendMatches(&reply, expression, visible, data)
+		if reply.Limited {
+			return fs.SkipAll
 		}
 		return nil
 	})

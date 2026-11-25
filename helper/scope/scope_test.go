@@ -23,6 +23,7 @@ func TestScopedFileOperations(t *testing.T) {
 		{"unapproved", Request{Action: "write", Path: "report.txt", Content: "before"}, "", true},
 		{"write", Request{Action: "write", Path: "notes/report.txt", Content: "before", Writable: true}, "", false},
 		{"edit", Request{Action: "edit", Path: "notes/report.txt", OldText: "before", Content: "after", Writable: true}, "", false},
+		{"create never overwrites", Request{Action: "create", Path: "notes/report.txt", Content: "overwrite", Writable: true}, "", true},
 		{"read", Request{Action: "read", Path: "notes/report.txt", Limit: 32}, "after", false},
 		{"read bound", Request{Action: "read", Path: "notes/report.txt", Limit: 2}, "", true},
 		{"parent", Request{Action: "write", Path: "../report.txt", Writable: true}, "", true},
@@ -45,6 +46,35 @@ func TestScopedFileOperations(t *testing.T) {
 	}
 	if got := execute(context.Background(), root, Request{Action: "grep", Path: "notes", Pattern: "^after$"}); len(got.Matches) != 1 || got.Matches[0].Path != "notes/report.txt" || got.Matches[0].Line != 1 {
 		t.Errorf("unexpected matches: %+v", got)
+	}
+	if got := execute(context.Background(), root, Request{Action: "grep", Path: "notes/report.txt", Pattern: "^after$"}); len(got.Matches) != 1 || got.Matches[0].Path != "notes/report.txt" {
+		t.Errorf("unexpected file matches: %+v", got)
+	}
+}
+
+func TestCreateAndDeleteRequireWritePermission(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	ctx := context.Background()
+	for _, input := range []Request{
+		{Action: "create", Path: "new.txt", Content: "text"},
+		{Action: "delete", Path: "new.txt"},
+	} {
+		if got := execute(ctx, root, input); got.Error == "" {
+			t.Fatalf("accepted unapproved %s", input.Action)
+		}
+	}
+	for _, action := range []string{"create", "read", "delete"} {
+		got := execute(ctx, root, Request{Action: action, Path: "new.txt", Content: "text", Limit: 32, Writable: true})
+		if got.Error != "" || (action == "read" && string(got.Data) != "text") {
+			t.Fatalf("%s: %+v", action, got)
+		}
+	}
+	if _, err := root.Stat("new.txt"); !os.IsNotExist(err) {
+		t.Fatalf("deleted file is still present: %v", err)
 	}
 }
 

@@ -74,11 +74,11 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 			return Response{Error: "路径超出授权目录"}
 		}
 	}
-	writes := input.Action == "write" || input.Action == "edit"
+	writes := input.Action == "write" || input.Action == "create" || input.Action == "edit" || input.Action == "mkdir" || input.Action == "delete"
 	if writes && (!input.Writable || input.Path == ".") {
 		return Response{Error: "当前操作没有写入权限"}
 	}
-	dir, err := openDirectory(root, path.Dir(input.Path), input.Action == "write")
+	dir, err := openDirectory(root, path.Dir(input.Path), input.Action == "write" || input.Action == "mkdir")
 	if err != nil {
 		return Response{Error: "无法打开授权目录"}
 	}
@@ -86,6 +86,11 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 	name := path.Base(input.Path)
 	switch input.Action {
 	case "find", "grep":
+		if input.Action == "grep" {
+			if info, err := dir.Lstat(name); err == nil && info.Mode().IsRegular() {
+				return grepFile(ctx, dir, name, input)
+			}
+		}
 		dir, err := openDirectory(dir, name, false)
 		if err != nil {
 			return Response{Error: "无法打开目录"}
@@ -138,17 +143,34 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 			}
 		}
 		return Response{Entries: entries}
-	case "write", "edit":
+	case "mkdir":
+		created, err := openDirectory(dir, name, true)
+		if err != nil {
+			return Response{Error: "无法创建目录"}
+		}
+		created.Close()
+		return Response{}
+	case "delete":
+		file, err := openVerifiedFile(dir, name)
+		if err != nil {
+			return Response{Error: "只能删除普通文件"}
+		}
+		file.Close()
+		if ctx.Err() != nil || dir.Remove(name) != nil {
+			return Response{Error: "无法删除文件"}
+		}
+		return Response{}
+	case "write", "create", "edit":
 		data := []byte(input.Content)
-		if input.Action == "write" && input.Data != nil {
+		if input.Action != "edit" && input.Data != nil {
 			data = input.Data
 		}
 		var mode fs.FileMode = 0600
 		info, err := dir.Lstat(name)
 		switch {
-		case err == nil && info.Mode().IsRegular():
+		case err == nil && info.Mode().IsRegular() && input.Action != "create":
 			mode = info.Mode().Perm()
-		case errors.Is(err, fs.ErrNotExist) && input.Action == "write":
+		case errors.Is(err, fs.ErrNotExist) && input.Action != "edit":
 		default:
 			return Response{Error: "只能修改普通文件"}
 		}
@@ -159,7 +181,7 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 			}
 			data = bytes.Replace(before, []byte(input.OldText), data, 1)
 		}
-		if len(data) > maxSize || replaceFile(ctx, dir, name, data, mode) != nil {
+		if len(data) > maxSize || saveFile(ctx, dir, name, data, mode, input.Action == "create") != nil {
 			return Response{Error: "无法写入文件或文件超出大小限制"}
 		}
 		return Response{}
@@ -235,7 +257,7 @@ func openVerifiedFile(root *os.Root, name string) (*os.File, error) {
 	return file, nil
 }
 
-func replaceFile(ctx context.Context, dir *os.Root, name string, data []byte, mode fs.FileMode) error {
+func saveFile(ctx context.Context, dir *os.Root, name string, data []byte, mode fs.FileMode, create bool) error {
 	var nonce [16]byte
 	rand.Read(nonce[:])
 	staged := ".delion-" + hex.EncodeToString(nonce[:])
@@ -250,6 +272,9 @@ func replaceFile(ctx context.Context, dir *os.Root, name string, data []byte, mo
 	}
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if create {
+		return dir.Link(staged, name)
 	}
 	return dir.Rename(staged, name)
 }
