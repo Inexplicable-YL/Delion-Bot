@@ -7,16 +7,15 @@ import { cn } from '../cn';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 
 export type AskCardOption = { label: string; description?: string };
-export type AskCardGroup = { question: string; options: AskCardOption[] };
+export type AskCardGroup = { question: string; options: AskCardOption[]; multiple?: boolean };
 
-type Choice = number | 'other' | undefined;
+type Choice = (number | 'other')[];
 
 const letter = (index: number) => String.fromCharCode(65 + index);
 
 const rowClass = cn(
   'flex w-full min-w-0 items-center gap-2.5 rounded-control px-2.5 py-1 text-left transition-colors duration-base',
   'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink',
-  'aria-checked:bg-selected',
 );
 
 function OptionLetter({ index, checked }: { index: number; checked: boolean }) {
@@ -37,22 +36,27 @@ function OptionRow({
   index,
   option,
   checked,
+  multiple,
   disabled,
   onSelect,
 }: {
   index: number;
   option: AskCardOption;
   checked: boolean;
+  multiple: boolean;
   disabled: boolean;
   onSelect: () => void;
 }) {
   const row = (
     <button
       aria-checked={checked}
-      className={cn(rowClass, 'enabled:hover:bg-hover disabled:cursor-default')}
+      className={cn(
+        rowClass,
+        'enabled:hover:bg-hover enabled:aria-checked:bg-selected disabled:cursor-default',
+      )}
       disabled={disabled}
       onClick={onSelect}
-      role="radio"
+      role={multiple ? 'checkbox' : 'radio'}
       type="button"
     >
       <OptionLetter checked={checked} index={index} />
@@ -77,21 +81,19 @@ function OtherRow({
   checked,
   disabled,
   value,
-  onSelect,
   onChange,
 }: {
   index: number;
   checked: boolean;
   disabled: boolean;
   value: string;
-  onSelect: () => void;
   onChange: (value: string) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   return (
     <div
       aria-checked={checked}
-      className={cn(rowClass, !disabled && 'cursor-text hover:bg-hover')}
+      className={cn(rowClass, !disabled && 'cursor-text hover:bg-hover aria-checked:bg-selected')}
       onClick={() => input.current?.focus()}
     >
       <OptionLetter checked={checked} index={index} />
@@ -106,7 +108,6 @@ function OtherRow({
           aria-label="其他回答"
           className="min-w-0 flex-1 bg-transparent text-ui-body text-ink outline-none placeholder:text-ink-2"
           onChange={(event) => onChange(event.target.value)}
-          onFocus={onSelect}
           placeholder="其他"
           ref={input}
           value={value}
@@ -136,10 +137,11 @@ function StepDots({ count, current }: { count: number; current: number }) {
   );
 }
 
-function answeredChoice(group: AskCardGroup, answer: string | undefined): [Choice, string] {
-  if (answer === undefined) return [undefined, ''];
-  const index = group.options.findIndex(({ label }) => label === answer);
-  return index < 0 ? ['other', answer] : [index, ''];
+function answeredChoice(group: AskCardGroup, answer: string[]): [Choice, string] {
+  const labels = group.options.map(({ label }) => label);
+  const custom = answer.filter((item) => !labels.includes(item)).join('、');
+  const picked = labels.flatMap((label, index) => (answer.includes(label) ? [index] : []));
+  return [custom ? [...picked, 'other'] : picked, custom];
 }
 
 function replaced<T>(list: T[], length: number, index: number, value: T): T[] {
@@ -152,8 +154,8 @@ export function AskCard({
   onSubmit,
 }: {
   groups: AskCardGroup[];
-  answers: (string | undefined)[] | undefined;
-  onSubmit: ((answers: (string | undefined)[]) => Promise<void>) | undefined;
+  answers: string[][] | undefined;
+  onSubmit: ((answers: string[][]) => Promise<void>) | undefined;
 }) {
   const id = useId();
   const [page, setPage] = useState(0);
@@ -166,24 +168,29 @@ export function AskCard({
   const current = Math.min(page, groups.length - 1);
   const group = groups[current]!;
   const last = current === groups.length - 1;
+  const multiple = group.multiple === true;
   const [choice, custom] = answers
-    ? answeredChoice(group, answers[current])
-    : [choices[current], customs[current] ?? ''];
+    ? answeredChoice(group, answers[current] ?? [])
+    : [choices[current] ?? [], customs[current] ?? ''];
   const pickedAt = (index: number) => {
-    const picked = choices[index];
-    if (skipped[index] || picked === undefined) return undefined;
-    return picked === 'other'
-      ? customs[index]?.trim() || undefined
-      : groups[index]!.options[picked]!.label;
+    const picked = choices[index] ?? [];
+    if (skipped[index]) return [];
+    const labels = groups[index]!.options.flatMap(({ label }, at) =>
+      picked.includes(at) ? [label] : [],
+    );
+    const other = picked.includes('other') ? customs[index]?.trim() : undefined;
+    return other ? [...labels, other] : labels;
   };
-  const choose = (next: Choice) => {
-    setChoices(replaced(choices, groups.length, current, next));
+  const choose = (next: number | 'other', on: boolean) => {
+    const rest = choice.filter((item) => item !== next);
+    const nextChoice = !on ? rest : multiple ? [...rest, next] : [next];
+    setChoices(replaced(choices, groups.length, current, nextChoice));
     setSkipped(replaced(skipped, groups.length, current, false));
   };
   const submit = (finalSkipped: boolean[]) => {
     if (!onSubmit) return;
     setSending(true);
-    const result = groups.map((_, index) => (finalSkipped[index] ? undefined : pickedAt(index)));
+    const result = groups.map((_, index) => (finalSkipped[index] ? [] : pickedAt(index)));
     void onSubmit(result).finally(() => setSending(false));
   };
   const advance = (skip: boolean) => {
@@ -198,33 +205,41 @@ export function AskCard({
   return (
     <Card asChild variant="surface">
       <section aria-label="询问" className="my-3 grid gap-3">
-        <div className="whitespace-pre-wrap text-ui-headline text-ink" id={questionId}>
-          {group.question}
+        <div className="grid gap-1">
+          <div className="whitespace-pre-wrap text-ui-headline text-ink" id={questionId}>
+            {group.question}
+          </div>
+          {multiple && <div className="text-ui-subhead text-ink-2">选择所有符合的选项</div>}
         </div>
         <div
           aria-labelledby={questionId}
           className="-mx-2.5 grid gap-0.5"
           key={current}
-          role="radiogroup"
+          role={multiple ? 'group' : 'radiogroup'}
         >
           {group.options.map((option, index) => (
             <OptionRow
-              checked={choice === index}
+              checked={choice.includes(index)}
               disabled={locked}
               index={index}
               key={option.label}
-              onSelect={() => choose(index)}
+              multiple={multiple}
+              onSelect={() => choose(index, !multiple || !choice.includes(index))}
               option={option}
             />
           ))}
-          <OtherRow
-            checked={choice === 'other'}
-            disabled={locked}
-            index={group.options.length}
-            onChange={(value) => setCustoms(replaced(customs, groups.length, current, value))}
-            onSelect={() => choose('other')}
-            value={custom}
-          />
+          {(!readOnly || custom) && (
+            <OtherRow
+              checked={choice.includes('other')}
+              disabled={locked}
+              index={group.options.length}
+              onChange={(value) => {
+                setCustoms(replaced(customs, groups.length, current, value));
+                choose('other', value.trim() !== '');
+              }}
+              value={custom}
+            />
+          )}
         </div>
         {showFooter && (
           <div className="flex items-center gap-2 pt-1">
@@ -246,7 +261,10 @@ export function AskCard({
                   <Button disabled={sending} onClick={() => advance(true)} variant="secondary">
                     跳过
                   </Button>
-                  <Button disabled={sending || !pickedAt(current)} onClick={() => advance(false)}>
+                  <Button
+                    disabled={sending || !pickedAt(current).length}
+                    onClick={() => advance(false)}
+                  >
                     {last ? '发送' : '下一步'}
                   </Button>
                 </>

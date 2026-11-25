@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export type AskOption = { label: string; description?: string };
-export type AskGroup = { question: string; options: AskOption[] };
+export type AskGroup = { question: string; options: AskOption[]; multiple?: boolean };
 
 export const ASK_CARD_LANGUAGE = 'ask';
 
@@ -9,11 +9,14 @@ const optionMarker =
   /^(?:(?:[-*+•]|\d{1,2}[.)]|[A-Za-z][.)])\s+|(?:\d{1,2}|[A-Za-z])、\s*)(?:\[[ xX]\]\s*)?(.*)$/;
 const questionPrefix = /^(?:#{1,6}\s+|(?:问题|question|q)\s*\d*\s*[:：]\s*)/i;
 const descriptionSeparator = /\s*[|｜]\s*|\s+[—–]\s+/;
+const multipleMarker = /\s*\[(?:multi|多选)\]$/i;
 const freeformOption = /^(?:其他|其它|other)(?:\s*[（(：:].*)?$/i;
 const answerSeparator = '：';
+const choiceSeparator = '、';
 
 const jsonGroup = z.object({
   question: z.string(),
+  multiple: z.boolean().optional(),
   options: z.array(
     z.union([z.string(), z.object({ label: z.string(), description: z.string().optional() })]),
   ),
@@ -42,9 +45,10 @@ function parseJson(source: string): AskGroup[] | null {
   try {
     const parsed = jsonCard.safeParse(JSON.parse(source));
     if (!parsed.success) return null;
-    return parsed.data.map(({ question, options }) => ({
+    return parsed.data.map(({ question, multiple, options }) => ({
       question,
       options: options.map((item) => (typeof item === 'string' ? { label: item } : item)),
+      ...(multiple && { multiple }),
     }));
   } catch {
     return null;
@@ -87,15 +91,19 @@ function parseLines(source: string): AskGroup[] {
   return groups;
 }
 
-function cleanGroup({ question, options }: AskGroup): AskGroup | null {
+function cleanGroup({ question, options, multiple }: AskGroup): AskGroup | null {
   const seen = new Set<string>();
   const kept = options.filter(({ label }) => {
     if (!label || freeformOption.test(label) || seen.has(label)) return false;
     seen.add(label);
     return true;
   });
-  const text = question.trim();
-  return text && kept.length ? { question: text, options: kept } : null;
+  const trimmed = question.trim();
+  const text = trimmed.replace(multipleMarker, '');
+  if (!text || !kept.length) return null;
+  return multiple || text !== trimmed
+    ? { question: text, options: kept, multiple: true }
+    : { question: text, options: kept };
 }
 
 export function parseAskCard(source: string): AskGroup[] | null {
@@ -110,19 +118,37 @@ const questionLine = (question: string) => question.replace(/\s+/g, ' ').replace
 const skippedAnswer = '（跳过）';
 const answerPrefix = (group: AskGroup) => `${questionLine(group.question)}${answerSeparator}`;
 
-export function formatAskAnswer(groups: AskGroup[], answers: (string | undefined)[]): string {
-  if (groups.length === 1 && answers[0] !== undefined) return answers[0];
+export function formatAskAnswer(groups: AskGroup[], answers: string[][]): string {
   return groups
-    .map((group, index) => `${answerPrefix(group)}${answers[index] ?? skippedAnswer}`)
+    .map((group, index) => {
+      const picked = answers[index] ?? [];
+      return `${answerPrefix(group)}${picked.length ? picked.join(choiceSeparator) : skippedAnswer}`;
+    })
     .join('\n');
 }
 
-export function parseAskAnswer(groups: AskGroup[], text: string): (string | undefined)[] {
+function pickedLabels(group: AskGroup, answer: string): string[] {
+  if (!group.multiple) return [answer];
+  const wrapped = (text: string) => `${choiceSeparator}${text}${choiceSeparator}`;
+  const labels = group.options
+    .map(({ label }) => label)
+    .filter((label) => wrapped(answer).includes(wrapped(label)));
+  const custom = labels
+    .reduce((rest, label) => rest.replace(wrapped(label), choiceSeparator), wrapped(answer))
+    .split(choiceSeparator)
+    .filter(Boolean)
+    .join(choiceSeparator);
+  return custom ? [...labels, custom] : labels;
+}
+
+export function parseAskAnswer(groups: AskGroup[], text: string): string[][] {
   const lines = text.split(/\r?\n/);
   return groups.map((group) => {
     const prefix = answerPrefix(group);
-    const line = lines.find((item) => item.startsWith(prefix));
-    const answer = line ? line.slice(prefix.length).trim() : groups.length === 1 ? text.trim() : '';
-    return answer && answer !== skippedAnswer ? answer : undefined;
+    const answer = lines
+      .find((item) => item.startsWith(prefix))
+      ?.slice(prefix.length)
+      .trim();
+    return answer && answer !== skippedAnswer ? pickedLabels(group, answer) : [];
   });
 }

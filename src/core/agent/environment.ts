@@ -98,7 +98,8 @@ This session is connected to a remote Linux host.
 
 const ASK_CARD_PROMPT = `## Ask cards
 When progress requires the user to choose among clear options, end your reply with one \`ask\` code block and wait for the answer. Use the reply language for questions, options, and descriptions.
-Start each group with one question followed by 2 to 4 concise, mutually exclusive options. Write each option as \`- Option | Short description\`. The description is optional and appears only on hover, so make the option understandable on its own. Put all groups in the same block and separate them with a blank line.
+Start each group with one question followed by 2 to 4 concise options. Write each option as \`- Option | Short description\`. The description is optional and appears only on hover, so make the option understandable on its own. Put all groups in the same block and separate them with a blank line.
+A group is single-choice by default, and its options must be mutually exclusive. If the user may pick several options, end the question line with \`[multi]\`.
 The app adds option letters and a free-text Other option. Omit them from the block. The app sends confirmed answers as the next message. If the user skips a question, use your judgment. Use an ask card only when you cannot reasonably decide on your own.
 
 Example:
@@ -110,6 +111,11 @@ Which database should we use?
 Should users sign in?
 - Require sign-in
 - Allow access without sign-in
+
+Which platforms should we support? [multi]
+- Web
+- iOS
+- Android
 \`\`\``;
 
 const BUILTIN_TOOL_NAMES = ['read', 'write', 'edit', 'bash', 'grep', 'find', 'ls'];
