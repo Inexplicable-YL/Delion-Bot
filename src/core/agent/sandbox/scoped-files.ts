@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { basename, dirname, isAbsolute, join, parse, posix, relative, sep } from 'node:path';
 import { lstatSync, realpathSync } from 'node:fs';
 import { isIP } from 'node:net';
-import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
+import type { ReadToolInput, ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
 import { imageMimeOf } from '../../protocol/files';
 import {
@@ -14,9 +14,11 @@ import { executionMode, ownerRow, scopedDirectories, type ScopedDirectory } from
 import type { SessionRow } from '../session/store';
 import { approveNonPublicRead, deniedMessage } from './approve-tool';
 import { fetchPublicWebPage } from '../../capabilities/public-web-fetch';
+import { commandOutputDirectory } from './command-output';
+import type { loadPi } from '../pi';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_TEXT_BYTES = 200_000;
+const MAX_CONTEXT_BYTES = 200_000;
 
 type FileRequest = {
   path?: string;
@@ -25,9 +27,10 @@ type FileRequest = {
   newText?: string;
   pattern?: string;
 };
-type Action = Exclude<ScopedFileOperation['action'], 'stat' | 'create'>;
+type Action = Exclude<ScopedFileOperation['action'], 'stat' | 'create' | 'read'>;
 
-const virtualRoot = /^\/(privacy|share|project)(?:\/|$)/;
+const virtualRoot = /^\/(privacy|share|project|command-output)(?:\/|$)/;
+const commandOutputPath = /^\/command-output\/([a-f0-9-]{36}\.log)$/;
 const windowsDevice = /^(con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/i;
 const sensitiveName =
   /^(?:\.git|git~\d+|\.ssh|\.gnupg|\.aws|\.azure|\.kube|\.docker|\.config|\.netrc|\.npmrc|\.pypirc|\.git-credentials|\.password-store|\.vault-token|\.env(?:\..*)?|\.delion-bot|appdata|\$recycle\.bin|system volume information|ntuser\.dat(?:[.{].*)?|delion-command[-.].*|.*\.(?:key|pem|pfx|p12|kdbx))$/i;
@@ -98,6 +101,7 @@ async function externalRead(
   action: 'read' | 'ls',
   limit: number,
   signal: AbortSignal,
+  range?: Pick<ScopedFileOperation, 'lineOffset' | 'lineLimit' | 'byteOffset'>,
 ): Promise<ScopedFileResponse> {
   const protectedPath = externalPathPolicy();
   try {
@@ -107,15 +111,28 @@ async function externalRead(
     if (!absoluteLocalPath(path) || protectedPath(path)) throw new Error();
     const result = await runLocalFileAction(
       action === 'ls' ? path : dirname(path),
-      { action, path: action === 'ls' ? '.' : basename(path), limit },
+      { action, path: action === 'ls' ? '.' : basename(path), limit, ...range },
       signal,
     );
     if (action === 'ls' && result.entries)
       result.entries = result.entries.filter((name) => !protectedPath(join(path, name)));
     return result;
   } catch {
-    return { error: '外部路径不可用或不允许读取' };
+    return { error: 'The external path is unavailable or not readable.' };
   }
+}
+
+export async function scopedProjectInstructions(project: ScopedDirectory) {
+  const path = '/project/AGENTS.md';
+  const result = await runFileAction(
+    project,
+    { action: 'read', path: 'AGENTS.md', limit: MAX_CONTEXT_BYTES },
+    AbortSignal.timeout(10_000),
+  );
+  const content = Buffer.from(result.data ?? '', 'base64')
+    .toString('utf8')
+    .replace(/^\uFEFF/, '');
+  return content.trim() ? [{ path, content }] : [];
 }
 
 function targetPath(input: string, directories: ScopedDirectory[]) {
@@ -136,7 +153,7 @@ function targetPath(input: string, directories: ScopedDirectory[]) {
         windowsDevice.test(segment),
     )
   )
-    throw new Error('路径超出聊天授权目录');
+    throw new Error('The path is outside the chat directories.');
   return { root, key: segments.filter(Boolean).join('/') || '.' };
 }
 
@@ -145,7 +162,8 @@ export function scopedReferencePath(meta: SessionRow, input: string): string {
   if (root.remote) return posix.join(root.host, key);
   const path = join(root.host, key);
   const actual = realpathSync(path);
-  if (relative(path, actual) !== '' || !isAbsolute(actual)) throw new Error('链接超出聊天授权目录');
+  if (relative(path, actual) !== '' || !isAbsolute(actual))
+    throw new Error('The link is outside the chat directories.');
   return actual;
 }
 
@@ -187,7 +205,7 @@ async function runFileAction(
     try {
       return await helperSession(root.remote).scopedFile(root.host, request, signal);
     } catch {
-      return { error: '远程文件沙箱无法完成操作' };
+      return { error: 'The remote file sandbox could not complete the operation.' };
     }
   }
   return runLocalFileAction(root.host, request, signal);
@@ -209,13 +227,13 @@ function runLocalFileAction(
       { env: {}, windowsHide: true, signal, timeout: 10_000, maxBuffer: 8 * 1024 * 1024 },
       (error, output) => {
         if (error || signal.aborted) {
-          resolve({ error: '文件沙箱无法完成操作' });
+          resolve({ error: 'The file sandbox could not complete the operation.' });
           return;
         }
         try {
           resolve(JSON.parse(output) as ScopedFileResponse);
         } catch {
-          resolve({ error: '文件沙箱返回了无效的响应' });
+          resolve({ error: 'The file sandbox returned an invalid response.' });
         }
       },
     );
@@ -243,7 +261,7 @@ export async function readScopedReference(
 
 export type CommandInspection = Pick<
   ScopedFileOperation,
-  'pattern' | 'glob' | 'maxDepth' | 'filesOnly' | 'skipHidden'
+  'pattern' | 'glob' | 'maxDepth' | 'filesOnly' | 'skipHidden' | 'limit'
 > & { action: 'read' | 'ls' | 'find' | 'grep' };
 
 export function inspectCommandPath(
@@ -257,9 +275,9 @@ export function inspectCommandPath(
     absoluteLocalPath(input) &&
     (request.action === 'read' || request.action === 'ls')
   )
-    return externalRead(input, request.action, MAX_IMAGE_BYTES, signal);
+    return externalRead(input, request.action, request.limit ?? MAX_IMAGE_BYTES, signal);
   const { root, key } = targetPath(input, directories);
-  return runFileAction(root, { ...request, path: key, limit: MAX_IMAGE_BYTES }, signal);
+  return runFileAction(root, { limit: MAX_IMAGE_BYTES, ...request, path: key }, signal);
 }
 
 export function commandCopyTarget(directories: ScopedDirectory[], destination: string) {
@@ -283,7 +301,8 @@ export async function copyCommandFile(
   if (stat.kind === 'directory')
     key = posix.join(key, posix.basename(source.replaceAll('\\', '/')));
   const original = commandCopyTarget(directories, source);
-  if (original?.root === root && original.key === key) return { error: '源文件和目标文件相同' };
+  if (original?.root === root && original.key === key)
+    return { error: 'The source and destination are the same file.' };
   const checked = targetPath(`${root.name}/${key}`, directories);
   return writeCommandFile(
     { root, key: checked.key },
@@ -316,13 +335,26 @@ const textResult = (text: string, isError = false) => ({
   ...(isError ? { isError: true } : {}),
 });
 
-const readResult = (result: ScopedFileResponse, mime: string | null | undefined) =>
-  mime && mime !== 'image/svg+xml'
-    ? {
-        content: [{ type: 'image' as const, data: result.data ?? '', mimeType: mime }],
-        details: undefined,
-      }
-    : textResult(Buffer.from(result.data ?? '', 'base64').toString('utf8'));
+function readPageResult(result: ScopedFileResponse) {
+  const text = Buffer.from(result.data ?? '', 'base64').toString('utf8');
+  const next = result.nextOffset
+    ? { offset: result.nextOffset }
+    : result.nextByteOffset
+      ? { byteOffset: result.nextByteOffset }
+      : null;
+  if (!next) return { ...textResult(text), structuredContent: text };
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: `[Read metadata: pass ${JSON.stringify(next)} with the same path to continue. File content follows.]`,
+      },
+      { type: 'text' as const, text },
+    ],
+    details: { next },
+    structuredContent: text,
+  };
+}
 
 async function externalChange(
   session: string,
@@ -348,7 +380,7 @@ async function externalChange(
     } else if (!current && action === 'write') operation = 'create';
     else if (!current?.isFile() || protectedPath(realpathSync.native(target))) throw new Error();
   } catch {
-    return textResult('外部路径不可用或不允许修改', true);
+    return textResult('The external path is unavailable or not writable.', true);
   }
   const create = operation === 'create' || operation === 'mkdir';
   const data = operation === 'edit' ? newText : content;
@@ -356,7 +388,7 @@ async function externalChange(
     Buffer.byteLength(data ?? '') > MAX_IMAGE_BYTES ||
     Buffer.byteLength(oldText ?? '') > MAX_IMAGE_BYTES
   )
-    return textResult('内容上限为 5 MB', true);
+    return textResult('Content is limited to 5 MB.', true);
   const approval = await hostPorts().desktop.approveToolAction?.({
     session,
     title: create ? '在外部目录新建' : action === 'delete' ? '删除外部文件' : '修改外部文件',
@@ -376,7 +408,7 @@ async function externalChange(
     signal,
   });
   if (!approval?.approved || signal.aborted)
-    return textResult(deniedMessage('文件操作未获批准', approval), true);
+    return textResult(deniedMessage('File operation not approved', approval), true);
   const result = await runLocalFileAction(
     directory,
     {
@@ -423,7 +455,10 @@ export function downloadTool(meta: SessionRow): ToolDefinition | null {
         )
           throw new Error();
       } catch {
-        return textResult('请输入公开 HTTPS 地址和共享目录或项目内的文件路径', true);
+        return textResult(
+          'Provide a public HTTPS address and a destination inside the available chat directory.',
+          true,
+        );
       }
       const cancellation = AbortSignal.any([
         ...(signal ? [signal] : []),
@@ -452,7 +487,7 @@ export function downloadTool(meta: SessionRow): ToolDefinition | null {
           Number(response.headers.get('content-length')) > MAX_IMAGE_BYTES
         ) {
           await response.body?.cancel();
-          return textResult('文件无法下载或超过 5 MiB', true);
+          return textResult('The file cannot be downloaded or exceeds 5 MiB.', true);
         }
         const reader = response.body.getReader();
         const chunks = [];
@@ -462,7 +497,7 @@ export function downloadTool(meta: SessionRow): ToolDefinition | null {
             const { done, value } = await reader.read();
             if (done) break;
             size += value.length;
-            if (size > MAX_IMAGE_BYTES) return textResult('文件超过 5 MiB', true);
+            if (size > MAX_IMAGE_BYTES) return textResult('The file exceeds 5 MiB.', true);
             chunks.push(value);
           }
         } finally {
@@ -483,46 +518,115 @@ export function downloadTool(meta: SessionRow): ToolDefinition | null {
         );
         return result.error ? textResult(result.error, true) : textResult(`${root.name}/${key}`);
       } catch {
-        return textResult('无法下载或保存文件', true);
+        return textResult('Unable to download or save the file.', true);
       }
     },
   };
 }
 
-export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
+export function scopedFileTools(
+  meta: SessionRow,
+  pi: Awaited<ReturnType<typeof loadPi>>,
+): ToolDefinition[] {
   const mode = executionMode(meta);
   const owner = ownerRow(meta);
   const directories = scopedDirectories(owner);
-  if (!directories.length || mode === 'full') return [];
+  if (mode === 'full') return [];
+  const cwd = directories[0]?.name ?? '/command-output';
+  const nativeRead = pi.createReadToolDefinition(cwd);
+  const read = {
+    ...nativeRead,
+    description: directories.length
+      ? 'Read text, an image, or a command output file. Use offset and limit to read text by line. Local sessions also accept absolute paths for ordinary external files.'
+      : 'Read a command output file from this session using its full_output_path.',
+    parameters: {
+      ...nativeRead.parameters,
+      properties: {
+        ...nativeRead.parameters.properties,
+        offset: { ...nativeRead.parameters.properties.offset, type: 'integer', minimum: 1 },
+        limit: { ...nativeRead.parameters.properties.limit, type: 'integer', minimum: 1 },
+        byteOffset: {
+          type: 'integer',
+          minimum: 0,
+          description:
+            'Read a page starting at this zero-based byte offset in place of offset and limit.',
+        },
+      },
+    },
+    async execute(id, params: ReadToolInput & { byteOffset?: number }, signal, onUpdate, context) {
+      const cancellation = signal ?? new AbortController().signal;
+      if (cancellation.aborted) return textResult('The operation was cancelled.', true);
+      const mime = imageMimeOf(params.path);
+      const image = mime && mime !== 'image/svg+xml';
+      const range = !image
+        ? params.byteOffset == null
+          ? { lineOffset: params.offset ?? 1, lineLimit: params.limit ?? pi.DEFAULT_MAX_LINES }
+          : { byteOffset: params.byteOffset }
+        : undefined;
+      const limit = image ? MAX_IMAGE_BYTES : pi.DEFAULT_MAX_BYTES;
+      const commandOutput = commandOutputPath.exec(params.path);
+      let result: ScopedFileResponse;
+      if (commandOutput) {
+        try {
+          result = await runLocalFileAction(
+            realpathSync(commandOutputDirectory(owner.id)),
+            { action: 'read', path: commandOutput[1]!, limit, ...range },
+            cancellation,
+          );
+        } catch {
+          return textResult('This session has no such command output file.', true);
+        }
+      } else if (directories.length && !directories[0]?.remote && absoluteLocalPath(params.path)) {
+        result = await externalRead(params.path, 'read', limit, cancellation, range);
+      } else {
+        let target: ReturnType<typeof targetPath>;
+        try {
+          target = targetPath(params.path, directories);
+        } catch {
+          return textResult('The path is outside the chat directories.', true);
+        }
+        result = await runFileAction(
+          target.root,
+          { action: 'read', path: target.key, limit, ...range },
+          cancellation,
+        );
+      }
+      if (result.error) return textResult(result.error, true);
+      if (image) {
+        const imageReader = pi.createReadToolDefinition(cwd, {
+          operations: {
+            access: async () => cancellation.throwIfAborted(),
+            readFile: async () => Buffer.from(result.data ?? '', 'base64'),
+            detectImageMimeType: async () => mime,
+          },
+        });
+        return imageReader.execute(id, { path: 'image' }, cancellation, onUpdate, context);
+      }
+      return readPageResult(result);
+    },
+  } as ToolDefinition;
+  if (!directories.length) return [read];
   const createTool = (
     action: Action,
     description: string,
-    properties: Record<string, object>,
-    required: string[],
+    parameters: ToolDefinition['parameters'],
   ): ToolDefinition => ({
     name: action,
     label: action,
     description,
-    parameters: { type: 'object', properties, required } as unknown as ToolDefinition['parameters'],
+    parameters,
     async execute(_id, params: FileRequest, signal) {
       const cancellation = signal ?? new AbortController().signal;
-      if (cancellation.aborted) return textResult('操作已取消', true);
+      if (cancellation.aborted) return textResult('The operation was cancelled.', true);
       if (
         params.path &&
         !directories[0]?.remote &&
         absoluteLocalPath(params.path) &&
-        (action === 'read' || action === 'ls')
+        action === 'ls'
       ) {
-        const mime = action === 'read' ? imageMimeOf(params.path) : null;
-        const result = await externalRead(
-          params.path,
-          action,
-          mime ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES,
-          cancellation,
-        );
+        const result = await externalRead(params.path, action, pi.DEFAULT_MAX_BYTES, cancellation);
         if (result.error) return textResult(result.error, true);
-        if (action === 'ls') return textResult(JSON.stringify(result.entries ?? []));
-        return readResult(result, mime);
+        return textResult(JSON.stringify(result.entries ?? []));
       }
       if (
         mode === 'auto-approval' &&
@@ -543,7 +647,7 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
       try {
         target = targetPath(params.path ?? '.', directories);
       } catch {
-        return textResult('路径超出聊天授权目录', true);
+        return textResult('The path is outside the chat directories.', true);
       }
       const { root, key } = target;
       const visible = key === '.' ? root.name : `${root.name}/${key}`;
@@ -556,7 +660,7 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
           Buffer.byteLength(params.oldText ?? '') > MAX_IMAGE_BYTES ||
           key === '.')
       )
-        return textResult('请选择有名称的文件，内容上限为 5 MB', true);
+        return textResult('Choose a named file. Content is limited to 5 MB.', true);
       if (mode === 'approval' && (action === 'write' || action === 'edit')) {
         const approval = await hostPorts().desktop.approveFileChange?.({
           session: owner.id,
@@ -570,7 +674,7 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
           signal: cancellation,
         });
         if (!approval?.approved || cancellation.aborted)
-          return textResult(deniedMessage('文件修改未获批准', approval), true);
+          return textResult(deniedMessage('File change not approved', approval), true);
       }
       if (writable && mode === 'auto-approval' && (root.remote || action === 'delete')) {
         const approval = await hostPorts().desktop.approveToolAction?.({
@@ -588,9 +692,8 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
           signal: cancellation,
         });
         if (!approval?.approved || cancellation.aborted)
-          return textResult(deniedMessage('文件操作未获批准', approval), true);
+          return textResult(deniedMessage('File operation not approved', approval), true);
       }
-      const mime = action === 'read' ? imageMimeOf(key) : null;
       const result = await runFileAction(
         root,
         {
@@ -599,7 +702,6 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
           content,
           oldText: params.oldText,
           pattern: params.pattern,
-          limit: mime ? MAX_IMAGE_BYTES : MAX_TEXT_BYTES,
           writable,
         },
         cancellation,
@@ -607,73 +709,66 @@ export function scopedFileTools(meta: SessionRow): ToolDefinition[] {
       if (result.error) return textResult(result.error, true);
       if (writable) return textResult(visible);
       if (action === 'ls') return textResult(JSON.stringify(result.entries ?? []));
-      if (action === 'find' || action === 'grep') {
-        const matches =
-          action === 'find'
-            ? (result.entries ?? []).map((path) => `${root.name}/${path}`)
-            : (result.matches ?? []).map((match) => ({
-                ...match,
-                path: `${root.name}/${match.path}`,
-              }));
-        return textResult(JSON.stringify({ matches, limited: Boolean(result.limited) }));
-      }
-      return readResult(result, mime);
+      const matches =
+        action === 'find'
+          ? (result.entries ?? []).map((path) => `${root.name}/${path}`)
+          : (result.matches ?? []).map((match) => ({
+              ...match,
+              path: `${root.name}/${match.path}`,
+            }));
+      return textResult(
+        JSON.stringify({
+          matches,
+          limited: Boolean(result.limited),
+          ...(result.skippedFiles && { skippedFiles: result.skippedFiles }),
+        }),
+      );
     },
   });
   const path = { type: 'string' };
   const string = { type: 'string' };
+  const parameters = (properties: Record<string, object>, required: string[]) =>
+    ({ type: 'object', properties, required }) as unknown as ToolDefinition['parameters'];
   const tools = [
-    createTool(
-      'read',
-      'Read a chat file or use an absolute local path to read an ordinary external file in a local session.',
-      { path },
-      ['path'],
-    ),
+    read,
     createTool(
       'ls',
       'List up to 1,000 directory entries. Local sessions also accept absolute local paths.',
-      { path },
-      [],
+      parameters({ path }, []),
     ),
     createTool(
       'find',
       'Find names by glob pattern inside a current chat directory.',
-      { path, pattern: string },
-      ['pattern'],
+      parameters({ path, pattern: string }, ['pattern']),
     ),
     createTool(
       'grep',
-      'Find text lines matching a regular expression inside a current chat directory.',
-      { path, pattern: string },
-      ['pattern'],
+      'Find text matching a regular expression. If limited is true, some content was not searched or returned.',
+      parameters({ path, pattern: string }, ['pattern']),
     ),
   ];
-  if (mode === 'approval' || mode === 'auto-approval')
+  if (mode === 'approval' || mode === 'auto-approval') {
+    const nativeWrite = pi.createWriteToolDefinition(cwd);
     tools.push(
-      createTool('write', 'Write a file in a current chat directory.', { path, content: string }, [
-        'path',
-        'content',
-      ]),
+      {
+        ...nativeWrite,
+        ...createTool('write', 'Write a file in a current chat directory.', nativeWrite.parameters),
+      } as ToolDefinition,
       createTool(
         'edit',
         'Replace one exact occurrence of text in a current chat file.',
-        {
-          path,
-          oldText: string,
-          newText: string,
-        },
-        ['path', 'oldText', 'newText'],
+        parameters({ path, oldText: string, newText: string }, ['path', 'oldText', 'newText']),
       ),
     );
+  }
   if (mode === 'auto-approval')
     tools.push(
       createTool(
         'mkdir',
         'Create a directory. Outside the working directories, creation requires permission for the parent directory.',
-        { path },
-        ['path'],
+        parameters({ path }, ['path']),
       ),
-      createTool('delete', 'Delete one file after approval.', { path }, ['path']),
+      createTool('delete', 'Delete one file after approval.', parameters({ path }, ['path'])),
     );
   return tools;
 }

@@ -24,6 +24,7 @@ vi.mock('../../../../src/core/capabilities/skills', () => ({
   ensureBuiltinSkills: () => {},
   effectiveDisabledSkills: () => new Set<string>(),
   globalSkillDirectories: () => [join(root, 'skills')],
+  listGlobalSkills: () => [],
   readDisabledSkillPaths: () => new Set<string>(),
 }));
 vi.mock('../../../../src/core/capabilities/mcp', () => ({

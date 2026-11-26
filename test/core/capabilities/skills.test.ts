@@ -93,19 +93,7 @@ it('writes the document skill but excludes it until its dependencies are install
 });
 
 it('受限技能按已启用的名称读取，并隐藏目录路径', async () => {
-  const tool = scopedSkillTool({
-    id: 'chat',
-    project_id: null,
-    cwd: null,
-    file: '',
-    title: '',
-    title_temporary: 0,
-    archived: 0,
-    provider_id: null,
-    model: null,
-    effort: null,
-    parent_id: null,
-  });
+  const tool = scopedSkillTool();
   const execute = (name?: string) =>
     tool.execute('call', { name }, undefined, undefined, {} as never);
   const listed = JSON.stringify(await execute());

@@ -93,7 +93,7 @@ it('后台 bash 是 helper 任务：输出进日志，退出码映射成任务�
 it('task_stop 用同一个任务 id 让 helper 取消，记为停止', async () => {
   const taskId = await start('pnpm dev');
   const exec = await lastExec();
-  expect(textOf(await call('task_stop', { taskId }))).toContain('已停止');
+  expect(textOf(await call('task_stop', { taskId }))).toContain('Stopped');
   expect(helper.cancelled).toEqual([exec.options.id]);
   await vi.waitFor(() => expect(delivered).toHaveLength(1));
   expect(delivered[0]!.details.status).toBe('stopped');

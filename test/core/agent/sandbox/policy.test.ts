@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   remoteExec: vi.fn(),
   writeRemoteFile: vi.fn(),
   disabledTools: vi.fn(() => new Set<string>()),
+  globalSkills: [] as { name: string; description: string; enabled: boolean; path: string }[],
   mcpDefinitions:
     vi.fn<
       () => ReturnType<
@@ -35,6 +36,7 @@ vi.mock('../../../../src/core/capabilities/skills', () => ({
   ensureBuiltinSkills: () => {},
   effectiveDisabledSkills: () => new Set<string>(),
   globalSkillDirectories: () => ['/tmp/skills'],
+  listGlobalSkills: () => state.globalSkills,
   readDisabledSkillPaths: () => new Set<string>(),
 }));
 vi.mock('../../../../src/core/capabilities/mcp', () => ({
@@ -177,6 +179,7 @@ it('远程命令获批后以 SSH 账户权限运行并接收项目文件副本',
   const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
     sessionId: id,
   });
+  state.scopedFile.mockClear();
   const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
   const params = { command: 'exec /bin/cat inputs/1', files: ['/project/note.txt'] };
   const execute = () => tool.execute('call', params, undefined, undefined, {} as never);
@@ -228,7 +231,11 @@ it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并
     onData(Buffer.from('src/a.ts:1:TODO'));
     return { code: 0, state: 'exited', lost: 0 };
   });
-  state.scopedFile.mockResolvedValue({ matches: [{ path: 'src/a.ts', line: 1, text: 'TODO' }] });
+  state.scopedFile.mockResolvedValue({
+    matches: [{ path: 'src/a.ts', line: 1, text: 'TODO' }],
+    limited: true,
+    skippedFiles: 1,
+  });
   const id = insertSession('p1');
   writePermissionMode(id, mode);
   const { customTools, appendSystemPrompt } = await agentEnvironment().sessionOptions(
@@ -239,6 +246,7 @@ it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并
     },
   );
   const prompt = appendSystemPrompt.join('\n');
+  state.scopedFile.mockClear();
   expect(prompt).toContain('the SSH project host (Linux)');
   expect(prompt).toContain('Virtual working directory: /project');
   expect(prompt).toContain('git status --short');
@@ -248,7 +256,11 @@ it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并
   const execute = (command: string) =>
     tool.execute('call', { command }, undefined, undefined, {} as never);
   expect(await execute('grep -rn TODO /project/src | head -n 5')).toMatchObject({
-    content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO\n' }) }],
+    content: [
+      {
+        text: expect.stringContaining('"searchLimited":true,"skippedFiles":1'),
+      },
+    ],
   });
   expect(await execute('git log --oneline -5')).toMatchObject({
     content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO' }) }],
@@ -359,6 +371,14 @@ it.each(['read-only', 'auto-approval', 'approval'] as const)(
         isError: true,
       });
       expect(approveSandboxCommand).not.toHaveBeenCalled();
+      fetch.mockResolvedValueOnce(new Response('response\n'.repeat(16_000)));
+      const large = await execute('curl -fsS https://example.test/api');
+      const [response] = large.content;
+      if (response?.type !== 'text') throw new Error('Expected a text command result');
+      expect(JSON.parse(response.text)).toMatchObject({
+        exitCode: 0,
+        full_output_path: expect.stringMatching(/^\/command-output\//),
+      });
       return;
     }
 
@@ -506,7 +526,7 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
     send.execute('1', payload, signal, undefined, {} as never);
   expect(await execute()).toMatchObject({
     isError: true,
-    content: [{ text: '操作未获批准或已取消。用户说明：改用草稿' }],
+    content: [{ text: 'The operation was not approved or was cancelled. User note: 改用草稿' }],
   });
   expect(await execute(cancellation.signal)).toMatchObject({ isError: true });
   expect(call).not.toHaveBeenCalled();
@@ -570,7 +590,7 @@ it.each(['auto-approval', 'read-only'] as const)(
       await expect(run('update_item', {})).resolves.toMatchObject({ isError: true });
     else expect(customTools.some(({ name }) => name === 'update_item')).toBe(false);
     await expect(run('web_fetch', { url: 'http://127.0.0.1/' })).rejects.toThrow(
-      '网络访问未获批准',
+      'Network access not approved',
     );
     expect(approveToolAction).toHaveBeenCalledTimes(mode === 'auto-approval' ? 2 : 1);
     expect(execute).toHaveBeenCalledTimes(1);
@@ -673,9 +693,11 @@ it('自动批准允许 SSH 项目只读操作，写入和删除在批准前不�
     },
   });
   const id = insertSession('p1');
+  state.scopedFile.mockResolvedValue({ error: '无法读取文件' });
   const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
     sessionId: id,
   });
+  state.scopedFile.mockClear();
   state.scopedFile.mockResolvedValue({ entries: ['source.txt'] });
   const run = (name: string, input: unknown) =>
     customTools
@@ -703,6 +725,116 @@ it('自动批准允许 SSH 项目只读操作，写入和删除在批准前不�
 });
 
 describe('受限普通对话', () => {
+  it.skipIf(commandTools.length === 0)(
+    '默认项目会话加载项目规则及技能描述，并可分页读取完整命令输出',
+    async () => {
+      database();
+      const project = join(root, 'project');
+      mkdirSync(project, { recursive: true });
+      const rules = 'Use project naming rules.';
+      const source = join(project, 'AGENTS.md');
+      const skillDir = join(project, '.agents', 'skills', 'test-skill');
+      const skillPath = join(skillDir, 'SKILL.md');
+      const skill =
+        '---\nname: test-skill\ndescription: Validate project files\n---\nRead the test fixtures.\n';
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(source, rules);
+      writeFileSync(skillPath, skill);
+      const imagePath = join(project, 'pixel.png');
+      writeFileSync(
+        imagePath,
+        Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOQi1oAAAGyARnBUHQ0AAAAAElFTkSuQmCC',
+          'base64',
+        ),
+      );
+      try {
+        const full = 'start\n' + 'detail\n'.repeat(9_000) + 'end\n';
+        writeFileSync(join(project, 'build.log'), full);
+        state.globalSkills = [
+          {
+            name: 'global-skill',
+            description: 'Use the global workflow',
+            enabled: true,
+            path: join(root, 'home', '.delion-bot', 'skills', 'global-skill', 'SKILL.md'),
+          },
+        ];
+        const id = insertSession('p1');
+        const options = await agentEnvironment().sessionOptions('p1', '/project', {
+          sessionId: id,
+        });
+        expect(options.scopedResources?.agentsFiles).toEqual([
+          { path: '/project/AGENTS.md', content: rules },
+        ]);
+        expect(options.scopedResources?.skillPrompt).toContain('Validate project files');
+        expect(options.scopedResources?.skillPrompt).not.toContain('Read the test fixtures.');
+        expect(options.scopedResources?.skillPrompt).toContain('Use the global workflow');
+        const call = (name: string, params: unknown) =>
+          options.customTools
+            .find((tool) => tool.name === name)!
+            .execute('call', params, undefined, undefined, {} as never);
+        await expect(call('read_skill', { name: 'test-skill' })).resolves.toMatchObject({
+          content: [{ text: skill }],
+        });
+        await expect(call('read', { path: '/project/pixel.png' })).resolves.toMatchObject({
+          content: expect.arrayContaining([
+            expect.objectContaining({ type: 'image', mimeType: 'image/png' }),
+          ]),
+        });
+        const command = await call('sandbox_command', {
+          command: 'cat /project/build.log | head -n 9002',
+        });
+        const response = command.content[0]!;
+        if (response.type !== 'text') throw new Error('Expected a text command result');
+        const result = JSON.parse(response.text);
+        expect(result.exitCode).toBe(0);
+        expect(result.output.trimEnd()).toMatch(/end$/);
+        expect(result.output).not.toContain('start\n');
+        expect(result.full_output_path).toMatch(/^\/command-output\//);
+        const firstPage = await call('read', { path: result.full_output_path, limit: 2 });
+        expect(firstPage).toMatchObject({
+          details: { next: { offset: 3 } },
+          content: [{ text: expect.stringContaining('"offset":3') }, { text: 'start\ndetail\n' }],
+        });
+        const nextPage = await call('read', {
+          path: result.full_output_path,
+          offset: 3,
+          limit: 10_000,
+        });
+        const { next } = nextPage.details as { next: { offset: number } };
+        const rest = await call('read', {
+          path: result.full_output_path,
+          offset: next.offset,
+          limit: 10_000,
+        });
+        expect(
+          [firstPage, nextPage, rest]
+            .map((page) => {
+              const body = page.content.at(-1);
+              if (body?.type !== 'text') throw new Error('Expected a text read result');
+              return body.text;
+            })
+            .join(''),
+        ).toBe(full);
+        const partial = await call('sandbox_command', {
+          command: 'head -n 2 /project/build.log && cat /project/../escape',
+        });
+        const partialText = partial.content[0]!;
+        if (partialText.type !== 'text') throw new Error('Expected a text command result');
+        expect(JSON.parse(partialText.text)).toMatchObject({
+          error: expect.stringContaining('outside the chat directories'),
+          output: 'start\ndetail\n',
+        });
+      } finally {
+        state.globalSkills = [];
+        rmSync(source);
+        rmSync(skillPath);
+        rmSync(imagePath);
+        rmSync(join(project, 'build.log'), { force: true });
+      }
+    },
+  );
+
   it('默认受限，共享目录名不是会话 id，子会话共用父目录', async () => {
     database();
     const id = insertSession(null);
@@ -1075,12 +1207,16 @@ describe('受限普通对话', () => {
     symlinkSync(join(root, 'user'), link, process.platform === 'win32' ? 'junction' : 'dir');
     const note = join(root, 'home', 'note.txt');
     writeFileSync(note, 'ext');
-    expect(() => referenceFilePath(id, secret)).toThrow('路径超出聊天授权目录');
-    expect(() => referenceFilePath(id, '/share/outside/delion.db')).toThrow('链接超出聊天授权目录');
-    expect(() => referenceFilePath(id, '/privacy/../../etc/passwd')).toThrow(
-      '路径超出聊天授权目录',
+    expect(() => referenceFilePath(id, secret)).toThrow(
+      'The path is outside the chat directories.',
     );
-    expect(() => referenceFilePath(id, note)).toThrow('路径超出聊天授权目录');
+    expect(() => referenceFilePath(id, '/share/outside/delion.db')).toThrow(
+      'The link is outside the chat directories.',
+    );
+    expect(() => referenceFilePath(id, '/privacy/../../etc/passwd')).toThrow(
+      'The path is outside the chat directories.',
+    );
+    expect(() => referenceFilePath(id, note)).toThrow('The path is outside the chat directories.');
     const shared = join(chatShareDirectory(id), 'shared.txt');
     writeFileSync(shared, 'shared');
     expect(referenceFilePath(id, '/share/shared.txt')).toBe(realpathSync(shared));

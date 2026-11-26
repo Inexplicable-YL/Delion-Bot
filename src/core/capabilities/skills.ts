@@ -135,9 +135,13 @@ async function projectSkills(
   return lists.flat();
 }
 
-export async function listSkills(projectId?: string | null): Promise<SkillView[]> {
+export function listGlobalSkills(): SkillView[] {
   ensureBuiltinSkills();
-  return [...globalSkills(), ...(await projectSkills(readDisabledSkillPaths(), projectId))];
+  return globalSkills();
+}
+
+export async function listSkills(projectId?: string | null): Promise<SkillView[]> {
+  return [...listGlobalSkills(), ...(await projectSkills(readDisabledSkillPaths(), projectId))];
 }
 
 export async function setGlobalSkillEnabled(name: string, enabled: boolean): Promise<void> {

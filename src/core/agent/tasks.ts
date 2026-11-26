@@ -11,7 +11,7 @@ import {
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { finished } from 'node:stream/promises';
-import type { ToolDefinition, getShellConfig } from '@earendil-works/pi-coding-agent';
+import type { BashOperations, ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { BackgroundTaskView, TaskNoticeDetails, TaskStatus } from '../protocol/agent';
 import type { RemoteBackend } from '../remote/operations';
 import { loadPi } from './pi';
@@ -127,32 +127,34 @@ export async function stopAllTasks() {
 
 const statusText = (outcome: TaskOutcome) =>
   outcome.status === 'completed'
-    ? '完成'
+    ? 'completed'
     : outcome.status === 'stopped'
-      ? '已停止'
+      ? 'stopped'
       : outcome.exitCode != null
-        ? `失败（退出码 ${outcome.exitCode}）`
-        : `失败${outcome.error ? `：${outcome.error}` : ''}`;
+        ? `failed (exit code ${outcome.exitCode})`
+        : `failed${outcome.error ? `: ${outcome.error}` : ''}`;
 
 function notice(task: BackgroundTask): TaskNotice {
   const outcome = task.outcome!;
   const durationMs = task.finishedAt! - task.startedAt;
   const tail = task.tail.split('\n').slice(-NOTICE_LINES).join('\n').trimEnd();
   const lines = [
-    `后台任务结束（taskId: ${task.id}）`,
+    `Background task finished (taskId: ${task.id})`,
     task.kind === 'bash'
-      ? `来源：bash\n命令：${task.label}`
-      : `来源：子 Agent\n任务：${task.label}`,
-    `状态：${statusText(outcome)}`,
-    `用时：${(durationMs / 1000).toFixed(1)} 秒`,
-    ...(task.stoppedBy === 'user' ? ['用户在后台任务面板上手动停止了它。'] : []),
+      ? `Source: bash\nCommand: ${task.label}`
+      : `Source: subagent\nTask: ${task.label}`,
+    `Status: ${statusText(outcome)}`,
+    `Duration: ${(durationMs / 1000).toFixed(1)}s`,
+    ...(task.stoppedBy === 'user'
+      ? ['The user stopped it manually in the background task panel.']
+      : []),
     task.kind === 'bash'
       ? tail
-        ? `输出末尾：\n\`\`\`\n${tail}\n\`\`\``
-        : '没有输出'
+        ? `Output tail:\n\`\`\`\n${tail}\n\`\`\``
+        : 'No output.'
       : outcome.reply
-        ? `最终回复：\n${outcome.reply}`
-        : '没有最终回复',
+        ? `Final reply:\n${outcome.reply}`
+        : 'No final reply.',
   ];
   return {
     text: lines.join('\n'),
@@ -168,49 +170,45 @@ function notice(task: BackgroundTask): TaskNotice {
   };
 }
 
-function killTree(pid: number) {
-  if (process.platform === 'win32') {
-    const killer = spawn(
-      join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'taskkill.exe'),
-      ['/F', '/T', '/PID', String(pid)],
-      { stdio: 'ignore', windowsHide: true },
-    );
-    killer.once('error', () => {});
-    return;
-  }
-  try {
-    process.kill(-pid, 'SIGKILL');
-  } catch {}
-}
-
 export type BashRunner = (
   command: string,
   options: { signal: AbortSignal; timeout?: number; onData: (chunk: Buffer) => void },
 ) => Promise<TaskOutcome>;
 
 export function localBash(
+  operations: BashOperations,
   cwd: string,
-  shell: ReturnType<typeof getShellConfig> & { windowsVerbatimArguments?: boolean },
-  commandPrefix: string | undefined,
-  env?: NodeJS.ProcessEnv,
+  commandPrefix?: string,
+  env: NodeJS.ProcessEnv = process.env,
 ): BashRunner {
+  return async (command, options) => {
+    try {
+      const script = commandPrefix ? `${commandPrefix}\n${command}` : command;
+      const { exitCode } = await operations.exec(script, cwd, { ...options, env });
+      return { status: exitCode === 0 ? 'completed' : 'failed', exitCode };
+    } catch (error) {
+      if (options.signal.aborted) return { status: 'stopped' };
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: 'failed',
+        error: message.startsWith('timeout:') ? `Timed out (${options.timeout}s).` : message,
+      };
+    }
+  };
+}
+
+export function localCmd(cwd: string, verifiedRead: boolean, env?: NodeJS.ProcessEnv): BashRunner {
+  const system = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
+  const args = ['/D', '/Q', '/S', ...(verifiedRead ? ['/V:OFF'] : []), '/C'];
   return (command, { signal, timeout, onData }) => {
     if (signal.aborted) return Promise.resolve({ status: 'stopped' });
-    const script = commandPrefix ? `${commandPrefix}\n${command}` : command;
-    const fromStdin = shell.commandTransport === 'stdin';
-    const argument = shell.windowsVerbatimArguments ? `"${script}"` : script;
-    const child = spawn(shell.shell, fromStdin ? shell.args : [...shell.args, argument], {
+    const child = spawn(join(system, 'cmd.exe'), [...args, `"${command}"`], {
       cwd,
-      detached: process.platform !== 'win32',
-      stdio: [fromStdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
-      windowsVerbatimArguments: shell.windowsVerbatimArguments,
+      windowsVerbatimArguments: true,
       env,
     });
-    if (fromStdin) {
-      child.stdin?.on('error', () => {});
-      child.stdin?.end(script);
-    }
     let timedOut = false;
     let aborted = false;
     let finished = false;
@@ -219,7 +217,14 @@ export function localBash(
     };
     child.stdout?.on('data', forward);
     child.stderr?.on('data', forward);
-    const stop = () => child.pid && killTree(child.pid);
+    const stop = () => {
+      if (!child.pid) return;
+      const killer = spawn(join(system, 'taskkill.exe'), ['/F', '/T', '/PID', String(child.pid)], {
+        stdio: 'ignore',
+        windowsHide: true,
+      });
+      killer.once('error', () => {});
+    };
     const onAbort = () => {
       aborted = true;
       stop();
@@ -311,7 +316,7 @@ function readLog(log: string, offset: number | undefined) {
 function ownTask(parentId: string, id: string, restricted = false): BackgroundTask {
   const task = tasks.get(id);
   if (task?.parent.id !== parentId || (restricted && task.kind !== 'subagent'))
-    throw new Error(`没有这个后台任务：${id}`);
+    throw new Error(`No such background task: ${id}`);
   return task;
 }
 
@@ -338,20 +343,20 @@ export function taskControls(parent: TaskParent, restricted = false): ToolDefini
       } as unknown as ToolDefinition['parameters'],
       async execute(_id, params: { taskId: string; offset?: number }) {
         const task = ownTask(parent.id, params.taskId, restricted);
-        const status = task.outcome ? statusText(task.outcome) : '运行中';
+        const status = task.outcome ? statusText(task.outcome) : 'running';
         if (task.kind === 'subagent')
           return text(
             [
-              `状态：${status}`,
-              ...(task.outcome?.reply ? [`最终回复：\n${task.outcome.reply}`] : []),
+              `Status: ${status}`,
+              ...(task.outcome?.reply ? [`Final reply:\n${task.outcome.reply}`] : []),
             ].join('\n'),
           );
         const output = readLog(task.log!, params.offset);
         return text(
           [
-            `状态：${status}`,
-            `输出（字节 ${output.start}–${output.end}，共 ${output.size}）：`,
-            output.text || '（没有输出）',
+            `Status: ${status}`,
+            `Output (bytes ${output.start}–${output.end} of ${output.size}):`,
+            output.text || '(no output)',
             `nextOffset: ${output.end}`,
           ].join('\n'),
         );
@@ -370,9 +375,10 @@ export function taskControls(parent: TaskParent, restricted = false): ToolDefini
       } as unknown as ToolDefinition['parameters'],
       async execute(_id, params: { taskId: string }) {
         const task = ownTask(parent.id, params.taskId, restricted);
-        if (task.status !== 'running') return text(`任务已经结束：${statusText(task.outcome!)}`);
+        if (task.status !== 'running')
+          return text(`The task has already finished: ${statusText(task.outcome!)}`);
         stopTask(task.id, 'model');
-        return text('已停止。');
+        return text('Stopped.');
       },
     },
   ];
@@ -414,9 +420,15 @@ export async function backgroundTools(
         if (!params.background) return bash.execute(toolCallId, params, signal, onUpdate, ctx);
         const run: BashRunner = remote
           ? (command, options) => remote.runInBackground(command, cwd, options)
-          : localBash(cwd, pi.getShellConfig(shellPath), commandPrefix);
+          : localBash(
+              pi.createLocalBashOperations({ shellPath: pi.getShellConfig(shellPath).shell }),
+              cwd,
+              commandPrefix,
+            );
         const id = startBash(parent, params.command, params.timeout, run);
-        return text(`已在后台运行（taskId: ${id}）。结束时会自动通知你，不需要轮询。`);
+        return text(
+          `Running in the background (taskId: ${id}). You will be notified when it finishes; do not poll.`,
+        );
       },
     } as ToolDefinition,
     ...taskControls(parent),

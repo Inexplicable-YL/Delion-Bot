@@ -190,6 +190,10 @@ export interface OpenSessionInput {
   shellPath: string;
   commandPrefix?: string;
   skillPaths: string[];
+  scopedResources?: {
+    agentsFiles: { path: string; content: string }[];
+    skillPrompt: string;
+  };
   agentsFilesOverride?: (base: { agentsFiles: { path: string; content: string }[] }) => {
     agentsFiles: { path: string; content: string }[];
   };
@@ -211,6 +215,10 @@ export async function openPiSession(input: OpenSessionInput): Promise<AgentSessi
     shellCommandPrefix: input.commandPrefix,
     defaultTools: ['read', 'bash', 'edit', 'write', 'grep', 'find', 'ls'],
   });
+  const scopedResources = input.scopedResources;
+  const prompt = [...input.appendSystemPrompt, scopedResources?.skillPrompt].filter(
+    (part): part is string => Boolean(part),
+  );
   const resourceLoader = new pi.DefaultResourceLoader({
     cwd: input.cwd,
     agentDir,
@@ -218,16 +226,16 @@ export async function openPiSession(input: OpenSessionInput): Promise<AgentSessi
     noExtensions: true,
     noPromptTemplates: true,
     noThemes: true,
-    noSkills: input.restricted,
-    noContextFiles: input.restricted,
+    noSkills: Boolean(scopedResources),
+    noContextFiles: Boolean(scopedResources),
     extensionFactories: input.beforeTool
       ? [(api) => void api.on('tool_call', async () => void (await input.beforeTool!()))]
       : [],
     additionalSkillPaths: input.skillPaths,
-    ...(input.restricted
-      ? { systemPrompt: input.appendSystemPrompt.join('\n\n') }
-      : { appendSystemPrompt: input.appendSystemPrompt }),
-    ...(input.agentsFilesOverride ? { agentsFilesOverride: input.agentsFilesOverride } : {}),
+    ...(input.restricted ? { systemPrompt: prompt.join('\n\n') } : { appendSystemPrompt: prompt }),
+    agentsFilesOverride: scopedResources
+      ? () => ({ agentsFiles: scopedResources.agentsFiles })
+      : input.agentsFilesOverride,
     skillsOverride: (base) => ({
       ...base,
       skills: base.skills.filter((skill) => {

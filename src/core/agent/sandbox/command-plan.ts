@@ -262,8 +262,6 @@ export function commandPlan(
   return { steps, readOnly: targets.size === 0, targets };
 }
 
-const maxOutput = 128 * 1024;
-
 export function commandPlanPermissions(plan: NonNullable<ReturnType<typeof commandPlan>>) {
   return plan.steps.flat().map((stage) => {
     if (stage.kind === 'http') {
@@ -347,14 +345,15 @@ export async function executeCommandPlan(
   files: string[],
   session: string,
   signal: AbortSignal,
-): Promise<ScopedCommandResult> {
+  onOutput: (text: string) => void,
+): Promise<Omit<ScopedCommandResult, 'output'>> {
   const root = directories[0]!;
   const cancellation = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
   const inspect = async (path: string, request: CommandInspection) => {
     const input = /^inputs[\\/](\d+)$/.exec(path);
     if (input) {
       const original = files[Number(input[1]) - 1];
-      if (!original) throw new Error('未提供对应的命令输入文件');
+      if (!original) throw new Error('The matching command input file was not provided.');
       path = original;
     }
     const result = await inspectCommandPath(directories, path, request, cancellation);
@@ -363,14 +362,12 @@ export async function executeCommandPlan(
   };
   const read = async (path: string) =>
     Buffer.from((await inspect(path, { action: 'read' })).data ?? '', 'base64');
-  let output = '';
-  let truncated = false;
-  const append = (text = '') => {
-    const space = maxOutput - output.length;
-    output += text.slice(0, space);
-    truncated ||= text.length > space;
-    return output + (truncated ? '\n[输出已截断]' : '');
-  };
+  let searchLimited = false;
+  let skippedFiles = 0;
+  const diagnostics = () => ({
+    ...(searchLimited && { searchLimited }),
+    ...(skippedFiles && { skippedFiles }),
+  });
   for (const pipeline of plan.steps) {
     let result: ScopedCommandResult = { exitCode: 0, output: '' };
     for (const stage of pipeline) {
@@ -402,7 +399,7 @@ export async function executeCommandPlan(
         try {
           value = JSON.parse(content);
         } catch {
-          return { exitCode: 4, output, error: '输入不是有效的 JSON' };
+          return { exitCode: 4, error: 'The input is not valid JSON.', ...diagnostics() };
         }
         for (const field of stage.fields)
           value =
@@ -439,16 +436,20 @@ export async function executeCommandPlan(
         result = { exitCode: 0, output: values.join('') };
       } else {
         const values = [];
-        let limited = false;
         let bytes = 0;
         for (const path of stage.paths) {
           const data = await inspect(path, stage.request);
-          limited ||= Boolean(data.limited);
+          searchLimited ||= Boolean(data.limited);
+          skippedFiles += data.skippedFiles ?? 0;
           if (stage.request.action === 'read') {
             const file = Buffer.from(data.data ?? '', 'base64');
             bytes += file.byteLength;
             if (bytes > 8 * 1024 * 1024)
-              return { exitCode: 1, output, error: '命令输入文件超过 8 MiB' };
+              return {
+                exitCode: 1,
+                error: 'The command input files exceed 8 MiB.',
+                ...diagnostics(),
+              };
             values.push(file.toString('utf8'));
             continue;
           }
@@ -468,13 +469,21 @@ export async function executeCommandPlan(
         const text = (stage.namesOnly ? [...new Set(values)] : values).join('');
         result = {
           exitCode: stage.request.action === 'grep' && !values.length ? 1 : 0,
-          output: limited ? text + '[搜索结果已截断]\n' : text,
+          output: text,
         };
       }
-      if (result.error) return { ...result, output: append(result.output) };
+      if (result.error) {
+        onOutput(result.output);
+        return {
+          exitCode: result.exitCode,
+          error: result.error,
+          ...(result.output_truncated && { output_truncated: true }),
+          ...diagnostics(),
+        };
+      }
     }
-    const combined = append(result.output);
-    if (result.exitCode !== 0) return { ...result, output: combined };
+    onOutput(result.output);
+    if (result.exitCode !== 0) return { exitCode: result.exitCode, ...diagnostics() };
   }
-  return { exitCode: 0, output: append() };
+  return { exitCode: 0, ...diagnostics() };
 }

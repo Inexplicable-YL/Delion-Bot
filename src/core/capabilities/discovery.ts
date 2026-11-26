@@ -5,6 +5,7 @@ export interface DiscoveredSkill {
   name: string;
   description: string;
   path: string;
+  disableModelInvocation: boolean;
 }
 
 export async function discoverProjectSkills(cwd: string): Promise<DiscoveredSkill[]> {
@@ -28,5 +29,6 @@ export async function discoverProjectSkills(cwd: string): Promise<DiscoveredSkil
       name: skill.name,
       description: skill.description,
       path: resolve(skill.filePath),
+      disableModelInvocation: skill.disableModelInvocation,
     }));
 }

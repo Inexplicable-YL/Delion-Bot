@@ -9,10 +9,12 @@ import { helperSession, type ScopedCommandResult } from '../../remote/helper';
 import { shellQuote, targetKey } from '../../remote/transport';
 import { notifyRemoteChange } from '../../remote/events';
 import type { SessionRow } from '../session/store';
-import { localBash } from '../tasks';
+import { loadPi } from '../pi';
+import { localBash, localCmd } from '../tasks';
 import { deniedMessage } from './approve-tool';
 import { commandNames, literalCommands, readOnlyCommand } from './command-names';
 import { commandPlan, commandPlanPermissions, executeCommandPlan } from './command-plan';
+import { CommandOutput } from './command-output';
 import { macosSandboxLauncher, runMacosCommand } from './macos-command';
 import { redactModelPaths } from './model-paths';
 import {
@@ -22,12 +24,7 @@ import {
   scopedDirectories,
   type ScopedDirectory,
 } from './mode';
-import {
-  commandCopyTarget,
-  copyCommandFile,
-  readScopedReference,
-  scopedFileTools,
-} from './scoped-files';
+import { commandCopyTarget, copyCommandFile, readScopedReference } from './scoped-files';
 
 const commandResult = (value: object, isError = false) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(value) }],
@@ -99,22 +96,10 @@ async function runApprovedCommand(
   command: string,
   copies: readonly Buffer[],
   signal: AbortSignal,
+  capture: CommandOutput,
   verifiedRead = false,
 ): Promise<ScopedCommandResult> {
-  const maxOutputBytes = 50 * 1024;
-  const chunks: Buffer[] = [];
-  let bytes = 0;
-  let truncated = false;
-  const onData = (chunk: Buffer) => {
-    const count = Math.min(chunk.length, maxOutputBytes - bytes);
-    if (count) chunks.push(chunk.subarray(0, count));
-    bytes += count;
-    truncated ||= count < chunk.length;
-  };
-  const output = (temporary?: string) => {
-    const text = Buffer.concat(chunks).toString('utf8');
-    return `${temporary ? text.replaceAll(temporary, '.') : text}${truncated ? '\n[输出已截断]' : ''}`;
-  };
+  const onData = (chunk: Buffer) => capture.append(chunk);
   const timeout = 120;
   if (root.remote) {
     const helper = helperSession(root.remote);
@@ -131,7 +116,7 @@ async function runApprovedCommand(
         });
         path = path.trim();
         if (prepared.code !== 0 || !/^\/tmp\/delion-command\.[a-zA-Z0-9]{10}$/.test(path))
-          throw new Error('无法创建远端命令临时目录');
+          throw new Error('Unable to create the remote command scratch directory.');
         scratch = path;
         const inputs = await helper.exec('mkdir -m 700 inputs', {
           cwd: scratch,
@@ -139,7 +124,8 @@ async function runApprovedCommand(
           timeoutMs: 10_000,
           onData: () => {},
         });
-        if (inputs.code !== 0) throw new Error('无法创建远端命令输入目录');
+        if (inputs.code !== 0)
+          throw new Error('Unable to create the remote command input directory.');
         for (const [index, data] of copies.entries()) {
           signal.throwIfAborted();
           await helper.writeFile(`${scratch}/inputs/${index + 1}`, data);
@@ -159,9 +145,16 @@ async function runApprovedCommand(
         },
       );
       signal.throwIfAborted();
-      return result.state === 'timeout'
-        ? { exitCode: null, output: output(scratch), error: '命令执行超时' }
-        : { exitCode: result.code, output: output(scratch) };
+      return {
+        ...(result.state === 'timeout'
+          ? { exitCode: null, error: 'Command timed out.' }
+          : { exitCode: result.code }),
+        ...(await capture.result(
+          (text) => (scratch ? text.replaceAll(scratch, '.') : text),
+          !result.lost,
+        )),
+        ...(result.lost && { error: `SSH transfer lost ${result.lost} bytes of output.` }),
+      };
     } finally {
       if (scratch)
         await helper
@@ -177,13 +170,6 @@ async function runApprovedCommand(
 
   const windows = process.platform === 'win32';
   const system = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
-  const shell = windows
-    ? {
-        shell: join(system, 'cmd.exe'),
-        args: ['/D', '/Q', '/S', ...(verifiedRead ? ['/V:OFF'] : []), '/C'],
-        windowsVerbatimArguments: true,
-      }
-    : { shell: '/bin/bash', args: ['--noprofile', '--norc', '-c'] };
   const scratch =
     root.name !== '/project' || copies.length
       ? await mkdtemp(join(await realpath(tmpdir()), 'delion-command-'))
@@ -211,20 +197,25 @@ async function runApprovedCommand(
             : { PATH: '/usr/bin:/bin', LANG: process.env.LANG }),
         }
       : undefined;
-    const result = await localBash(
-      scratch ?? root.host,
-      shell,
-      undefined,
-      environment,
-    )(command, {
+    const cwd = scratch ?? root.host;
+    const run = windows
+      ? localCmd(cwd, verifiedRead, environment)
+      : localBash(
+          (await loadPi()).createLocalBashOperations({ shellPath: '/bin/bash' }),
+          cwd,
+          undefined,
+          environment,
+        );
+    const result = await run(command, {
       signal,
       timeout,
       onData,
     });
     signal.throwIfAborted();
+    const redact = redactModelPaths(chatDirectories);
     return {
       exitCode: result.exitCode ?? null,
-      output: redactModelPaths(chatDirectories)(output(scratch)),
+      ...(await capture.result((text) => redact(scratch ? text.replaceAll(scratch, '.') : text))),
       ...(result.error && { error: result.error }),
     };
   } finally {
@@ -251,7 +242,11 @@ export function runWindowsCommand(
             return;
           } catch {}
         }
-        resolve({ exitCode: null, output: '', error: 'Windows 受限命令无法完成' });
+        resolve({
+          exitCode: null,
+          output: '',
+          error: 'The scoped Windows command did not complete.',
+        });
       },
     );
     const cancel = () => child.stdin?.end();
@@ -318,7 +313,10 @@ function analyzeCommand(
   };
 }
 
-export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
+export function sandboxCommandTool(
+  meta: SessionRow,
+  fileTools: ToolDefinition[],
+): ToolDefinition | null {
   const mode = executionMode(meta);
   if (mode === 'full') return null;
   const automatic = mode === 'auto-approval';
@@ -337,7 +335,6 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   const isolated =
     Boolean(remote) || (process.platform === 'darwin' && existsSync(macosSandboxLauncher));
   const { id: session } = owner;
-  const fileTools = scopedFileTools(meta);
   return {
     name: 'sandbox_command',
     label: 'Sandbox command',
@@ -360,7 +357,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
       const cancellation = signal ?? new AbortController().signal;
       files = [...files];
       if (cancellation.aborted || command.includes('\0'))
-        return commandResult({ error: '命令无效或已取消' }, true);
+        return commandResult({ error: 'The command is invalid or was cancelled.' }, true);
       const analysis = analyzeCommand(
         command,
         shell,
@@ -371,7 +368,10 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
       );
       const isolatedRead = mode === 'read-only' && analysis.kind === 'shell' && analysis.isolated;
       if (mode === 'read-only' && !analysis.readOnly && !isolatedRead)
-        return commandResult({ error: '只读模式下只能运行已确认无修改的命令' }, true);
+        return commandResult(
+          { error: 'Read-only mode only runs commands verified to make no changes.' },
+          true,
+        );
       const approvedHostFile = mode === 'approval' && analysis.kind === 'file' && analysis.hostPath;
       const plan =
         analysis.kind === 'plan' || (analysis.kind === 'file' && !approvedHostFile)
@@ -420,7 +420,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
           ...(grant && { grant }),
         });
         if (!approval?.approved || cancellation.aborted)
-          return commandResult({ error: deniedMessage('命令未获批准', approval) }, true);
+          return commandResult({ error: deniedMessage('Command not approved', approval) }, true);
       }
       if (analysis.kind === 'file' && !approvedHostFile && (mode !== 'approval' || !plan)) {
         const operation = analysis.file;
@@ -433,7 +433,7 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
             return tool.execute(id, { ...operation.params, path }, cancellation, onUpdate, context);
         }
         if (!plan && mode !== 'approval')
-          return commandResult({ error: '无法读取命令所需的文件' }, true);
+          return commandResult({ error: 'Unable to read the file required by the command.' }, true);
       }
       if (analysis.kind === 'copy') {
         try {
@@ -448,23 +448,35 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
             Boolean(result.error),
           );
         } catch {
-          return commandResult({ error: '无法复制文件' }, true);
+          return commandResult({ error: 'Unable to copy the file.' }, true);
         }
       }
+      const capture = new CommandOutput(session);
       if (plan) {
         try {
-          const result = await executeCommandPlan(plan, directories, files, session, cancellation);
+          const result = await executeCommandPlan(
+            plan,
+            directories,
+            files,
+            session,
+            cancellation,
+            (text) => capture.append(Buffer.from(text)),
+          );
           return commandResult(
-            { ...result, output: redactModelPaths(directories)(result.output) },
+            {
+              ...result,
+              ...(await capture.result(redactModelPaths(directories), !result.output_truncated)),
+            },
             result.exitCode !== 0,
           );
         } catch (error) {
           return commandResult(
             {
+              ...(await capture.result(redactModelPaths(directories))),
               error:
                 error instanceof Error
                   ? redactModelPaths(directories)(error.message)
-                  : '无法完成命令读取',
+                  : 'Unable to complete the command read.',
             },
             true,
           );
@@ -487,7 +499,8 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
           );
           const bytes = Buffer.from(data ?? '', 'base64');
           remaining -= bytes.byteLength;
-          if (remaining < 0) return commandResult({ error: '命令输入文件超过 8 MiB' }, true);
+          if (remaining < 0)
+            return commandResult({ error: 'The command input files exceed 8 MiB.' }, true);
           copies.push(bytes);
         }
         cancellation.throwIfAborted();
@@ -502,9 +515,10 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
             script,
             copies,
             cancellation,
+            capture,
             verifiedRead,
           );
-          return commandResult(output, output.exitCode !== 0);
+          return commandResult(output, output.exitCode !== 0 || Boolean(output.error));
         }
         if (remote) {
           const output = await helperSession(remote).scopedCommand(command, copies, cancellation);
@@ -517,7 +531,12 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
         return commandResult(output, output.exitCode !== 0);
       } catch {
         return commandResult(
-          { error: cancellation.aborted ? '命令已取消' : '无法运行命令或读取输入文件' },
+          {
+            ...(await capture.result(redactModelPaths(directories))),
+            error: cancellation.aborted
+              ? 'The command was cancelled.'
+              : 'Unable to run the command or read the input files.',
+          },
           true,
         );
       } finally {

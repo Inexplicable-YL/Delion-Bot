@@ -70,14 +70,14 @@ it('不带 background 时就是内置 bash；带上时立即返回，结束后�
     label: 'sleep 0.2; echo 后台完成',
   });
   expect(notice.text).toContain('后台完成');
-  expect(await call('task_output', { taskId })).toContain('状态：完成');
+  expect(await call('task_output', { taskId })).toContain('Status: completed');
 });
 
 it('退出码非零记为失败，通知里带退出码', async () => {
   const taskId = await start('echo 出错了; exit 3');
   const { notice } = await noticeOf(taskId);
   expect(notice.details).toMatchObject({ status: 'failed', exitCode: 3 });
-  expect(notice.text).toContain('退出码 3');
+  expect(notice.text).toContain('exit code 3');
   expect(notice.text).toContain('出错了');
 });
 
@@ -88,15 +88,15 @@ it('长输出完整写进日志：通知只带末尾几行，task_output 按 off
   expect(notice.text).not.toContain('\n99900\n');
 
   const tail = await call('task_output', { taskId });
-  const size = Number(/共 (\d+)/.exec(tail)![1]);
+  const size = Number(/of (\d+)/.exec(tail)![1]);
   expect(size).toBeGreaterThan(500_000);
   expect(tail).toContain('100000');
   expect(tail).toContain(`nextOffset: ${size}`);
 
   const head = await call('task_output', { taskId, offset: 0 });
-  expect(head).toContain('输出（字节 0–51200');
-  expect(head).toMatch(/：\n1\n2\n3\n/);
-  expect(await call('task_output', { taskId, offset: size })).toContain('（没有输出）');
+  expect(head).toContain('Output (bytes 0–51200');
+  expect(head).toMatch(/:\n1\n2\n3\n/);
+  expect(await call('task_output', { taskId, offset: size })).toContain('(no output)');
 });
 
 it('task_stop 连同子进程一起结束，记为停止并照常投递', async () => {
@@ -114,11 +114,11 @@ it('task_stop 连同子进程一起结束，记为停止并照常投递', async 
     },
     { timeout: 5_000 },
   );
-  expect(await call('task_stop', { taskId })).toContain('已停止');
+  expect(await call('task_stop', { taskId })).toContain('Stopped');
   const { notice, wake } = await noticeOf(taskId);
   expect(notice.details.status).toBe('stopped');
   expect(wake).toBe(true);
-  expect(await call('task_stop', { taskId })).toContain('任务已经结束');
+  expect(await call('task_stop', { taskId })).toContain('The task has already finished');
   await vi.waitFor(
     () => expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' })),
     { timeout: 5_000 },
@@ -130,12 +130,12 @@ it('用户在面板上手动停止只追加通知、不唤醒；归档删除时�
   stopTask(manual, 'user');
   const { notice, wake } = await noticeOf(manual);
   expect(wake).toBe(false);
-  expect(notice.text).toContain('手动停止');
+  expect(notice.text).toContain('stopped it manually');
 
   const silent = await start('sleep 30');
   stopSessionTasks('parent');
   await vi.waitFor(
-    async () => expect(await call('task_output', { taskId: silent })).toContain('已停止'),
+    async () => expect(await call('task_output', { taskId: silent })).toContain('stopped'),
     {
       timeout: 10_000,
     },
@@ -150,7 +150,7 @@ it('别的会话的任务查不到', async () => {
     others
       .find((item) => item.name === 'task_output')!
       .execute('call', { taskId } as never, undefined, undefined, undefined as never),
-  ).rejects.toThrow('没有这个后台任务');
+  ).rejects.toThrow('No such background task');
   await noticeOf(taskId);
 });
 

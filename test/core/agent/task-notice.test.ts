@@ -118,7 +118,7 @@ it('父会话空闲时自动开一轮处理通知，界面显示运行中；只�
     reply: '构建好了',
     status: 'completed',
   });
-  expect(last.user).toContain('后台任务结束');
+  expect(last.user).toContain('Background task finished');
 });
 
 it('主对话停止不影响后台任务，之后正常结束的任务仍会唤醒父会话', async () => {
