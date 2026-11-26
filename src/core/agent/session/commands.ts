@@ -1,9 +1,11 @@
 import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import type { WorkspaceChat, MainSessionCommand, PermissionMode } from '../../protocol/agent';
 import { hostPorts } from '../../ports';
 import * as changes from '../changes';
 import { forkSessionFile, loadPi, resolveModel } from '../pi';
 import { usableLlmProviders } from '../providers';
+import { commandOutputDirectory } from '../sandbox/command-output';
 import { closeSidechat, sidechatBusy } from '../sidechat';
 import { stopSessionTasks } from '../tasks';
 import { live, sessionBranch, type Live } from './live';
@@ -166,6 +168,7 @@ export async function deleteSession(id: string) {
   const { file } = row(id);
   removeSession(id);
   await changes.deleteTurnChanges(id);
+  await rm(commandOutputDirectory(id), { recursive: true, force: true });
   if (file && existsSync(file)) await hostPorts().desktop.trash(file);
 }
 
