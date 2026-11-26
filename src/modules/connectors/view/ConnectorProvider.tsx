@@ -117,8 +117,8 @@ export function ConnectorProvider({
         open={open}
         title={name}
       >
-        <div className="grid gap-6 pt-6">
-          <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+        <div className="grid gap-6 pt-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
             <p className="text-ui-callout text-ink-2">
               {!configured
                 ? `填入 ${name} 凭据后，即可连接 Gmail、GitHub 等应用。`
