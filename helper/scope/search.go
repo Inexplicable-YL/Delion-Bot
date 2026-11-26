@@ -11,6 +11,8 @@ import (
 	"strings"
 )
 
+const maxSearchFileBytes = 200_000
+
 type Match struct {
 	Path string `json:"path"`
 	Line int    `json:"line"`
@@ -19,23 +21,26 @@ type Match struct {
 
 func grepFile(ctx context.Context, root *os.Root, name string, input Request) Response {
 	if input.Pattern == "" || len(input.Pattern) > 512 {
-		return Response{Error: "搜索模式必须为 1 至 512 字节"}
+		return Response{Error: "The search pattern must be 1 to 512 bytes."}
 	}
 	expression, err := regexp.Compile(input.Pattern)
 	if err != nil {
-		return Response{Error: "无效的搜索模式"}
+		return Response{Error: "Invalid search pattern."}
 	}
 	if input.Glob != "" {
 		if match, err := path.Match(input.Glob, name); err != nil || !match {
 			return Response{}
 		}
 	}
-	data, err := readFile(root, name, 200_000)
+	if info, err := root.Lstat(name); err == nil && info.Size() > maxSearchFileBytes {
+		return Response{Limited: true, SkippedFiles: 1}
+	}
+	data, err := readFile(root, name, maxSearchFileBytes)
 	if err != nil {
-		return Response{Error: "无法读取文件或文件超出大小限制"}
+		return Response{Error: "Unable to read the file or the file exceeds the size limit."}
 	}
 	if ctx.Err() != nil {
-		return Response{Error: "操作已取消"}
+		return Response{Error: "Operation cancelled."}
 	}
 	var reply Response
 	appendMatches(&reply, expression, input.Path, data)
@@ -66,7 +71,7 @@ func appendMatches(reply *Response, expression *regexp.Regexp, name string, data
 
 func search(ctx context.Context, root *os.Root, input Request) Response {
 	if input.Pattern == "" || len(input.Pattern) > 512 {
-		return Response{Error: "搜索模式必须为 1 至 512 字节"}
+		return Response{Error: "The search pattern must be 1 to 512 bytes."}
 	}
 	var expression *regexp.Regexp
 	var err error
@@ -76,11 +81,11 @@ func search(ctx context.Context, root *os.Root, input Request) Response {
 		_, err = path.Match(input.Pattern, "")
 	}
 	if err != nil {
-		return Response{Error: "无效的搜索模式"}
+		return Response{Error: "Invalid search pattern."}
 	}
 	if input.Glob != "" {
 		if _, err := path.Match(input.Glob, ""); err != nil {
-			return Response{Error: "无效的文件筛选模式"}
+			return Response{Error: "Invalid file filter pattern."}
 		}
 	}
 	var reply Response
@@ -95,6 +100,7 @@ func search(ctx context.Context, root *os.Root, input Request) Response {
 		}
 		visited++
 		if err != nil {
+			reply.Limited = true
 			if entry != nil && entry.IsDir() {
 				return fs.SkipDir
 			}
@@ -130,22 +136,25 @@ func search(ctx context.Context, root *os.Root, input Request) Response {
 			}
 		}
 		info, err := entry.Info()
-		if err != nil || info.Size() > 200_000 || info.Size() > int64(remaining) {
+		if err != nil || info.Size() > maxSearchFileBytes || info.Size() > int64(remaining) {
+			reply.SkippedFiles++
 			return nil
 		}
 		remaining -= int(info.Size())
 		data, err := readFile(root, name, max(1, info.Size()))
 		if err != nil {
+			reply.SkippedFiles++
 			return nil
 		}
 		appendMatches(&reply, expression, visible, data)
-		if reply.Limited {
+		if len(reply.Matches) == 200 {
 			return fs.SkipAll
 		}
 		return nil
 	})
 	if err != nil && !errors.Is(err, fs.SkipAll) {
-		return Response{Error: "搜索未完成"}
+		return Response{Error: "The search did not complete."}
 	}
+	reply.Limited = reply.Limited || reply.SkippedFiles > 0
 	return reply
 }

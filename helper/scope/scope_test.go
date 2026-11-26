@@ -4,8 +4,46 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestReadPagesAndIncompleteSearch(t *testing.T) {
+	dir := t.TempDir()
+	large := strings.Repeat("first\n", 34_000) + "target"
+	if err := os.WriteFile(filepath.Join(dir, "large.txt"), []byte(large), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "small.txt"), []byte("target"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	read := Request{Action: "read", Path: "large.txt", Limit: 200_000, LineOffset: 34_000, LineLimit: 1}
+	first := Run(ctx, dir, read)
+	if string(first.Data) != "first\n" || first.NextOffset != 34_001 {
+		t.Fatalf("first page: %+v", first)
+	}
+	read.LineOffset = first.NextOffset
+	last := Run(ctx, dir, read)
+	if string(last.Data) != "target" || last.NextOffset != 0 {
+		t.Fatalf("last page: %+v", last)
+	}
+	read.LineOffset++
+	if past := Run(ctx, dir, read); !strings.Contains(past.Error, "34001 lines total") {
+		t.Fatalf("offset past an unterminated last line: %+v", past)
+	}
+	read.Path, read.LineOffset = "small.txt", 2
+	if err := os.WriteFile(filepath.Join(dir, read.Path), []byte("target\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if past := Run(ctx, dir, read); !strings.Contains(past.Error, "1 lines total") {
+		t.Fatalf("offset past a newline-terminated last line: %+v", past)
+	}
+	search := Run(ctx, dir, Request{Action: "grep", Path: ".", Pattern: "target"})
+	if !search.Limited || search.SkippedFiles != 1 || len(search.Matches) != 1 || search.Matches[0].Path != "small.txt" {
+		t.Fatalf("incomplete search: %+v", search)
+	}
+}
 
 func TestScopedFileOperations(t *testing.T) {
 	dir := t.TempDir()

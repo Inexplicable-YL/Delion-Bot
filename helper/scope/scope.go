@@ -28,63 +28,69 @@ type Request struct {
 	FilesOnly  bool
 	SkipHidden bool
 	Limit      int64
+	LineOffset int64
+	LineLimit  int64
+	ByteOffset *int64
 	Writable   bool
 }
 
 type Response struct {
-	Data    []byte   `json:"data,omitempty"`
-	Entries []string `json:"entries,omitempty"`
-	Kind    string   `json:"kind,omitempty"`
-	Matches []Match  `json:"matches,omitempty"`
-	Limited bool     `json:"limited,omitempty"`
-	Error   string   `json:"error,omitempty"`
+	Data           []byte   `json:"data,omitempty"`
+	NextOffset     int64    `json:"nextOffset,omitempty"`
+	NextByteOffset int64    `json:"nextByteOffset,omitempty"`
+	SkippedFiles   int      `json:"skippedFiles,omitempty"`
+	Entries        []string `json:"entries,omitempty"`
+	Kind           string   `json:"kind,omitempty"`
+	Matches        []Match  `json:"matches,omitempty"`
+	Limited        bool     `json:"limited,omitempty"`
+	Error          string   `json:"error,omitempty"`
 }
 
 func Run(ctx context.Context, directory string, input Request) Response {
 	if ctx.Err() != nil {
-		return Response{Error: "操作已取消"}
+		return Response{Error: "Operation cancelled."}
 	}
 	if !filepath.IsAbs(directory) {
-		return Response{Error: "授权目录不可用"}
+		return Response{Error: "The authorized directory is unavailable."}
 	}
 	before, err := os.Lstat(directory)
 	if err != nil || !before.IsDir() {
-		return Response{Error: "授权目录不可用"}
+		return Response{Error: "The authorized directory is unavailable."}
 	}
 	for child, parent := directory, filepath.Dir(directory); child != parent; child, parent = parent, filepath.Dir(parent) {
 		info, err := os.Lstat(parent)
 		if err != nil || !info.IsDir() {
-			return Response{Error: "授权目录不可用"}
+			return Response{Error: "The authorized directory is unavailable."}
 		}
 	}
 	root, err := os.OpenRoot(directory)
 	if err != nil {
-		return Response{Error: "授权目录不可用"}
+		return Response{Error: "The authorized directory is unavailable."}
 	}
 	defer root.Close()
 	opened, err := root.Stat(".")
 	if err != nil || !os.SameFile(before, opened) {
-		return Response{Error: "授权目录不可用"}
+		return Response{Error: "The authorized directory is unavailable."}
 	}
 	return execute(ctx, root, input)
 }
 
 func execute(ctx context.Context, root *os.Root, input Request) Response {
 	if !fs.ValidPath(input.Path) || strings.ContainsAny(input.Path, "\\:\x00") {
-		return Response{Error: "路径超出授权目录"}
+		return Response{Error: "The path is outside the authorized directory."}
 	}
 	for _, segment := range strings.Split(input.Path, "/") {
 		if internalName(segment) {
-			return Response{Error: "路径超出授权目录"}
+			return Response{Error: "The path is outside the authorized directory."}
 		}
 	}
 	writes := input.Action == "write" || input.Action == "create" || input.Action == "edit" || input.Action == "mkdir" || input.Action == "delete"
 	if writes && (!input.Writable || input.Path == ".") {
-		return Response{Error: "当前操作没有写入权限"}
+		return Response{Error: "This operation has no write permission."}
 	}
 	dir, err := openDirectory(root, path.Dir(input.Path), input.Action == "write" || input.Action == "mkdir")
 	if err != nil {
-		return Response{Error: "无法打开授权目录"}
+		return Response{Error: "Unable to open the authorized directory."}
 	}
 	defer dir.Close()
 	name := path.Base(input.Path)
@@ -97,14 +103,14 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 		}
 		dir, err := openDirectory(dir, name, false)
 		if err != nil {
-			return Response{Error: "无法打开目录"}
+			return Response{Error: "Unable to open the directory."}
 		}
 		defer dir.Close()
 		return search(ctx, dir, input)
 	case "stat":
 		info, err := dir.Lstat(name)
 		if err != nil {
-			return Response{Error: "文件或目录不可用"}
+			return Response{Error: "The file or directory is unavailable."}
 		}
 		if info.IsDir() {
 			return Response{Kind: "directory"}
@@ -115,30 +121,33 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 				return Response{Kind: "file"}
 			}
 		}
-		return Response{Error: "只能访问普通文件和目录"}
+		return Response{Error: "Only regular files and directories are accessible."}
 	case "read":
 		if input.Limit <= 0 || input.Limit > maxSize {
-			return Response{Error: "无效的读取上限"}
+			return Response{Error: "Invalid read limit."}
+		}
+		if input.LineOffset != 0 || input.LineLimit != 0 || input.ByteOffset != nil {
+			return readPage(ctx, dir, name, input)
 		}
 		data, err := readFile(dir, name, input.Limit)
 		if err != nil {
-			return Response{Error: "无法读取文件或文件超出大小限制"}
+			return Response{Error: "Unable to read the file or the file exceeds the size limit."}
 		}
 		return Response{Data: data}
 	case "ls":
 		dir, err := openDirectory(dir, name, false)
 		if err != nil {
-			return Response{Error: "无法打开目录"}
+			return Response{Error: "Unable to open the directory."}
 		}
 		defer dir.Close()
 		file, err := openRegular(dir, ".")
 		if err != nil {
-			return Response{Error: "无法列出目录"}
+			return Response{Error: "Unable to list the directory."}
 		}
 		defer file.Close()
 		names, err := file.Readdirnames(1000)
 		if err != nil && !errors.Is(err, io.EOF) {
-			return Response{Error: "无法列出目录"}
+			return Response{Error: "Unable to list the directory."}
 		}
 		entries := names[:0]
 		for _, name := range names {
@@ -150,18 +159,18 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 	case "mkdir":
 		created, err := openDirectory(dir, name, true)
 		if err != nil {
-			return Response{Error: "无法创建目录"}
+			return Response{Error: "Unable to create the directory."}
 		}
 		created.Close()
 		return Response{}
 	case "delete":
 		file, err := openVerifiedFile(dir, name)
 		if err != nil {
-			return Response{Error: "只能删除普通文件"}
+			return Response{Error: "Only regular files can be deleted."}
 		}
 		file.Close()
 		if ctx.Err() != nil || dir.Remove(name) != nil {
-			return Response{Error: "无法删除文件"}
+			return Response{Error: "Unable to delete the file."}
 		}
 		return Response{}
 	case "write", "create", "edit":
@@ -176,21 +185,21 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 			mode = info.Mode().Perm()
 		case errors.Is(err, fs.ErrNotExist) && input.Action != "edit":
 		default:
-			return Response{Error: "只能修改普通文件"}
+			return Response{Error: "Only regular files can be modified."}
 		}
 		if input.Action == "edit" {
 			before, err := readFile(dir, name, maxSize)
 			if err != nil || input.OldText == "" || bytes.Count(before, []byte(input.OldText)) != 1 {
-				return Response{Error: "源文本必须在可读取的文件中恰好出现一次"}
+				return Response{Error: "The source text must appear exactly once in a readable file."}
 			}
 			data = bytes.Replace(before, []byte(input.OldText), data, 1)
 		}
 		if len(data) > maxSize || saveFile(ctx, dir, name, data, mode, input.Action == "create") != nil {
-			return Response{Error: "无法写入文件或文件超出大小限制"}
+			return Response{Error: "Unable to write the file or the file exceeds the size limit."}
 		}
 		return Response{}
 	default:
-		return Response{Error: "不支持的文件操作"}
+		return Response{Error: "Unsupported file operation."}
 	}
 }
 

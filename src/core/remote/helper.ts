@@ -17,7 +17,7 @@ import {
   type RemoteTarget,
 } from './transport';
 
-export const HELPER_VERSION = '0.3.6';
+export const HELPER_VERSION = '0.3.7';
 const PROTOCOL_VERSION = 2;
 const HEARTBEAT_MS = 30_000;
 const IDLE_TIMEOUT = '1h';
@@ -234,6 +234,9 @@ export interface ScopedFileOperation {
   filesOnly?: boolean;
   skipHidden?: boolean;
   limit?: number;
+  lineOffset?: number;
+  lineLimit?: number;
+  byteOffset?: number;
   writable?: boolean;
 }
 
@@ -243,6 +246,9 @@ export interface ScopedFileResponse {
   kind?: 'file' | 'directory';
   matches?: { path: string; line: number; text: string }[];
   limited?: boolean;
+  skippedFiles?: number;
+  nextOffset?: number;
+  nextByteOffset?: number;
   error?: string;
 }
 
@@ -250,6 +256,11 @@ export interface ScopedCommandResult {
   exitCode: number | null;
   output: string;
   error?: string;
+  full_output_path?: string;
+  output_truncated?: boolean;
+  output_notice?: string;
+  searchLimited?: boolean;
+  skippedFiles?: number;
 }
 
 export interface HelperSession {
