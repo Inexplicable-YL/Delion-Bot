@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
@@ -66,7 +66,7 @@ import { saveWebSearchEntry } from '../../../../src/core/capabilities/web-search
 import { launchPlan, scopedDirectories } from '../../../../src/core/agent/sandbox/mode';
 import { referenceFilePath } from '../../../../src/modules/chat/main/reference-file';
 import { fileLinkKey } from '../../../../src/modules/chat/view/reference-tokens';
-import { hostPorts } from '../../../../src/core/ports';
+import { hostPorts, type Approval, type ApprovalRequest } from '../../../../src/core/ports';
 import { provideTestHostPorts } from '../../host-mock';
 import {
   chatSessionDirectory,
@@ -84,9 +84,24 @@ const commandTools =
     : [];
 let db: Database.Database;
 
-function database(
-  approveFileChange?: NonNullable<ReturnType<typeof hostPorts>['desktop']['approveFileChange']>,
-) {
+type ApprovalHandler<K extends ApprovalRequest['kind']> = (
+  request: Extract<ApprovalRequest, { kind: K }>,
+) => Promise<Approval>;
+
+function approvalHandlers(handlers: {
+  command?: ApprovalHandler<'command'>;
+  file?: ApprovalHandler<'file'>;
+  tool?: ApprovalHandler<'tool'>;
+}) {
+  return async (request: ApprovalRequest) => {
+    if (request.kind === 'command' && handlers.command) return handlers.command(request);
+    if (request.kind === 'file' && handlers.file) return handlers.file(request);
+    if (request.kind === 'tool' && handlers.tool) return handlers.tool(request);
+    return { approved: false } as const;
+  };
+}
+
+function database(approveFileChange?: ApprovalHandler<'file'>) {
   state.mcpDefinitions.mockResolvedValue([]);
   db = new Database(':memory:');
   db.exec(`
@@ -104,7 +119,7 @@ function database(
     );
   `);
   provideTestHostPorts({
-    desktop: { ...hostPorts().desktop, approveFileChange },
+    desktop: { ...hostPorts().desktop, approve: approvalHandlers({ file: approveFileChange }) },
     paths: {
       userData: () => join(root, 'user'),
       storage: () => join(root, 'storage'),
@@ -155,7 +170,7 @@ it('远程命令获批后以 SSH 账户权限运行并接收项目文件副本',
   const target = { host: 'user@remote' };
   provideTestHostPorts({
     ...host,
-    desktop: { ...host.desktop, approveSandboxCommand },
+    desktop: { ...host.desktop, approve: approvalHandlers({ command: approveSandboxCommand }) },
     projects: {
       ...host.projects,
       remoteOf: () => ({
@@ -191,10 +206,14 @@ it('远程命令获批后以 SSH 账户权限运行并接收项目文件副本',
   });
   expect(approveSandboxCommand).toHaveBeenLastCalledWith({
     ...params,
+    kind: 'command',
     remote: target.host,
     session: id,
     signal: expect.any(AbortSignal),
-    grant: { keys: ['host-command:/bin/cat'], label: '运行 /bin/cat 命令' },
+    grant: {
+      keys: ['host-command:' + JSON.stringify(['user@remote||', '/srv/project', '/bin/cat'])],
+      label: '运行 /bin/cat 命令',
+    },
   });
   expect(state.scopedFile).toHaveBeenCalledWith(
     '/srv/project',
@@ -215,7 +234,7 @@ it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并
   const host = hostPorts();
   provideTestHostPorts({
     ...host,
-    desktop: { ...host.desktop, approveSandboxCommand },
+    desktop: { ...host.desktop, approve: approvalHandlers({ command: approveSandboxCommand }) },
     projects: {
       ...host.projects,
       remoteOf: () => ({
@@ -275,7 +294,12 @@ it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并
   if (mode === 'auto-approval') {
     expect(approveSandboxCommand).toHaveBeenCalledWith(
       expect.objectContaining({
-        grant: { keys: ['host-command:gh pr merge'], label: '运行 gh pr merge 命令' },
+        grant: {
+          keys: [
+            'host-command:' + JSON.stringify(['user@remote||', '/srv/project', 'gh pr merge']),
+          ],
+          label: '运行 gh pr merge 命令',
+        },
       }),
     );
     expect(approveSandboxCommand).toHaveBeenCalledTimes(3);
@@ -300,7 +324,10 @@ it('curl HEAD 重定向到非公开地址前再次检查权限', async () => {
   const approveSandboxCommand = vi.fn();
   provideTestHostPorts({
     ...host,
-    desktop: { ...host.desktop, approveToolAction, approveSandboxCommand },
+    desktop: {
+      ...host.desktop,
+      approve: approvalHandlers({ tool: approveToolAction, command: approveSandboxCommand }),
+    },
   });
   const fetch = vi
     .fn()
@@ -335,7 +362,10 @@ it.each(['read-only', 'auto-approval', 'approval'] as const)(
     database();
     const host = hostPorts();
     const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: false });
-    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    provideTestHostPorts({
+      ...host,
+      desktop: { ...host.desktop, approve: approvalHandlers({ command: approveSandboxCommand }) },
+    });
     const fetch = vi
       .spyOn(publicWeb, 'fetchPublicWebPage')
       .mockImplementation(
@@ -411,7 +441,10 @@ it
     database();
     const host = hostPorts();
     const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: false });
-    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    provideTestHostPorts({
+      ...host,
+      desktop: { ...host.desktop, approve: approvalHandlers({ command: approveSandboxCommand }) },
+    });
     const id = insertSession(null);
     writePermissionMode(id, mode);
     const share = chatShareDirectory(id);
@@ -480,7 +513,7 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
   database();
   const host = hostPorts();
   const approveToolAction = vi
-    .fn()
+    .fn<ApprovalHandler<'tool'>>()
     .mockResolvedValueOnce({ approved: false, note: '改用草稿' })
     .mockImplementationOnce(async () => {
       cancellation.abort();
@@ -488,7 +521,10 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
     })
     .mockResolvedValueOnce({ approved: true });
   const cancellation = new AbortController();
-  provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveToolAction } });
+  provideTestHostPorts({
+    ...host,
+    desktop: { ...host.desktop, approve: approvalHandlers({ tool: approveToolAction }) },
+  });
   const call = vi.fn().mockResolvedValue({
     ok: true,
     result: { text: 'done' },
@@ -500,6 +536,7 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
       type: 'function',
       function: { name: 'mail_send', description: 'Send mail', parameters: { type: 'object' } },
       source: { name: 'Mailbox', domain: 'mail.example.test' },
+      approvalKey: 'mailbox:mail_send',
       execute: call,
     },
   ]);
@@ -538,6 +575,13 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
       fields: expect.arrayContaining([{ label: '连接器', value: 'Mailbox (mail.example.test)' }]),
     }),
   );
+  expect(approveToolAction.mock.lastCall?.[0].grant?.keys).toEqual(['mailbox:mail_send']);
+  await expect(
+    customTools
+      .find(({ name }) => name === 'delion')!
+      .execute('call', { command: 'query_todos' }, undefined, undefined, {} as never),
+  ).resolves.toMatchObject({ isError: true });
+  expect(approveToolAction.mock.lastCall?.[0].grant?.keys).toEqual(['delion:query_todos']);
 });
 
 it.each(['auto-approval', 'read-only'] as const)(
@@ -552,7 +596,10 @@ it.each(['auto-approval', 'read-only'] as const)(
       }),
     );
     vi.stubGlobal('fetch', fetch);
-    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveToolAction } });
+    provideTestHostPorts({
+      ...host,
+      desktop: { ...host.desktop, approve: approvalHandlers({ tool: approveToolAction }) },
+    });
     saveWebSearchEntry({ name: 'Search', provider: 'custom', url: 'https://search.example/' });
     const execute = vi.fn().mockResolvedValue({
       ok: true,
@@ -565,6 +612,7 @@ it.each(['auto-approval', 'read-only'] as const)(
         type: 'function',
         function: { name, description: name, parameters: {} },
         source: { name: 'Connector' },
+        approvalKey: `connector:${name}`,
         readOnly: name === 'read_item',
         execute,
       })),
@@ -611,19 +659,20 @@ it.skipIf(
   const competing = join(external, 'competing.txt');
   writeFileSync(existing, 'original');
   const grants = new Set<string>();
-  const approveToolAction = vi.fn<NonNullable<typeof host.desktop.approveToolAction>>(
-    async ({ grant, fields }) => {
-      const key = grant?.keys[0];
-      if (!key) return { approved: false };
-      if (fields[0]?.value === competing) writeFileSync(competing, 'concurrent');
-      grants.add(key);
-      return { approved: true };
-    },
-  );
+  const approveToolAction = vi.fn<ApprovalHandler<'tool'>>(async ({ grant, fields }) => {
+    const key = grant?.keys[0];
+    if (!key) return { approved: false };
+    if (fields[0]?.value === competing) writeFileSync(competing, 'concurrent');
+    grants.add(key);
+    return { approved: true };
+  });
   const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: false });
   provideTestHostPorts({
     ...host,
-    desktop: { ...host.desktop, approveToolAction, approveSandboxCommand },
+    desktop: {
+      ...host.desktop,
+      approve: approvalHandlers({ tool: approveToolAction, command: approveSandboxCommand }),
+    },
   });
   const id = insertSession(null);
   writePermissionMode(id, 'auto-approval');
@@ -674,55 +723,121 @@ it.skipIf(
   }
 });
 
-it('自动批准允许 SSH 项目只读操作，写入和删除在批准前不会发给远端', async () => {
+it.skipIf(
+  !existsSync(
+    join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
+  ),
+)('并发编辑同一文件时每次修改都保留', async () => {
   database();
-  const host = hostPorts();
-  const approveToolAction = vi.fn().mockResolvedValue({ approved: false });
-  provideTestHostPorts({
-    ...host,
-    desktop: { ...host.desktop, approveToolAction },
-    projects: {
-      ...host.projects,
-      remoteOf: () => ({
-        id: 'p1',
-        label: 'remote',
-        path: '/srv/project',
-        remoteId: 'ssh',
-        target: { host: 'user@remote' },
-      }),
-    },
-  });
-  const id = insertSession('p1');
-  state.scopedFile.mockResolvedValue({ error: '无法读取文件' });
-  const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
+  const id = insertSession(null);
+  writePermissionMode(id, 'auto-approval');
+  const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
     sessionId: id,
   });
-  state.scopedFile.mockClear();
-  state.scopedFile.mockResolvedValue({ entries: ['source.txt'] });
-  const run = (name: string, input: unknown) =>
-    customTools
-      .find((tool) => tool.name === name)!
-      .execute('call', input, undefined, undefined, {} as never);
-  await expect(run('ls', { path: '/project' })).resolves.toMatchObject({
-    content: [{ text: '["source.txt"]' }],
-  });
-  for (const name of ['write', 'edit', 'delete']) {
-    await expect(
-      run(name, {
-        path: '/project/source.txt',
-        content: 'after',
-        oldText: 'before',
-        newText: 'after',
-      }),
-    ).resolves.toMatchObject({ isError: true });
-  }
-  expect(approveToolAction).toHaveBeenCalledTimes(3);
-  expect(state.scopedFile).toHaveBeenCalledExactlyOnceWith(
-    '/srv/project',
-    expect.objectContaining({ action: 'ls' }),
-    expect.any(AbortSignal),
+  const edit = customTools.find((tool) => tool.name === 'edit')!;
+  const lines = Array.from({ length: 8 }, (_, index) => `line-${index}`);
+  writeFileSync(join(chatShareDirectory(id), 'shared.txt'), lines.join('\n'));
+  await Promise.all(
+    lines.map((line) =>
+      edit.execute(
+        'call',
+        { path: '/share/shared.txt', oldText: line, newText: line.toUpperCase() },
+        undefined,
+        undefined,
+        {} as never,
+      ),
+    ),
+  );
+  expect(readFileSync(join(chatShareDirectory(id), 'shared.txt'), 'utf8')).toBe(
+    lines.map((line) => line.toUpperCase()).join('\n'),
   );
 });
+
+it.each(['auto-approval', 'approval'] as const)(
+  '%s 模式下 SSH 文件修改在批准前不会发给远端',
+  async (mode) => {
+    database();
+    const host = hostPorts();
+    const approveFileChange = vi
+      .fn<ApprovalHandler<'file'>>()
+      .mockResolvedValue({ approved: false });
+    provideTestHostPorts({
+      ...host,
+      desktop: { ...host.desktop, approve: approvalHandlers({ file: approveFileChange }) },
+      projects: {
+        ...host.projects,
+        remoteOf: () => ({
+          id: 'p1',
+          label: 'remote',
+          path: '/srv/project',
+          remoteId: 'ssh',
+          target: { host: 'user@remote' },
+        }),
+      },
+    });
+    const id = insertSession('p1');
+    writePermissionMode(id, mode);
+    state.scopedFile.mockResolvedValue({ error: '无法读取文件' });
+    const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
+      sessionId: id,
+    });
+    state.scopedFile.mockClear();
+    state.scopedFile.mockResolvedValue({ entries: ['source.txt'], limited: true });
+    const run = (name: string, input: unknown) =>
+      customTools
+        .find((tool) => tool.name === name)!
+        .execute('call', input, undefined, undefined, {} as never);
+    await expect(run('ls', { path: '/project' })).resolves.toMatchObject({
+      content: [{ text: JSON.stringify({ entries: ['source.txt'], limited: true }) }],
+    });
+    for (const name of ['write', 'edit', 'delete', 'mkdir']) {
+      await expect(
+        run(name, {
+          path: '/project/source.txt',
+          content: 'after',
+          oldText: 'before',
+          newText: 'after',
+        }),
+      ).resolves.toMatchObject({ isError: true });
+    }
+    await expect(
+      run('write', { path: '/project/other.txt', content: 'after' }),
+    ).resolves.toMatchObject({ isError: true });
+    const [write, edit, removal, mkdir, otherFile] = approveFileChange.mock.calls.map(
+      ([request]) => request,
+    );
+    expect(write?.grant?.keys).toHaveLength(1);
+    expect(edit?.grant?.keys).toHaveLength(1);
+    expect(otherFile?.grant?.keys).toHaveLength(1);
+    expect(
+      new Set([write?.grant?.keys[0], edit?.grant?.keys[0], otherFile?.grant?.keys[0]]).size,
+    ).toBe(3);
+    expect(removal?.grant).toBeUndefined();
+    expect(write?.grant?.directory?.key).toEqual(expect.any(String));
+    expect(write?.grant?.directory?.key).toBe(otherFile?.grant?.directory?.key);
+    expect(write?.grant?.directory?.key).not.toBe(edit?.grant?.directory?.key);
+    expect(write?.grant?.directory?.key).not.toBe(mkdir?.grant?.directory?.key);
+    if (mode === 'approval') {
+      await expect(
+        run('sandbox_command', { command: 'mkdir /project/reports' }),
+      ).resolves.toMatchObject({
+        isError: true,
+      });
+      expect(approveFileChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          kind: 'file',
+          action: 'mkdir',
+          path: 'user@remote: /srv/project/reports',
+        }),
+      );
+    }
+    expect(state.scopedFile).toHaveBeenCalledExactlyOnceWith(
+      '/srv/project',
+      expect.objectContaining({ action: 'ls' }),
+      expect.any(AbortSignal),
+    );
+  },
+);
 
 describe('受限普通对话', () => {
   it.skipIf(commandTools.length === 0)(
@@ -732,7 +847,11 @@ describe('受限普通对话', () => {
       const project = join(root, 'project');
       mkdirSync(project, { recursive: true });
       const rules = 'Use project naming rules.';
-      const source = join(project, 'AGENTS.md');
+      const source = join(project, 'CLAUDE.md');
+      const globalRules = 'Use global rules.';
+      const globalSource = join(root, 'home', '.agents', 'AGENTS.md');
+      mkdirSync(dirname(globalSource), { recursive: true });
+      writeFileSync(globalSource, globalRules);
       const skillDir = join(project, '.agents', 'skills', 'test-skill');
       const skillPath = join(skillDir, 'SKILL.md');
       const skill =
@@ -749,7 +868,7 @@ describe('受限普通对话', () => {
         ),
       );
       try {
-        const full = 'start\n' + 'detail\n'.repeat(9_000) + 'end\n';
+        const full = 'start\n' + 'detail\n'.repeat(29_000) + 'end\n';
         writeFileSync(join(project, 'build.log'), full);
         state.globalSkills = [
           {
@@ -764,7 +883,8 @@ describe('受限普通对话', () => {
           sessionId: id,
         });
         expect(options.scopedResources?.agentsFiles).toEqual([
-          { path: '/project/AGENTS.md', content: rules },
+          { path: '~/.agents/AGENTS.md', content: globalRules },
+          { path: '/project/CLAUDE.md', content: rules },
         ]);
         expect(options.scopedResources?.skillPrompt).toContain('Validate project files');
         expect(options.scopedResources?.skillPrompt).not.toContain('Read the test fixtures.');
@@ -782,7 +902,7 @@ describe('受限普通对话', () => {
           ]),
         });
         const command = await call('sandbox_command', {
-          command: 'cat /project/build.log | head -n 9002',
+          command: 'cat /project/build.log | head -n 29002',
         });
         const response = command.content[0]!;
         if (response.type !== 'text') throw new Error('Expected a text command result');
@@ -794,12 +914,18 @@ describe('受限普通对话', () => {
         const firstPage = await call('read', { path: result.full_output_path, limit: 2 });
         expect(firstPage).toMatchObject({
           details: { next: { offset: 3 } },
-          content: [{ text: expect.stringContaining('"offset":3') }, { text: 'start\ndetail\n' }],
+          content: [{ text: expect.stringMatching(/^start\ndetail\n[\s\S]*"offset":3/) }],
+          structuredContent: { output: 'start\ndetail\n', truncated: true, next: { offset: 3 } },
         });
         const nextPage = await call('read', {
           path: result.full_output_path,
           offset: 3,
-          limit: 10_000,
+          limit: 30_000,
+        });
+        expect(nextPage.structuredContent).toMatchObject({
+          output: 'detail\n'.repeat(28_571),
+          truncated: true,
+          next: { offset: 28_574 },
         });
         const { next } = nextPage.details as { next: { offset: number } };
         const rest = await call('read', {
@@ -807,15 +933,19 @@ describe('受限普通对话', () => {
           offset: next.offset,
           limit: 10_000,
         });
+        expect(rest.structuredContent).toMatchObject({ truncated: false, next: null });
         expect(
           [firstPage, nextPage, rest]
-            .map((page) => {
-              const body = page.content.at(-1);
-              if (body?.type !== 'text') throw new Error('Expected a text read result');
-              return body.text;
-            })
+            .map((page) => (page.structuredContent as { output: string }).output)
             .join(''),
         ).toBe(full);
+        expect(await call('read', { path: result.full_output_path, byteOffset: 0 })).toMatchObject({
+          structuredContent: {
+            output: full.slice(0, 200_000),
+            truncated: true,
+            next: { byteOffset: 200_000 },
+          },
+        });
         const partial = await call('sandbox_command', {
           command: 'head -n 2 /project/build.log && cat /project/../escape',
         });
@@ -828,6 +958,7 @@ describe('受限普通对话', () => {
       } finally {
         state.globalSkills = [];
         rmSync(source);
+        rmSync(globalSource);
         rmSync(skillPath);
         rmSync(imagePath);
         rmSync(join(project, 'build.log'), { force: true });
@@ -955,7 +1086,7 @@ describe('受限普通对话', () => {
   });
 
   it.skipIf(commandTools.length === 0)(
-    '原始二进制文件经批准下载至共享目录，模型只收到虚拟路径',
+    '原始二进制文件经批准下载至私有目录，模型只收到虚拟路径',
     async () => {
       database();
       const host = hostPorts();
@@ -977,7 +1108,7 @@ describe('受限普通对话', () => {
         .mockResolvedValueOnce({ approved: true });
       provideTestHostPorts({
         ...host,
-        desktop: { ...host.desktop, approveToolAction },
+        desktop: { ...host.desktop, approve: approvalHandlers({ tool: approveToolAction }) },
       });
       const id = insertSession(null);
       writePermissionMode(id, 'approval');
@@ -987,7 +1118,7 @@ describe('受限普通对话', () => {
         { sessionId: id },
       );
       const download = customTools.find(({ name }) => name === 'download_file')!;
-      const input = { url: 'https://drive.example.test/export', path: '/share/原件.docx' };
+      const input = { url: 'https://drive.example.test/export', path: '/privacy/原件.docx' };
       const execute = (url = input.url) =>
         download.execute('1', { ...input, url }, undefined, undefined, {} as never);
       expect(await execute()).toMatchObject({ isError: true });
@@ -997,9 +1128,9 @@ describe('受限普通对话', () => {
         content: [{ text: JSON.stringify({ redirect: redirected }) }],
       });
       expect(fetch).toHaveBeenCalledTimes(1);
-      expect(await execute(redirected)).toMatchObject({ content: [{ text: '/share/原件.docx' }] });
-      expect(readFileSync(join(chatShareDirectory(id), '原件.docx'))).toEqual(Buffer.from(data));
-      expect(appendSystemPrompt.join('\n')).not.toContain(chatShareDirectory(id));
+      expect(await execute(redirected)).toMatchObject({ content: [{ text: input.path }] });
+      expect(readFileSync(join(chatSessionDirectory(id), '原件.docx'))).toEqual(Buffer.from(data));
+      expect(appendSystemPrompt.join('\n')).not.toContain(chatSessionDirectory(id));
     },
   );
 
@@ -1014,7 +1145,10 @@ describe('受限普通对话', () => {
       .mockResolvedValueOnce({ approved: false })
       .mockResolvedValueOnce({ approved: true });
     const host = hostPorts();
-    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    provideTestHostPorts({
+      ...host,
+      desktop: { ...host.desktop, approve: approvalHandlers({ command: approveSandboxCommand }) },
+    });
     const id = insertSession(null);
     writePermissionMode(id, 'approval');
     writeFileSync(join(chatShareDirectory(id), 'input.txt'), 'approved input');
@@ -1044,7 +1178,10 @@ describe('受限普通对话', () => {
       .mockResolvedValueOnce({ approved: true })
       .mockResolvedValueOnce({ approved: false });
     const host = hostPorts();
-    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    provideTestHostPorts({
+      ...host,
+      desktop: { ...host.desktop, approve: approvalHandlers({ command: approveSandboxCommand }) },
+    });
     const id = insertSession(null);
     writePermissionMode(id, 'approval');
     const directory = mkdtempSync(join(root, 'approved command '));
@@ -1069,7 +1206,10 @@ describe('受限普通对话', () => {
     database();
     const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: true });
     const host = hostPorts();
-    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    provideTestHostPorts({
+      ...host,
+      desktop: { ...host.desktop, approve: approvalHandlers({ command: approveSandboxCommand }) },
+    });
     const id = insertSession(null);
     const share = chatShareDirectory(id);
     const privacy = chatSessionDirectory(id);
@@ -1121,7 +1261,9 @@ describe('受限普通对话', () => {
           .find((tool) => tool.name === name)!
           .execute('call', { path }, undefined, undefined, {} as never);
       expect(await run('read', file)).toMatchObject({ content: [{ text: 'ordinary file' }] });
-      expect(await run('ls', directory)).toMatchObject({ content: [{ text: '["normal.txt"]' }] });
+      expect(await run('ls', directory)).toMatchObject({
+        content: [{ text: JSON.stringify({ entries: ['normal.txt'], limited: false }) }],
+      });
       expect(await run('read', credential)).toMatchObject({ isError: true });
       expect(await run('read', otherFile)).toMatchObject({ isError: true });
       expect(await run('write', file)).toMatchObject({ isError: true });
@@ -1138,7 +1280,10 @@ describe('受限普通对话', () => {
     const approve = vi
       .fn()
       .mockResolvedValueOnce({ approved: true })
-      .mockResolvedValueOnce({ approved: false });
+      .mockResolvedValueOnce({ approved: false })
+      .mockResolvedValueOnce({ approved: true })
+      .mockResolvedValueOnce({ approved: false })
+      .mockResolvedValueOnce({ approved: true });
     database(approve);
     const id = insertSession(null);
     writePermissionMode(id, 'approval');
@@ -1165,8 +1310,22 @@ describe('受限普通对话', () => {
       content: [{ text: 'approved' }],
     });
     expect(await run(read, { path: '/privacy/deliverable.txt' })).toMatchObject({ isError: true });
-    expect(approve).toHaveBeenCalledTimes(2);
-    expect(readFileSync(join(chatShareDirectory(id), 'deliverable.txt'), 'utf8')).toBe('approved');
+    const mkdir = tools.find(({ name }) => name === 'mkdir')!;
+    const remove = tools.find(({ name }) => name === 'delete')!;
+    const share = chatShareDirectory(id);
+    await expect(run(mkdir, { path: '/share/reports' })).resolves.toMatchObject({
+      content: [{ text: '/share/reports' }],
+    });
+    expect(existsSync(join(share, 'reports'))).toBe(true);
+    await expect(run(remove, { path: '/share/deliverable.txt' })).resolves.toMatchObject({
+      isError: true,
+    });
+    expect(readFileSync(join(share, 'deliverable.txt'), 'utf8')).toBe('approved');
+    await expect(run(remove, { path: '/share/deliverable.txt' })).resolves.toMatchObject({
+      content: [{ text: '/share/deliverable.txt' }],
+    });
+    expect(existsSync(join(share, 'deliverable.txt'))).toBe(false);
+    expect(approve).toHaveBeenCalledTimes(5);
   });
 
   it.skipIf(
@@ -1177,7 +1336,7 @@ describe('受限普通对话', () => {
     const approve = vi.fn().mockResolvedValue({ approved: false });
     database();
     const host = hostPorts();
-    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveToolAction: approve } });
+    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approve } });
     const project = join(root, 'project');
     mkdirSync(project, { recursive: true });
     const id = insertSession('p1');

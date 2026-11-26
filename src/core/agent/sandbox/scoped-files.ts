@@ -10,15 +10,18 @@ import {
   type ScopedFileOperation,
   type ScopedFileResponse,
 } from '../../remote/helper';
+import { targetKey } from '../../remote/transport';
 import { executionMode, ownerRow, scopedDirectories, type ScopedDirectory } from './mode';
 import type { SessionRow } from '../session/store';
 import { approveNonPublicRead, deniedMessage } from './approve-tool';
 import { fetchPublicWebPage } from '../../capabilities/public-web-fetch';
+import { CONTEXT_FILE_NAMES } from '../../capabilities/context-files';
 import { commandOutputDirectory } from './command-output';
-import type { loadPi } from '../pi';
+import { loadPi } from '../pi';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_CONTEXT_BYTES = 200_000;
+const MAX_READ_BYTES = 200_000;
 
 type FileRequest = {
   path?: string;
@@ -123,16 +126,19 @@ async function externalRead(
 }
 
 export async function scopedProjectInstructions(project: ScopedDirectory) {
-  const path = '/project/AGENTS.md';
-  const result = await runFileAction(
-    project,
-    { action: 'read', path: 'AGENTS.md', limit: MAX_CONTEXT_BYTES },
-    AbortSignal.timeout(10_000),
-  );
-  const content = Buffer.from(result.data ?? '', 'base64')
-    .toString('utf8')
-    .replace(/^\uFEFF/, '');
-  return content.trim() ? [{ path, content }] : [];
+  for (const name of CONTEXT_FILE_NAMES) {
+    const result = await runFileAction(
+      project,
+      { action: 'read', path: name, limit: MAX_CONTEXT_BYTES },
+      AbortSignal.timeout(10_000),
+    );
+    if (result.error) continue;
+    const content = Buffer.from(result.data ?? '', 'base64')
+      .toString('utf8')
+      .replace(/^\uFEFF/, '');
+    return content.trim() ? [{ path: `/project/${name}`, content }] : [];
+  }
+  return [];
 }
 
 function targetPath(input: string, directories: ScopedDirectory[]) {
@@ -201,14 +207,22 @@ async function runFileAction(
   request: ScopedFileOperation,
   signal: AbortSignal,
 ): Promise<ScopedFileResponse> {
-  if (root.remote) {
-    try {
-      return await helperSession(root.remote).scopedFile(root.host, request, signal);
-    } catch {
-      return { error: 'The remote file sandbox could not complete the operation.' };
+  const run = async () => {
+    if (root.remote) {
+      try {
+        return await helperSession(root.remote).scopedFile(root.host, request, signal);
+      } catch {
+        return { error: 'The remote file sandbox could not complete the operation.' };
+      }
     }
-  }
-  return runLocalFileAction(root.host, request, signal);
+    return runLocalFileAction(root.host, request, signal);
+  };
+  if (!request.writable) return run();
+  const { withFileMutationQueue } = await loadPi();
+  return withFileMutationQueue(
+    root.remote ? posix.join(root.host, request.path) : join(root.host, request.path),
+    run,
+  );
 }
 
 function runLocalFileAction(
@@ -335,6 +349,10 @@ const textResult = (text: string, isError = false) => ({
   ...(isError ? { isError: true } : {}),
 });
 
+function listResult({ entries = [], limited = false }: ScopedFileResponse) {
+  return textResult(JSON.stringify({ entries, limited }));
+}
+
 function readPageResult(result: ScopedFileResponse) {
   const text = Buffer.from(result.data ?? '', 'base64').toString('utf8');
   const next = result.nextOffset
@@ -342,17 +360,14 @@ function readPageResult(result: ScopedFileResponse) {
     : result.nextByteOffset
       ? { byteOffset: result.nextByteOffset }
       : null;
-  if (!next) return { ...textResult(text), structuredContent: text };
   return {
-    content: [
-      {
-        type: 'text' as const,
-        text: `[Read metadata: pass ${JSON.stringify(next)} with the same path to continue. File content follows.]`,
-      },
-      { type: 'text' as const, text },
-    ],
-    details: { next },
-    structuredContent: text,
+    ...textResult(
+      next
+        ? `${text}\n\n[Pass ${JSON.stringify(next)} with the same path to continue reading.]`
+        : text,
+    ),
+    details: next ? { next } : undefined,
+    structuredContent: { output: text, truncated: next !== null, next },
   };
 }
 
@@ -389,7 +404,8 @@ async function externalChange(
     Buffer.byteLength(oldText ?? '') > MAX_IMAGE_BYTES
   )
     return textResult('Content is limited to 5 MB.', true);
-  const approval = await hostPorts().desktop.approveToolAction?.({
+  const approval = await hostPorts().desktop.approve?.({
+    kind: 'tool',
     session,
     title: create ? '在外部目录新建' : action === 'delete' ? '删除外部文件' : '修改外部文件',
     fields: [
@@ -409,30 +425,31 @@ async function externalChange(
   });
   if (!approval?.approved || signal.aborted)
     return textResult(deniedMessage('File operation not approved', approval), true);
-  const result = await runLocalFileAction(
-    directory,
-    {
-      action: operation,
-      path: key,
-      content: data,
-      oldText,
-      writable: true,
-    },
-    signal,
+  const { withFileMutationQueue } = await loadPi();
+  const result = await withFileMutationQueue(join(directory, key), () =>
+    runLocalFileAction(
+      directory,
+      {
+        action: operation,
+        path: key,
+        content: data,
+        oldText,
+        writable: true,
+      },
+      signal,
+    ),
   );
   return result.error ? textResult(result.error, true) : textResult(path);
 }
 
 export function downloadTool(meta: SessionRow): ToolDefinition | null {
   const automatic = executionMode(meta) === 'auto-approval';
-  const directories = scopedDirectories(meta).filter(
-    ({ name }) => automatic || name !== '/privacy',
-  );
+  const directories = scopedDirectories(meta);
   if (!directories.length) return null;
   return {
     name: 'download_file',
     label: 'Download file',
-    description: `Download the original binary from an HTTPS URL to ${automatic ? '/privacy, /share, or /project' : '/share or /project'}. Maximum size is 5 MiB. ${automatic && !directories[0]?.remote ? '' : 'This requires approval. '}If the server redirects, call this tool again with the returned URL.`,
+    description: `Download the original binary from an HTTPS URL to /privacy, /share, or /project. Maximum size is 5 MiB. ${automatic && !directories[0]?.remote ? '' : 'This requires approval. '}If the server redirects, call this tool again with the returned URL.`,
     parameters: {
       type: 'object',
       properties: { url: { type: 'string', maxLength: 8192 }, path: { type: 'string' } },
@@ -537,8 +554,36 @@ export function scopedFileTools(
   const read = {
     ...nativeRead,
     description: directories.length
-      ? 'Read text, an image, or a command output file. Use offset and limit to read text by line. Local sessions also accept absolute paths for ordinary external files.'
-      : 'Read a command output file from this session using its full_output_path.',
+      ? 'Read text, an image, or a command output file. Each text page contains up to 200 KB. Use offset and limit to read text by line. Local sessions also accept absolute paths for ordinary external files.'
+      : 'Read a command output file from this session using its full_output_path. Each text page contains up to 200 KB.',
+    outputSchema: {
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            output: { type: 'string' },
+            truncated: { type: 'boolean' },
+            next: {
+              anyOf: [
+                {
+                  type: 'object',
+                  properties: { offset: { type: 'integer', minimum: 1 } },
+                  required: ['offset'],
+                },
+                {
+                  type: 'object',
+                  properties: { byteOffset: { type: 'integer', minimum: 0 } },
+                  required: ['byteOffset'],
+                },
+                { type: 'null' },
+              ],
+            },
+          },
+          required: ['output', 'truncated', 'next'],
+        },
+        nativeRead.outputSchema!,
+      ],
+    } as ToolDefinition['outputSchema'],
     parameters: {
       ...nativeRead.parameters,
       properties: {
@@ -563,7 +608,7 @@ export function scopedFileTools(
           ? { lineOffset: params.offset ?? 1, lineLimit: params.limit ?? pi.DEFAULT_MAX_LINES }
           : { byteOffset: params.byteOffset }
         : undefined;
-      const limit = image ? MAX_IMAGE_BYTES : pi.DEFAULT_MAX_BYTES;
+      const limit = image ? MAX_IMAGE_BYTES : MAX_READ_BYTES;
       const commandOutput = commandOutputPath.exec(params.path);
       let result: ScopedFileResponse;
       if (commandOutput) {
@@ -626,10 +671,10 @@ export function scopedFileTools(
       ) {
         const result = await externalRead(params.path, action, pi.DEFAULT_MAX_BYTES, cancellation);
         if (result.error) return textResult(result.error, true);
-        return textResult(JSON.stringify(result.entries ?? []));
+        return listResult(result);
       }
       if (
-        mode === 'auto-approval' &&
+        (mode === 'approval' || mode === 'auto-approval') &&
         params.path &&
         !directories[0]?.remote &&
         absoluteLocalPath(params.path) &&
@@ -661,8 +706,15 @@ export function scopedFileTools(
           key === '.')
       )
         return textResult('Choose a named file. Content is limited to 5 MB.', true);
-      if (mode === 'approval' && (action === 'write' || action === 'edit')) {
-        const approval = await hostPorts().desktop.approveFileChange?.({
+      if (writable && (mode === 'approval' || root.remote || action === 'delete')) {
+        const executor = root.remote ? targetKey(root.remote) : 'local';
+        const parent = posix.dirname(key);
+        const directory = parent === '.' ? root.name : `${root.name}/${parent}`;
+        const verb = { write: '写入文件', edit: '编辑文件', mkdir: '创建目录', delete: '删除文件' }[
+          action
+        ];
+        const approval = await hostPorts().desktop.approve?.({
+          kind: 'file',
           session: owner.id,
           action,
           path: root.remote
@@ -670,25 +722,16 @@ export function scopedFileTools(
             : join(root.host, key),
           oldText: params.oldText,
           content,
-          grant: { keys: ['file-change'], label: '修改文件' },
-          signal: cancellation,
-        });
-        if (!approval?.approved || cancellation.aborted)
-          return textResult(deniedMessage('File change not approved', approval), true);
-      }
-      if (writable && mode === 'auto-approval' && (root.remote || action === 'delete')) {
-        const approval = await hostPorts().desktop.approveToolAction?.({
-          session: owner.id,
-          title: action === 'delete' ? '删除文件' : '修改 SSH 项目文件',
-          fields: [
-            {
-              label: '路径',
-              value: root.remote ? `${root.remote.host}: ${posix.join(root.host, key)}` : visible,
+          ...(action !== 'delete' && {
+            grant: {
+              keys: ['file-operation:' + JSON.stringify([executor, root.host, key, action])],
+              label: `${verb} ${visible}`,
+              directory: {
+                key: 'directory-operation:' + JSON.stringify([executor, root.host, parent, action]),
+                label: `在 ${directory} 中${verb}（仅直属条目）`,
+              },
             },
-            ...(params.oldText === undefined ? [] : [{ label: '替换前', value: params.oldText }]),
-            ...(content === undefined ? [] : [{ label: '内容', value: content }]),
-          ],
-          ...(action !== 'delete' && { grant: { keys: ['file-change'], label: '修改文件' } }),
+          }),
           signal: cancellation,
         });
         if (!approval?.approved || cancellation.aborted)
@@ -708,7 +751,7 @@ export function scopedFileTools(
       );
       if (result.error) return textResult(result.error, true);
       if (writable) return textResult(visible);
-      if (action === 'ls') return textResult(JSON.stringify(result.entries ?? []));
+      if (action === 'ls') return listResult(result);
       const matches =
         action === 'find'
           ? (result.entries ?? []).map((path) => `${root.name}/${path}`)
@@ -733,7 +776,7 @@ export function scopedFileTools(
     read,
     createTool(
       'ls',
-      'List up to 1,000 directory entries. Local sessions also accept absolute local paths.',
+      'List up to 1,000 directory entries. If limited is true, the listing is incomplete. Local sessions also accept absolute local paths.',
       parameters({ path }, []),
     ),
     createTool(
@@ -759,10 +802,6 @@ export function scopedFileTools(
         'Replace one exact occurrence of text in a current chat file.',
         parameters({ path, oldText: string, newText: string }, ['path', 'oldText', 'newText']),
       ),
-    );
-  }
-  if (mode === 'auto-approval')
-    tools.push(
       createTool(
         'mkdir',
         'Create a directory. Outside the working directories, creation requires permission for the parent directory.',
@@ -770,5 +809,6 @@ export function scopedFileTools(
       ),
       createTool('delete', 'Delete one file after approval.', parameters({ path }, ['path'])),
     );
+  }
   return tools;
 }

@@ -2,11 +2,40 @@ package scope
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestListMarksOnlyIncompleteListings(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer root.Close()
+	if err := root.Mkdir(".git", 0700); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 1000 {
+		if err := root.WriteFile(fmt.Sprintf("file-%d", i), nil, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	request := Request{Action: "ls", Path: "."}
+	complete := execute(context.Background(), root, request)
+	if complete.Error != "" || len(complete.Entries) != 1000 || complete.Limited {
+		t.Fatalf("listing at the limit: %d entries, limited=%t, error=%q", len(complete.Entries), complete.Limited, complete.Error)
+	}
+	if err := root.WriteFile("extra", nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	incomplete := execute(context.Background(), root, request)
+	if incomplete.Error != "" || len(incomplete.Entries) != 1000 || !incomplete.Limited {
+		t.Fatalf("listing above the limit: %d entries, limited=%t, error=%q", len(incomplete.Entries), incomplete.Limited, incomplete.Error)
+	}
+}
 
 func TestReadPagesAndIncompleteSearch(t *testing.T) {
 	dir, err := filepath.EvalSymlinks(t.TempDir())

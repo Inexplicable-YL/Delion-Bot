@@ -145,17 +145,25 @@ func execute(ctx context.Context, root *os.Root, input Request) Response {
 			return Response{Error: "Unable to list the directory."}
 		}
 		defer file.Close()
-		names, err := file.Readdirnames(1000)
-		if err != nil && !errors.Is(err, io.EOF) {
-			return Response{Error: "Unable to list the directory."}
-		}
-		entries := names[:0]
-		for _, name := range names {
-			if !internalName(name) {
-				entries = append(entries, name)
+		const limit = 1000
+		var entries []string
+		for {
+			names, err := file.Readdirnames(limit + 1 - len(entries))
+			if err != nil && !errors.Is(err, io.EOF) {
+				return Response{Error: "Unable to list the directory."}
+			}
+			for _, name := range names {
+				if !internalName(name) {
+					entries = append(entries, name)
+				}
+			}
+			if len(entries) > limit {
+				return Response{Entries: entries[:limit], Limited: true}
+			}
+			if errors.Is(err, io.EOF) {
+				return Response{Entries: entries}
 			}
 		}
-		return Response{Entries: entries}
 	case "mkdir":
 		created, err := openDirectory(dir, name, true)
 		if err != nil {
