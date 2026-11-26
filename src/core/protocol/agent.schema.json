@@ -1082,12 +1082,187 @@
               "type": "string"
             },
             "chat": {
-              "$ref": "#/$defs/WorkspaceChat"
+              "type": "object",
+              "properties": {
+                "sessionId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "projectId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cwd": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "permissionMode": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "read-only",
+                        "approval",
+                        "auto-approval",
+                        "full"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "running": {
+                  "type": "boolean"
+                },
+                "activeTool": {
+                  "type": "string"
+                },
+                "compacting": {
+                  "type": "boolean"
+                },
+                "queued": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "tasks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "bash",
+                          "subagent"
+                        ]
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "startedAt": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "label",
+                      "startedAt"
+                    ]
+                  }
+                },
+                "subagent": {
+                  "type": "object",
+                  "properties": {
+                    "parentId": {
+                      "type": "string"
+                    },
+                    "description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "parentId",
+                    "description"
+                  ]
+                },
+                "configured": {
+                  "type": "boolean"
+                },
+                "providerId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "providerName": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "model": {
+                  "type": "string"
+                },
+                "modelUnavailable": {
+                  "type": "boolean"
+                },
+                "effortLevels": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "effort": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "contextUsage": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ContextUsage"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "sessionId",
+                "projectId",
+                "cwd",
+                "configured",
+                "providerId",
+                "providerName",
+                "model",
+                "modelUnavailable",
+                "effortLevels",
+                "effort"
+              ]
+            },
+            "base": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "from": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "messages": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ChatMessage"
+              }
             }
           },
           "required": [
             "sessionId",
-            "chat"
+            "chat",
+            "base",
+            "from",
+            "messages"
           ]
         },
         "session-stream": {
@@ -1350,6 +1525,11 @@
               "type": "null"
             }
           ]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
         },
         "messages": {
           "type": "array",

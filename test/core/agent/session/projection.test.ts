@@ -5,6 +5,7 @@ import {
   COMPACTION_DETAILS,
   projectAfterCompaction,
   projectCompactionHistory,
+  projectLiveMessages,
   projectMessages,
   thinkingKey,
   thinkingTimes,
@@ -101,4 +102,43 @@ it('重新打开压缩会话时，分隔线在当时最后一条消息之后，�
       .slice(-3)
       .map(({ content }) => content),
   ).toEqual(['压缩摘要', '压缩后继续回复', '第二次摘要']);
+});
+
+it('运行中投影复用已定型轮次，结果与全量投影一致且不改动实时工具步骤', () => {
+  const reply = (timestamp: number, text: string) => ({
+    role: 'assistant',
+    content: [{ type: 'text', text }],
+    stopReason: 'stop',
+    timestamp,
+  });
+  const messages = [
+    { role: 'user', content: '第一问', timestamp: 1 },
+    reply(2, '第一答'),
+    { role: 'user', content: '第二问', timestamp: 3 },
+    {
+      role: 'assistant',
+      content: [{ type: 'toolCall', id: 't1', name: 'read', arguments: { path: 'a' } }],
+      stopReason: 'toolUse',
+      timestamp: 4,
+    },
+    {
+      role: 'toolResult',
+      toolCallId: 't1',
+      toolName: 'read',
+      content: [{ type: 'text', text: '内容' }],
+      isError: false,
+      timestamp: 5,
+    },
+  ] as unknown as AgentMessage[];
+  const pending = new Map([['t1', { id: 't1', name: 'read', input: { path: 'a' }, startedAt: 4 }]]);
+  const thinking = new Map();
+  const first = projectLiveMessages('live-test', messages, pending, thinking);
+  expect(first).toEqual(projectMessages(messages, pending, true, undefined, thinking));
+  expect(pending.get('t1')).not.toHaveProperty('output');
+  const next = [...messages, reply(6, '第二答')] as AgentMessage[];
+  const second = projectLiveMessages('live-test', next, pending, thinking);
+  expect(second).toEqual(projectMessages(next, pending, true, undefined, thinking));
+  expect(second.slice(0, 2)).toEqual(first.slice(0, 2));
+  expect(second[0]).toBe(first[0]);
+  expect(second[1]).toBe(first[1]);
 });

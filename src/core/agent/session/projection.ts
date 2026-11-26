@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import type { AgentSession, SessionEntry, SessionManager } from '@earendil-works/pi-coding-agent';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { ImageContent, TextContent } from '@earendil-works/pi-ai';
@@ -13,7 +14,16 @@ import { emit } from '../../ports';
 import { agentContract } from '../../protocol/agent';
 import { executionMode } from '../sandbox/mode';
 import { runningTasks } from '../tasks';
-import { live, liveSteps, liveThinking, type Live, type ThinkingTime } from './live';
+import {
+  live,
+  liveProjection,
+  liveSteps,
+  liveThinking,
+  publishedMessages,
+  publishedRevisions,
+  type Live,
+  type ThinkingTime,
+} from './live';
 import { modelChoice, requirePiSync, row, sessionCwd, type ModelChoice } from './store';
 
 type ChatMessage = WorkspaceChat['messages'][number];
@@ -141,10 +151,12 @@ export function projectMessages(
         else if (block.type === 'text' && block.text)
           reply.parts!.push({ type: 'text', text: block.text });
         else if (block.type === 'toolCall') {
-          const step: AgentToolResult = pending?.get(block.id) ?? {
-            id: block.id,
-            name: block.name,
-            input: block.arguments,
+          const step: AgentToolResult = {
+            ...(pending?.get(block.id) ?? {
+              id: block.id,
+              name: block.name,
+              input: block.arguments,
+            }),
           };
           results.set(block.id, step);
           const last = reply.parts!.at(-1);
@@ -222,6 +234,46 @@ export function projectMessages(
       ...(lastTurnId ? { turnId: lastTurnId } : {}),
     });
   return out;
+}
+
+export function projectLiveMessages(
+  id: string,
+  messages: AgentMessage[],
+  pending: Map<string, AgentToolResult> | undefined,
+  thinking: ReadonlyMap<string, ThinkingTime>,
+): ChatMessage[] {
+  const boundary = Math.max(
+    messages.findLastIndex(({ role }) => role === 'user'),
+    0,
+  );
+  const cached = liveProjection.get(id);
+  const reusable =
+    cached &&
+    cached.source.length <= boundary &&
+    cached.source.every((message, index) => message === messages[index])
+      ? cached
+      : { source: [], messages: [] };
+  const stable =
+    boundary > reusable.source.length
+      ? {
+          source: messages.slice(0, boundary),
+          messages: [
+            ...reusable.messages,
+            ...projectMessages(
+              messages.slice(reusable.source.length, boundary),
+              pending,
+              false,
+              undefined,
+              thinking,
+            ),
+          ],
+        }
+      : reusable;
+  liveProjection.set(id, stable);
+  return [
+    ...stable.messages,
+    ...projectMessages(messages.slice(boundary), pending, true, undefined, thinking),
+  ];
 }
 
 function storedMessages(
@@ -428,13 +480,13 @@ export function snapshot(id: string): WorkspaceChat {
     permissionMode,
     ...modelView(choice),
     contextUsage: usageOf(entry),
+    revision: publishedRevisions.get(id) ?? 0,
     messages: entry
       ? entry.run
-        ? projectMessages(
+        ? projectLiveMessages(
+            id,
             entry.session.messages,
             liveSteps.get(id),
-            true,
-            undefined,
             thinkingTimes(entry.session.sessionManager, liveThinking.get(id)),
           )
         : storedMessages(entry.session.sessionManager)
@@ -449,5 +501,28 @@ export function snapshot(id: string): WorkspaceChat {
 }
 
 export function publish(id: string) {
-  emit(agentContract, 'session-update', { sessionId: id, chat: snapshot(id) });
+  const { messages, revision: base, ...chat } = snapshot(id);
+  const previous = publishedMessages.get(id) ?? [];
+  let from = 0;
+  while (
+    from < messages.length &&
+    from < previous.length &&
+    (messages[from] === previous[from] || isDeepStrictEqual(messages[from], previous[from]))
+  )
+    from += 1;
+  const revision = (base ?? 0) + 1;
+  if (live.has(id)) {
+    publishedRevisions.set(id, revision);
+    publishedMessages.set(id, messages);
+  } else {
+    publishedRevisions.delete(id);
+    publishedMessages.delete(id);
+  }
+  emit(agentContract, 'session-update', {
+    sessionId: id,
+    chat: { ...chat, revision },
+    base: base ?? 0,
+    from,
+    messages: messages.slice(from),
+  });
 }

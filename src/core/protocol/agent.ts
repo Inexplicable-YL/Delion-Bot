@@ -151,6 +151,7 @@ export const workspaceChatSchema = z.object({
   effortLevels: z.array(z.string()),
   effort: z.string().nullable(),
   contextUsage: contextUsageViewSchema.nullable().optional(),
+  revision: z.number().int().nonnegative().optional(),
   messages: z.array(chatMessageSchema),
 });
 
@@ -289,7 +290,13 @@ const empty = z.object({});
 const sidechatTarget = z.object({ parentId: uuid });
 
 export const agentEvents = {
-  'session-update': z.object({ sessionId: z.string(), chat: workspaceChatSchema }),
+  'session-update': z.object({
+    sessionId: z.string(),
+    chat: workspaceChatSchema.omit({ messages: true }),
+    base: z.number().int().nonnegative(),
+    from: z.number().int().nonnegative(),
+    messages: z.array(chatMessageSchema),
+  }),
   'session-stream': chatStreamEventSchema,
   'run-event': runEventSchema,
   queue: chatQueueEventSchema,

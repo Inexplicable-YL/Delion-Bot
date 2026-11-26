@@ -25,10 +25,19 @@ import {
   type TaskNotice,
   type TaskParent,
 } from '../tasks';
-import { live, liveSteps, liveThinking, type Live, type Run } from './live';
+import {
+  live,
+  liveProjection,
+  liveSteps,
+  liveThinking,
+  publishedMessages,
+  publishedRevisions,
+  type Live,
+  type Run,
+} from './live';
 import {
   encodeMeta,
-  projectMessages,
+  projectLiveMessages,
   publish,
   queuedTexts,
   snapshot,
@@ -146,6 +155,9 @@ async function openLive(id: string): Promise<Live> {
 export function disposeLive(id: string, entry: Live): void {
   entry.unsubscribe();
   live.delete(id);
+  liveProjection.delete(id);
+  publishedMessages.delete(id);
+  publishedRevisions.delete(id);
   entry.session.dispose();
 }
 
@@ -262,11 +274,10 @@ function stream(id: string, entry: Live) {
   if (now - (streamTimers.get(id) ?? 0) < 100) return;
   streamTimers.set(id, now);
   const streaming = entry.session.state.streamingMessage;
-  const messages = projectMessages(
+  const messages = projectLiveMessages(
+    id,
     streaming ? [...entry.session.messages, streaming] : entry.session.messages,
     liveSteps.get(id),
-    true,
-    undefined,
     thinkingTimes(entry.session.sessionManager, liveThinking.get(id)),
   );
   const last = messages.at(-1);
@@ -584,6 +595,7 @@ async function runTurn(
         await compactAboveSessionThreshold(entry, autoCompaction);
       entry.run = undefined;
       liveSteps.delete(id);
+      liveProjection.delete(id);
       liveThinking.delete(id);
       if (entry.session.sessionFile) storeSessionFile(id, entry.session.sessionFile);
       touch(id, entry);

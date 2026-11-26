@@ -26,8 +26,11 @@ const { invoke, listeners } = vi.hoisted(() => {
 });
 import { poolKey, useSessions } from '../../../../src/modules/chat/view/sessions';
 
-const pushUpdate = (sessionId: string, chat: WorkspaceChat) =>
-  listeners['agent:session-update']![0]!({ sessionId, chat });
+const pushUpdate = (
+  sessionId: string,
+  { messages, ...chat }: WorkspaceChat,
+  delta: { base: number; from: number } = { base: 0, from: 0 },
+) => listeners['agent:session-update']![0]!({ sessionId, chat, ...delta, messages });
 const pushStream = (event: ChatStreamEvent) => listeners['agent:session-stream']![0]!(event);
 
 function summary(id: string, updatedAt = '2026-09-29T10:00:00.000Z'): ChatSessionSummary {
@@ -155,6 +158,31 @@ describe('sessions mirror store', () => {
 
     vi.clearAllTimers();
     vi.useRealTimers();
+  });
+
+  it('增量推送在修订号对得上时只替换变化部分，对不上时重新读取完整会话', async () => {
+    useSessions.setState({ chats: {} });
+    pushUpdate('s1', { ...chat('s1', 2), revision: 1 });
+    const prefix = useSessions.getState().chats['s1']!.messages[0];
+    pushUpdate(
+      's1',
+      { ...chat('s1', 0), revision: 2, messages: [{ role: 'user', content: '新' }] },
+      { base: 1, from: 1 },
+    );
+    const updated = useSessions.getState().chats['s1']!;
+    expect(updated.revision).toBe(2);
+    expect(updated.messages.map(({ content }) => content)).toEqual(['hi', '新']);
+    expect(updated.messages[0]).toBe(prefix);
+
+    const fresh = { ...chat('s1', 3), revision: 5 };
+    invoke.mockResolvedValue(fresh);
+    pushUpdate('s1', { ...chat('s1', 0), revision: 5 }, { base: 4, from: 2 });
+    expect(invoke).toHaveBeenCalledWith('agent:open-session', { sessionId: 's1' });
+    await vi.waitFor(() => expect(useSessions.getState().chats['s1']).toEqual(fresh));
+
+    invoke.mockResolvedValue({ ...fresh, sessionId: 's2' });
+    pushUpdate('s2', { ...chat('s2', 0), revision: 3 }, { base: 2, from: 1 });
+    await vi.waitFor(() => expect(useSessions.getState().chats['s2']?.messages).toHaveLength(3));
   });
 
   it('forgetSession 同时清出快照缓存与各池列表条目', () => {

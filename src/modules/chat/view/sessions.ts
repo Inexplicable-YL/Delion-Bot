@@ -93,8 +93,17 @@ export function querySessions(
     : Promise.resolve([]);
 }
 
-onAgentEvent('session-update', ({ sessionId, chat }) => {
-  useSessions.getState().putChat(sessionId, chat);
+onAgentEvent('session-update', ({ sessionId, chat, base, from, messages }) => {
+  const current = useSessions.getState().chats[sessionId];
+  if (from === 0 || current?.revision === base)
+    useSessions.getState().putChat(sessionId, {
+      ...chat,
+      messages: [...(current?.messages.slice(0, from) ?? []), ...messages],
+    });
+  else
+    void agentClient['open-session']({ sessionId })
+      .then((fresh) => useSessions.getState().putChat(sessionId, fresh))
+      .catch(console.error);
 });
 onPermissionRequestsChanged(({ sessionId, requests }) => {
   useSessions.setState((state) => ({
