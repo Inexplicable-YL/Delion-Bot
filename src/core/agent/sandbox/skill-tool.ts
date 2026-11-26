@@ -14,17 +14,18 @@ async function localProjectSkills(project: ScopedDirectory, cancellation?: Abort
   const skills = new Map<string, Skill>();
   const { createSyntheticSourceInfo } = await loadPi();
   const disabled = readDisabledSkillPaths();
+  const host = realpathSync(project.host);
   for (const discovered of await discoverProjectSkills(project.host)) {
     if (cancellation?.aborted) break;
     let file: string;
     let size: ReturnType<typeof statSync>;
     try {
-      file = realpathSync.native(discovered.path);
+      file = realpathSync(discovered.path);
       size = statSync(file);
     } catch {
       continue;
     }
-    const key = relative(project.host, file);
+    const key = relative(host, file);
     if (
       !key ||
       key === '..' ||
