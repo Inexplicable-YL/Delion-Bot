@@ -35,6 +35,16 @@ const targetSensitive = new Set([
   'chown',
   'curl',
   'wget',
+  'http',
+  'https',
+  'httpie',
+  'aria2c',
+  'wcurl',
+  'fetch',
+  'invoke-webrequest',
+  'invoke-restmethod',
+  'iwr',
+  'irm',
   'rsync',
   'scp',
   'sftp',
@@ -243,7 +253,7 @@ export function commandNames(command: string, shell: Shell): string[] | null {
     const base = executable
       .split(/[\\/]/)
       .at(-1)!
-      .replace(/\.(?:exe|cmd|bat)$/i, '');
+      .replace(/\.(?:exe|cmd|bat|ps1)$/i, '');
     const current = subcommandPrograms.has(base) && !/[\\/]/.test(executable) ? base : executable;
     if (
       !current ||

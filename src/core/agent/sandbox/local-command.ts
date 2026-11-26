@@ -6,13 +6,13 @@ import { delimiter, isAbsolute, join, posix } from 'node:path';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
 import { helperSession, type ScopedCommandResult } from '../../remote/helper';
-import { shellQuote } from '../../remote/transport';
+import { shellQuote, targetKey } from '../../remote/transport';
 import { notifyRemoteChange } from '../../remote/events';
 import type { SessionRow } from '../session/store';
 import { localBash } from '../tasks';
 import { deniedMessage } from './approve-tool';
 import { commandNames, literalCommands, readOnlyCommand } from './command-names';
-import { commandPlan, executeCommandPlan } from './command-plan';
+import { commandPlan, commandPlanPermissions, executeCommandPlan } from './command-plan';
 import { macosSandboxLauncher, runMacosCommand } from './macos-command';
 import { redactModelPaths } from './model-paths';
 import {
@@ -28,7 +28,6 @@ import {
   readScopedReference,
   scopedFileTools,
 } from './scoped-files';
-import { runVcsReads, vcsReadCommands } from './read-vcs';
 
 const commandResult = (value: object, isError = false) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(value) }],
@@ -278,7 +277,7 @@ function analyzeCommand(
   if (directories.length) {
     const windows = shell === 'cmd';
     const file = brokerCommand(command, windows);
-    const plan = commandPlan(command, shell, root);
+    const plan = commandPlan(command, shell, directories, hasInputs);
     if (file) {
       const path = file.params.path;
       const hostPath = Boolean(
@@ -289,30 +288,26 @@ function analyzeCommand(
       );
       return { kind: 'file' as const, file, plan, hostPath, readOnly: file.action !== 'mkdir' };
     }
-    if (!hasInputs) {
-      const vcs = vcsReadCommands(command, shell, root);
-      if (vcs) return { kind: 'vcs' as const, vcs, readOnly: true };
-      if (!root.remote) {
-        const commands = literalCommands(command, shell);
-        const [name, ...args] = commands?.length === 1 ? commands[0]! : [];
-        if (name === 'cp' || (windows && name?.toLowerCase() === 'copy')) {
-          if (args[0] === '--' && name === 'cp') args.shift();
-          const [source, destination] = args;
-          if (
-            args.length === 2 &&
-            source &&
-            destination &&
-            !source.startsWith('-') &&
-            !destination.startsWith('-') &&
-            !/[?*]/.test(source + destination)
-          ) {
-            const target = commandCopyTarget(directories, destination);
-            if (target) return { kind: 'copy' as const, source, target, readOnly: false };
-          }
+    if (!hasInputs && !root.remote) {
+      const commands = literalCommands(command, shell);
+      const [name, ...args] = commands?.length === 1 ? commands[0]! : [];
+      if (name === 'cp' || (windows && name?.toLowerCase() === 'copy')) {
+        if (args[0] === '--' && name === 'cp') args.shift();
+        const [source, destination] = args;
+        if (
+          args.length === 2 &&
+          source &&
+          destination &&
+          !source.startsWith('-') &&
+          !destination.startsWith('-') &&
+          !/[?*]/.test(source + destination)
+        ) {
+          const target = commandCopyTarget(directories, destination);
+          if (target) return { kind: 'copy' as const, source, target, readOnly: false };
         }
       }
     }
-    if (plan) return { kind: 'plan' as const, plan, readOnly: true };
+    if (plan) return { kind: 'plan' as const, plan, readOnly: plan.readOnly };
   }
   const roots = root.name === '/privacy' ? ['/privacy', '/share'] : hasInputs ? [] : ['/project'];
   return {
@@ -377,29 +372,56 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
       const isolatedRead = mode === 'read-only' && analysis.kind === 'shell' && analysis.isolated;
       if (mode === 'read-only' && !analysis.readOnly && !isolatedRead)
         return commandResult({ error: '只读模式下只能运行已确认无修改的命令' }, true);
-      if (mode === 'approval' || (automatic && analysis.kind === 'shell' && !analysis.readOnly)) {
-        const names = commandNames(command, shell);
+      const approvedHostFile = mode === 'approval' && analysis.kind === 'file' && analysis.hostPath;
+      const plan =
+        analysis.kind === 'plan' || (analysis.kind === 'file' && !approvedHostFile)
+          ? analysis.plan
+          : null;
+      if (
+        mode === 'approval' ||
+        (automatic && (plan?.requiresApproval || (analysis.kind === 'shell' && !analysis.readOnly)))
+      ) {
+        const permissions = plan
+          ? commandPlanPermissions(plan)
+          : analysis.kind === 'copy'
+            ? [
+                {
+                  key: ['copy', analysis.target.root.name, analysis.target.root.host],
+                  label: `复制文件到 ${analysis.target.root.name}`,
+                },
+              ]
+            : [];
+        const names = permissions.length ? null : commandNames(command, shell);
+        const grant = permissions.length
+          ? {
+              keys: [
+                ...new Set(
+                  permissions.map(
+                    ({ key }) =>
+                      'broker-command:' +
+                      JSON.stringify([root.host, remote ? targetKey(remote) : 'local', ...key]),
+                  ),
+                ),
+              ],
+              label: [...new Set(permissions.map(({ label }) => label))].join('、'),
+            }
+          : names
+            ? {
+                keys: names.map((name) => `host-command:${name}`),
+                label: `运行 ${names.join('、')} 命令`,
+              }
+            : undefined;
         const approval = await hostPorts().desktop.approveSandboxCommand?.({
           session,
           command,
           files,
           signal: cancellation,
           ...(remote && { remote: remote.host }),
-          ...(names && {
-            grant: {
-              keys: names.map((name) => `host-command:${name}`),
-              label: `运行 ${names.join('、')} 命令`,
-            },
-          }),
+          ...(grant && { grant }),
         });
         if (!approval?.approved || cancellation.aborted)
           return commandResult({ error: deniedMessage('命令未获批准', approval) }, true);
       }
-      const approvedHostFile = mode === 'approval' && analysis.kind === 'file' && analysis.hostPath;
-      const plan =
-        analysis.kind === 'plan' || (analysis.kind === 'file' && !approvedHostFile)
-          ? analysis.plan
-          : null;
       if (analysis.kind === 'file' && !approvedHostFile && (mode !== 'approval' || !plan)) {
         const operation = analysis.file;
         const tool = fileTools.find(({ name }) => name === operation.action);
@@ -427,17 +449,6 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
           );
         } catch {
           return commandResult({ error: '无法复制文件' }, true);
-        }
-      }
-      if (analysis.kind === 'vcs') {
-        try {
-          const output = await runVcsReads(analysis.vcs, root, cancellation);
-          return commandResult(
-            { ...output, output: redactModelPaths(directories)(output.output) },
-            output.exitCode !== 0,
-          );
-        } catch {
-          return commandResult({ error: '无法完成命令读取' }, true);
         }
       }
       if (plan) {

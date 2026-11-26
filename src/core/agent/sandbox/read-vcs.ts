@@ -22,6 +22,9 @@ const gitFlags = {
   'ls-files':
     /^(?:-[cosmtdu]+|--(?:cached|others|exclude-standard|modified|deleted|stage|unmerged|full-name|deduplicate))$/,
   'ls-tree': /^(?:-[rdtl]+|--(?:name-only|name-status|full-tree|full-name|long))$/,
+  'cat-file': /^-[tsep]$/,
+  'rev-list':
+    /^(?:-\d+|--(?:all|branches|tags|remotes|count|left-right|first-parent|no-merges|max-count=\d+))$/,
   'for-each-ref': /^(?:--count=\d+|--sort=-?[\w:]+)$/,
   'show-ref': /^(?:--(?:head|heads|branches|tags|verify|quiet|dereference))$/,
   describe: /^(?:--(?:tags|always|all|long|exact-match|abbrev=\d+))$/,
@@ -119,7 +122,7 @@ const ghSwitches = new Set([
 const githubURL =
   /^https:\/\/github\.com\/[\w-]+\/[\w.-]+(?:\/(?:issues|pull|actions\/runs)\/\d+)?\/?$/i;
 const apiReadPath =
-  /^(?:repos\/[\w-]+\/[\w.-]+(?:\/(?:issues|pulls|commits|branches|tags|releases)(?:\/[\w.-]+(?:\/(?:comments|files|reviews|commits|check-runs))?)?|\/actions\/(?:runs|workflows|jobs)(?:\/\d+(?:\/(?:jobs|runs))?)?)?|search\/(?:repositories|issues|commits|code))(?:\?[^#]*)?$/;
+  /^(?:repos\/[\w-]+\/[\w.-]+(?:\/(?:issues|pulls|commits|branches|tags|releases)(?:\/[\w.-]+(?:\/(?:comments|files|reviews|commits|check-runs))?)?|\/actions\/(?:runs|workflows|jobs|artifacts)(?:\/\d+(?:\/(?:jobs|runs))?)?|\/(?:contents(?:\/[\w.%/-]+)?|contributors|languages|labels|milestones|topics|license|compare\/[\w.%.-]+))?|search\/(?:repositories|issues|commits|code|users|topics))(?:\?[^#]*)?$/;
 
 function gitRead(args: string[], root: ScopedDirectory) {
   if (args[0] === '--no-pager') args.shift();
@@ -128,6 +131,11 @@ function gitRead(args: string[], root: ScopedDirectory) {
   const [command, ...options] = args;
   if ((command === '--version' || command === 'remote') && !options.length)
     return { args, filters: false };
+  if (
+    command === 'cat-file' &&
+    (options.length !== 2 || !/^-[tsep]$/.test(options[0]!) || options[1]!.startsWith('-'))
+  )
+    return null;
   if (!command || !Object.hasOwn(gitFlags, command)) return null;
   const flags = gitFlags[command as keyof typeof gitFlags];
   let paths = false;
@@ -183,11 +191,25 @@ function ghRead(args: string[]) {
     let hasFields = false;
     for (let i = 0; i < options.length; i++) {
       const arg = options[i]!;
-      if (arg === '--method=GET' || (['--method', '-X'].includes(arg) && options[++i] === 'GET'))
+      const equals = arg.indexOf('=');
+      const flag = equals < 0 ? arg : arg.slice(0, equals);
+      if (flag === '-X' || flag === '--method') {
+        if ((equals < 0 ? options[++i] : arg.slice(equals + 1)) !== 'GET') return false;
         explicitGet = true;
-      else if (['-f', '--raw-field'].includes(arg) && rawFields.test(options[++i] ?? ''))
+      } else if (['-f', '--raw-field', '-F', '--field'].includes(flag)) {
+        const field = equals < 0 ? options[++i] : arg.slice(equals + 1);
+        if (!field || !rawFields.test(field)) return false;
+        if (['-F', '--field'].includes(flag) && /^[^=]*=@/.test(field)) return false;
         hasFields = true;
-      else if (!['--paginate', '--slurp'].includes(arg)) return false;
+      } else if (flag === '-q' || flag === '--jq') {
+        const query = equals < 0 ? options[++i] : arg.slice(equals + 1);
+        if (!query || /\b(?:env|ENV)\b/.test(query)) return false;
+      } else if (flag === '-H' || flag === '--header') {
+        const header = equals < 0 ? options[++i] : arg.slice(equals + 1);
+        if (!header || !/^(?:accept|x-github-api-version):[\t\x20-\x7e]+$/i.test(header))
+          return false;
+      } else if (!['--paginate', '--slurp', '--silent', '--include', '-i'].includes(arg))
+        return false;
     }
     return !hasFields || explicitGet;
   }

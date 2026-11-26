@@ -34,6 +34,8 @@ export async function fetchPublicWebPage(
   options: RequestInit,
   approve: (url: URL) => Promise<void>,
 ): Promise<Response> {
+  const { body } = options;
+  if (body != null && typeof body !== 'string') throw new TypeError('Invalid HTTP request body');
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
   const family = isIP(hostname);
   const addresses = family
@@ -63,6 +65,7 @@ export async function fetchPublicWebPage(
       headers: {
         ...Object.fromEntries(new Headers(options.headers)),
         'accept-encoding': 'identity',
+        ...(body != null && { 'content-length': Buffer.byteLength(body).toString() }),
       },
       signal: options.signal ?? undefined,
       lookup(_hostname, opts, callback) {
@@ -94,6 +97,6 @@ export async function fetchPublicWebPage(
       );
     });
     outgoing.once('error', reject);
-    outgoing.end();
+    outgoing.end(body ?? undefined);
   });
 }

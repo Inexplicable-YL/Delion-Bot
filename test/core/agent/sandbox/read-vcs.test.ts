@@ -16,6 +16,8 @@ it('按操作和参数判断 Git、GitHub CLI 是否只读', () => {
     'git grep -n TODO -- src',
     'git blame --line-porcelain a.txt',
     'git tag --list "v*"',
+    'git rev-list --count HEAD',
+    'git cat-file -t HEAD',
     'gh issue view 123 --comments',
     'gh pr list -R owner/repo --state open --json number,title',
     'gh pr view 123 --json title --jq .title',
@@ -24,6 +26,8 @@ it('按操作和参数判断 Git、GitHub CLI 是否只读', () => {
     'gh search prs "repo:owner/repo is:open"',
     'gh api "repos/owner/repo/pulls?per_page=10" -X GET --paginate',
     'gh api repos/owner/repo/pulls -X GET -f state=open',
+    'gh api repos/owner/repo/contents/src -q . --include',
+    'gh api repos/owner/repo/pulls -X GET --field per_page=10',
   ]) {
     expect(vcsReadCommands(command, 'bash', root), command).not.toBeNull();
   }
@@ -39,6 +43,7 @@ it('按操作和参数判断 Git、GitHub CLI 是否只读', () => {
     'git branch new-branch',
     'git branch -- new-branch --list',
     'git tag new-tag',
+    'git cat-file --filters HEAD:a.txt',
     'git push',
     'git status & git diff',
     'git status && git push',
@@ -53,6 +58,7 @@ it('按操作和参数判断 Git、GitHub CLI 是否只读', () => {
     'gh api repos/owner/repo/issues -f title=example',
     'gh api repos/owner/repo/issues --method POST',
     'gh api repos/owner/repo/issues --input request.json',
+    'gh api repos/owner/repo/issues --header "X-HTTP-Method-Override: DELETE"',
     'gh api repos/owner/repo/issues -F body=@note.txt -X GET',
     'gh api graphql -f query=mutation',
     'gh api https://private.example/path',

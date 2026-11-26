@@ -1,10 +1,14 @@
 import { createHash } from 'node:crypto';
-import { fetchPublicWebPage } from '../../capabilities/public-web-fetch';
 import type { ScopedCommandResult } from '../../remote/helper';
-import { approveNonPublicRead } from './approve-tool';
 import { literalPipelines } from './command-names';
+import { parseHttpCommand, runHttpCommand, type HttpCommand } from './http-command';
 import type { ScopedDirectory } from './mode';
-import { inspectCommandPath, type CommandInspection } from './scoped-files';
+import {
+  commandCopyTarget,
+  inspectCommandPath,
+  writeCommandFile,
+  type CommandInspection,
+} from './scoped-files';
 import { runVcsReads, vcsReadCommand } from './read-vcs';
 
 type Stage =
@@ -17,7 +21,7 @@ type Stage =
     }
   | { kind: 'text'; command: string; path?: string; option?: string; count?: number }
   | { kind: 'vcs'; read: NonNullable<ReturnType<typeof vcsReadCommand>> }
-  | { kind: 'http'; url: URL; head: boolean; follow: boolean; fail: boolean }
+  | { kind: 'http'; request: HttpCommand }
   | { kind: 'hash'; paths: string[] }
   | { kind: 'json'; path?: string; fields: string[]; raw: boolean }
   | { kind: 'lines'; path?: string; first: number; last: number }
@@ -32,6 +36,7 @@ function searchStage(program: string, args: string[]): Stage | null {
   let numbers = program === 'rg';
   let insensitive = false;
   let fixed = false;
+  let expression: string | undefined;
   let operandsOnly = false;
   const operands: string[] = [];
   for (let index = 0; index < args.length; index++) {
@@ -43,11 +48,14 @@ function searchStage(program: string, args: string[]): Stage | null {
     else if (program === 'rg' && (arg === '-g' || arg === '--glob') && !glob) {
       glob = args[++index];
       if (!glob) return null;
+    } else if ((arg === '-e' || arg === '--regexp') && expression === undefined) {
+      expression = args[++index];
+      if (!expression) return null;
     } else if (arg === '--ignore-case') insensitive = true;
     else if (arg === '--fixed-strings') fixed = true;
     else if (arg === '--line-number') numbers = true;
     else if (arg === '--files-with-matches') namesOnly = true;
-    else if (/^-[rEFinHl]+$/.test(arg)) {
+    else if (/^-[rREFinHl]+$/.test(arg)) {
       insensitive ||= arg.includes('i');
       fixed ||= arg.includes('F');
       numbers ||= arg.includes('n');
@@ -55,8 +63,9 @@ function searchStage(program: string, args: string[]): Stage | null {
     } else return null;
   }
   if (glob !== undefined && (!glob || /[/\\!{}]/.test(glob) || glob.length > 512)) return null;
-  const paths = files ? operands : operands.slice(1);
-  let pattern = files ? (glob ?? '*') : operands[0];
+  if (files && expression) return null;
+  const paths = files || expression ? operands : operands.slice(1);
+  let pattern = files ? (glob ?? '*') : (expression ?? operands[0]);
   if (!pattern || pattern.length > 512 || paths.length > 8) return null;
   if (!files) {
     if (fixed) pattern = pattern.replace(/[.*+?^{}$()|[\]\\]/g, '\\$&');
@@ -95,46 +104,6 @@ function findStage(args: string[]): Stage | null {
   return { kind: 'inspect', paths, request: { action: 'find', pattern, maxDepth, filesOnly } };
 }
 
-function httpStage(program: string, args: string[]): Stage | null {
-  let url: URL | undefined;
-  let head = false;
-  let follow = program === 'wget';
-  let fail = program === 'wget';
-  let toStdout = program === 'curl';
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i]!;
-    if (program === 'wget' && (arg === '-qO-' || arg === '-O-' || arg === '--output-document=-'))
-      toStdout = true;
-    else if (program === 'wget' && arg === '-O' && args[i + 1] === '-') {
-      i++;
-      toStdout = true;
-    } else if (
-      program === 'curl' &&
-      (arg === '--request' || arg === '-X') &&
-      args[i + 1] === 'GET'
-    ) {
-      i++;
-    } else if (program === 'curl' && /^-[sSLfI]+$/.test(arg)) {
-      head ||= arg.includes('I');
-      follow ||= arg.includes('L');
-      fail ||= arg.includes('f');
-    } else if (program === 'curl' && arg === '--head') head = true;
-    else if (program === 'curl' && arg === '--location') follow = true;
-    else if (program === 'curl' && arg === '--fail') fail = true;
-    else if (['--quiet', '-q'].includes(arg) && program === 'wget') continue;
-    else if (['--silent', '--show-error'].includes(arg) && program === 'curl') continue;
-    else if (!url && !arg.startsWith('-')) {
-      try {
-        url = new URL(arg);
-      } catch {
-        return null;
-      }
-      if (!/^https?:$/.test(url.protocol) || url.username || url.password) return null;
-    } else return null;
-  }
-  return url && toStdout ? { kind: 'http', url, head, follow, fail } : null;
-}
-
 function parseStage(
   tokens: string[],
   shell: 'bash' | 'cmd',
@@ -152,12 +121,15 @@ function parseStage(
       program = program === 'get-content' ? 'cat' : 'ls';
     }
   } else {
-    program = program?.replace(/^\/(?:usr\/)?bin\//, '');
+    program = program?.replace(/^\/(?:usr\/(?:local\/)?)?bin\//, '');
   }
   if (program === 'pwd' && !piped && !args.length) return { kind: 'pwd' };
   if (program === 'jq') {
-    const raw = args[0] === '-r' || args[0] === '--raw-output';
-    if (raw) args.shift();
+    let raw = false;
+    while (/^(?:-[rc]+|--(?:compact-output|raw-output))$/.test(args[0] ?? '')) {
+      const flag = args.shift()!;
+      raw ||= flag === '--raw-output' || (!flag.startsWith('--') && flag.includes('r'));
+    }
     const [query, path] = args;
     if (
       args.length !== (piped ? 1 : 2) ||
@@ -197,8 +169,10 @@ function parseStage(
     return { kind: 'filter', pattern, insensitive: flags.some((flag) => flag.includes('i')) };
   }
   if (program === 'find' && shell === 'bash') return !piped ? findStage(args) : null;
-  if (program === 'curl' || program === 'wget')
-    return !piped && !root.remote ? httpStage(program, args) : null;
+  if (program && !piped && !root.remote) {
+    const request = parseHttpCommand(program, args, shell === 'cmd');
+    if (request) return { kind: 'http', request };
+  }
   if (
     !piped &&
     program === 'fd' &&
@@ -242,9 +216,15 @@ function parseStage(
       if (!/^\d{1,6}$/.test(args[1] ?? '')) return null;
       count = Number(args[1]);
       args = args.slice(2);
-    } else if (/^-\d{1,6}$/.test(args[0] ?? '')) count = Number(args.shift()!.slice(1));
+    } else {
+      const lines = /^(?:-n?|--lines=)(\d{1,6})$/.exec(args[0] ?? '');
+      if (lines) {
+        count = Number(lines[1]);
+        args.shift();
+      }
+    }
   } else {
-    const accepted = { wc: /^-[lwmc]$/, sort: /^-[nru]+$/, uniq: /^-[cd]$/ };
+    const accepted = { wc: /^-[lwmc]+$/, sort: /^-[nru]+$/, uniq: /^-[cd]$/ };
     if (accepted[program as keyof typeof accepted].test(args[0] ?? '')) option = args.shift();
   }
   if (args[0] === '--') args = args.slice(1);
@@ -252,72 +232,76 @@ function parseStage(
   return { kind: 'text', command: program, path: args[0], count, option };
 }
 
-export function commandPlan(command: string, shell: 'bash' | 'cmd', root: ScopedDirectory) {
+export function commandPlan(
+  command: string,
+  shell: 'bash' | 'cmd',
+  directories: ScopedDirectory[],
+  hasInputs: boolean,
+) {
   const pipelines = literalPipelines(command, shell);
   if (!pipelines) return null;
+  const root = directories[0]!;
   const stages = pipelines.map((pipeline) =>
     pipeline.map((tokens, index) => parseStage(tokens, shell, root, index > 0)),
   );
-  return stages.every((pipeline) => pipeline.every((stage) => stage !== null))
-    ? (stages as Stage[][])
-    : null;
+  if (!stages.every((pipeline) => pipeline.every((stage) => stage !== null))) return null;
+  const steps = stages as Stage[][];
+  if (steps.flat().some((stage) => stage.kind === 'http' && stage.request.write)) {
+    return steps.length === 1 && steps[0]!.length === 1 && !hasInputs
+      ? { steps, readOnly: false, requiresApproval: true }
+      : null;
+  }
+  const targets = new Map<Stage, NonNullable<ReturnType<typeof commandCopyTarget>>>();
+  for (const stage of steps.flat()) {
+    if (stage.kind !== 'http' || !stage.request.path) continue;
+    if (hasInputs) return null;
+    const target = commandCopyTarget(directories, stage.request.path);
+    if (!target || target.key === '.') return null;
+    targets.set(stage, target);
+  }
+  return { steps, readOnly: targets.size === 0, targets };
 }
 
 const maxOutput = 128 * 1024;
 
-async function httpOutput(
-  { url, head, follow, fail }: Extract<Stage, { kind: 'http' }>,
-  session: string,
-  signal: AbortSignal,
-) {
-  for (let hops = 0; hops <= 5; hops++) {
-    if (!/^https?:$/.test(url.protocol) || url.username || url.password)
-      throw new Error('仅支持无凭据的 HTTP 或 HTTPS 地址');
-    const response = await fetchPublicWebPage(
-      url,
-      { method: head ? 'HEAD' : 'GET', redirect: 'manual', credentials: 'omit', signal },
-      (target) => approveNonPublicRead(session, target, signal),
-    );
-    const redirect =
-      response.status >= 300 && response.status < 400 && response.headers.get('location');
-    if (follow && redirect) {
-      await response.body?.cancel();
-      url = new URL(redirect, url);
-      continue;
-    }
-    if (fail && !response.ok) {
-      await response.body?.cancel();
-      return { exitCode: 22, output: '', error: 'HTTP ' + response.status };
-    }
-    if (head)
-      return {
-        exitCode: 0,
-        output: [
-          'HTTP ' + response.status,
-          ...[...response.headers].map(([name, value]) => name + ': ' + value),
-          '',
-          '',
-        ].join('\r\n'),
-      };
-    if (!response.body) return { exitCode: 0, output: '' };
-    const reader = response.body.getReader();
-    const chunks = [];
-    let bytes = 0;
-    try {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) return { exitCode: 0, output: Buffer.concat(chunks).toString('utf8') };
-        const room = maxOutput - bytes;
-        chunks.push(value.subarray(0, room));
-        bytes += value.length;
-        if (bytes > maxOutput)
-          return { exitCode: 0, output: Buffer.concat(chunks).toString('utf8') + '\n[输出已截断]' };
+export function commandPlanPermissions(plan: NonNullable<ReturnType<typeof commandPlan>>) {
+  return plan.steps.flat().map((stage) => {
+    if (stage.kind === 'http') {
+      const origin = stage.request.url.origin;
+      const { write, method, headers, url } = stage.request;
+      if (write) {
+        const digest = createHash('sha256')
+          .update(JSON.stringify([url.href, [...headers], write.body]))
+          .digest('hex');
+        return {
+          key: ['http-write', method, digest],
+          label: `重复同一 ${method} 请求到 ${origin}`,
+        };
       }
-    } finally {
-      await reader.cancel().catch(() => {});
+      const target = plan.targets?.get(stage);
+      return target
+        ? {
+            key: ['http-download', origin, target.root.name, target.root.host],
+            label: `从 ${origin} 下载到 ${target.root.name}`,
+          }
+        : { key: ['http-read', origin], label: `读取 ${origin} 的 HTTP 响应` };
     }
-  }
-  throw new Error('网页重定向次数过多');
+    if (stage.kind === 'vcs') {
+      const { program, args } = stage.read;
+      const operation = [program, ...args.slice(0, program === 'gh' && args[0] !== 'api' ? 2 : 1)];
+      return { key: ['vcs-read', ...operation], label: operation.join(' ') + ' 只读' };
+    }
+    if (stage.kind === 'inspect') {
+      const action = stage.request.action;
+      return {
+        key: ['inspect', action],
+        label: { read: '读取文件', ls: '列出文件', find: '查找文件', grep: '搜索文件内容' }[action],
+      };
+    }
+    if (stage.kind === 'pwd') return { key: ['pwd'], label: '查看工作目录' };
+    if (stage.kind === 'hash') return { key: ['hash'], label: '计算文件校验值' };
+    return { key: ['filter'], label: '筛选和格式化命令输出' };
+  });
 }
 
 function textOutput(stage: Extract<Stage, { kind: 'text' }>, data: string): string {
@@ -329,9 +313,12 @@ function textOutput(stage: Extract<Stage, { kind: 'text' }>, data: string): stri
     const lineCount = lines.filter((line) => line.endsWith('\n')).length;
     const words = data.match(/\S+/gu)?.length ?? 0;
     const size = Buffer.byteLength(data);
-    const values = { '-l': lineCount, '-w': words, '-c': size, '-m': Array.from(data).length };
+    const values = { l: lineCount, w: words, m: Array.from(data).length, c: size };
     return (
-      (option ? values[option as keyof typeof values] : [lineCount, words, size].join(' ')) + '\n'
+      Object.entries(values)
+        .filter(([flag]) => (option || 'lwc').includes(flag))
+        .map(([, value]) => value)
+        .join(' ') + '\n'
     );
   }
   const content = lines.map((line) => line.replace(/\r?\n$/, ''));
@@ -355,7 +342,7 @@ function textOutput(stage: Extract<Stage, { kind: 'text' }>, data: string): stri
 }
 
 export async function executeCommandPlan(
-  plan: Stage[][],
+  plan: NonNullable<ReturnType<typeof commandPlan>>,
   directories: ScopedDirectory[],
   files: string[],
   session: string,
@@ -377,13 +364,31 @@ export async function executeCommandPlan(
   const read = async (path: string) =>
     Buffer.from((await inspect(path, { action: 'read' })).data ?? '', 'base64');
   let output = '';
-  for (const pipeline of plan) {
+  let truncated = false;
+  const append = (text = '') => {
+    const space = maxOutput - output.length;
+    output += text.slice(0, space);
+    truncated ||= text.length > space;
+    return output + (truncated ? '\n[输出已截断]' : '');
+  };
+  for (const pipeline of plan.steps) {
     let result: ScopedCommandResult = { exitCode: 0, output: '' };
     for (const stage of pipeline) {
       cancellation.throwIfAborted();
       if (stage.kind === 'vcs') result = await runVcsReads([stage.read], root, cancellation);
-      else if (stage.kind === 'http') result = await httpOutput(stage, session, cancellation);
-      else if (stage.kind === 'pwd') result = { exitCode: 0, output: root.name + '\n' };
+      else if (stage.kind === 'http') {
+        const target = plan.targets?.get(stage);
+        result = await runHttpCommand(
+          stage.request,
+          session,
+          cancellation,
+          target &&
+            (async (bytes, signal) => {
+              const saved = await writeCommandFile(target, bytes, signal);
+              if (saved.error) throw new Error(saved.error);
+            }),
+        );
+      } else if (stage.kind === 'pwd') result = { exitCode: 0, output: root.name + '\n' };
       else if (stage.kind === 'filter') {
         const pattern = stage.insensitive ? stage.pattern.toLowerCase() : stage.pattern;
         const lines = result.output.match(/[^\n]*\n|[^\n]+$/g) ?? [];
@@ -466,12 +471,10 @@ export async function executeCommandPlan(
           output: limited ? text + '[搜索结果已截断]\n' : text,
         };
       }
-      if (result.error) return { ...result, output: output + result.output };
+      if (result.error) return { ...result, output: append(result.output) };
     }
-    output += result.output;
-    if (output.length > maxOutput)
-      return { exitCode: 0, output: output.slice(0, maxOutput) + '\n[输出已截断]' };
-    if (result.exitCode !== 0) return { ...result, output };
+    const combined = append(result.output);
+    if (result.exitCode !== 0) return { ...result, output: combined };
   }
-  return { exitCode: 0, output };
+  return { exitCode: 0, output: append() };
 }

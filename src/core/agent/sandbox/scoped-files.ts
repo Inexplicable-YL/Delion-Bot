@@ -285,13 +285,25 @@ export async function copyCommandFile(
   const original = commandCopyTarget(directories, source);
   if (original?.root === root && original.key === key) return { error: '源文件和目标文件相同' };
   const checked = targetPath(`${root.name}/${key}`, directories);
+  return writeCommandFile(
+    { root, key: checked.key },
+    Buffer.from(read.data ?? '', 'base64'),
+    signal,
+  );
+}
+
+export function writeCommandFile(
+  { root, key }: NonNullable<ReturnType<typeof commandCopyTarget>>,
+  bytes: Buffer,
+  signal: AbortSignal,
+) {
   signal.throwIfAborted();
   return runFileAction(
     root,
     {
       action: 'write',
-      path: checked.key,
-      data: read.data ?? '',
+      path: key,
+      data: bytes.toString('base64'),
       writable: true,
     },
     signal,

@@ -59,6 +59,7 @@ vi.mock('../../../../src/core/remote/helper', async (original) => ({
 }));
 
 import { agentEnvironment } from '../../../../src/core/agent/environment';
+import * as publicWeb from '../../../../src/core/capabilities/public-web-fetch';
 import { saveWebSearchEntry } from '../../../../src/core/capabilities/web-search';
 import { launchPlan, scopedDirectories } from '../../../../src/core/agent/sandbox/mode';
 import { referenceFilePath } from '../../../../src/modules/chat/main/reference-file';
@@ -126,6 +127,7 @@ afterEach(() => {
   state.writeRemoteFile.mockReset();
   state.mcpDefinitions.mockReset();
   state.disabledTools.mockReset();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   db?.close();
 });
@@ -315,6 +317,68 @@ it('curl HEAD 重定向到非公开地址前再次检查权限', async () => {
   expect(approveSandboxCommand).not.toHaveBeenCalled();
 });
 
+it.each(['read-only', 'auto-approval', 'approval'] as const)(
+  '%s 对 HTTP 读取、下载和写入应用同一解析结果',
+  async (mode) => {
+    database();
+    const host = hostPorts();
+    const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: false });
+    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    const fetch = vi
+      .spyOn(publicWeb, 'fetchPublicWebPage')
+      .mockImplementation(
+        async () => new Response('response\n', { headers: { 'content-type': 'text/plain' } }),
+      );
+    const id = insertSession(null);
+    writePermissionMode(id, mode);
+    const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+      sessionId: id,
+    });
+    const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
+    const execute = (command: string) =>
+      tool.execute('call', { command }, undefined, undefined, {} as never);
+
+    const get =
+      'curl -fsSG --data-urlencode "q=two words" https://example.test/api -w "%{http_code}" | head -n2';
+    if (mode === 'approval') approveSandboxCommand.mockResolvedValueOnce({ approved: true });
+    expect(await execute(get)).toMatchObject({
+      content: [{ text: JSON.stringify({ exitCode: 0, output: 'response\n200' }) }],
+    });
+    expect(fetch).toHaveBeenLastCalledWith(
+      new URL('https://example.test/api?q=two+words'),
+      expect.objectContaining({ method: 'GET', credentials: 'omit' }),
+      expect.any(Function),
+    );
+    expect(approveSandboxCommand).toHaveBeenCalledTimes(mode === 'approval' ? 1 : 0);
+
+    const post = 'curl -X POST --data "name=one" https://example.test/api';
+    expect(await execute(post)).toMatchObject({ isError: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    if (mode === 'read-only') {
+      expect(await execute('curl -o /share/report.bin https://example.test/report')).toMatchObject({
+        isError: true,
+      });
+      expect(approveSandboxCommand).not.toHaveBeenCalled();
+      return;
+    }
+
+    expect(approveSandboxCommand).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        grant: { keys: [expect.stringContaining('http-write')], label: expect.any(String) },
+      }),
+    );
+    approveSandboxCommand.mockResolvedValueOnce({ approved: true });
+    expect(await execute(post)).toMatchObject({
+      content: [{ text: JSON.stringify({ exitCode: 0, output: 'response\n' }) }],
+    });
+    expect(fetch).toHaveBeenLastCalledWith(
+      new URL('https://example.test/api'),
+      expect.objectContaining({ method: 'POST', body: 'name=one', redirect: 'manual' }),
+      expect.any(Function),
+    );
+  },
+);
+
 it
   .skipIf(
     !existsSync(
@@ -371,6 +435,13 @@ it
     if (mode !== 'read-only') {
       await expect(runWithPermission(copy)).resolves.toMatchObject(output(''));
       expect(readFileSync(join(privacy, 'copy.bin'))).toEqual(bytes);
+    }
+    if (mode === 'auto-approval') {
+      vi.spyOn(publicWeb, 'fetchPublicWebPage').mockImplementation(async () => new Response(bytes));
+      await expect(
+        run('curl -fsSL -o /share/result.bin https://example.test/file && wc -c /share/result.bin'),
+      ).resolves.toMatchObject(output('4\n'));
+      expect(readFileSync(join(share, 'result.bin'))).toEqual(bytes);
     }
     expect(approveSandboxCommand).toHaveBeenCalledTimes(mode === 'approval' ? 6 : 0);
     await expect(run('rg --pre cat TODO /share')).resolves.toMatchObject({ isError: true });

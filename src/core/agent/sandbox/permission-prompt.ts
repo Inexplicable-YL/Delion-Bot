@@ -135,10 +135,10 @@ export function permissionPrompt(
             ? '- For a Git project, try git status --short, git diff --stat, or git log --oneline -10. Use gh pr checks with the actual PR number to inspect CI. A Git or GitHub command may require an installed CLI, a repository, or credentials.'
             : '',
           root && !remote
-            ? '- For public HTTP response headers, use curl -sI "https://example.com" with the actual URL. Use curl -sL for a public GET to stdout. The app checks the address on every redirect it follows.' +
-              (tools.has('download_file')
-                ? ' Use download_file when the user needs a saved binary.'
-                : '')
+            ? '- For public HTTP, use curl -fsSL URL for a GET or curl -sI URL for headers. Quote URLs with query strings. Use curl -G --data-urlencode "q=search term" URL to add a query parameter, or wget -qO- URL for a GET to stdout. The app checks the destination before every followed redirect.' +
+              (mode === 'read-only'
+                ? ' Keep the result on stdout. Saving a response or sending a request body that changes remote state is prohibited.'
+                : ` For a download up to 5 MiB, use curl -fsSL -o "${workspace}/file.ext" URL, or the available download_file tool. For a remote write, send a separate curl command with the exact method and inline JSON. Remote writes require approval.`)
             : '',
           remote
             ? '- The scoped HTTP command forms run in local chats and local projects. For public pages in an SSH session, prefer the available web tools. Those requests originate from the application host.'
