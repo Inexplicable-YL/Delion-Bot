@@ -283,9 +283,9 @@ app
       (await invoke(`return await window.delionBot.bridge.invoke('llm:list');`))[0].enabled,
       false,
     );
-    assert.equal(
-      await invoke(`return await window.delionBot.bridge.invoke('connectors:configured');`),
-      false,
+    assert.deepEqual(
+      await invoke(`return await window.delionBot.bridge.invoke('connectors:status');`),
+      { active: null, configured: { composio: false, pipedream: false } },
     );
     await invoke(`await document.fonts.ready;`);
     assert.equal(
@@ -310,6 +310,10 @@ app
       if (link.querySelector('img')) throw new Error('未连接时侧栏不应显示应用图标');
       if (document.querySelector('nav[aria-label="功能入口"]').textContent.includes('连接器')) throw new Error('连接器出现在顶部功能入口');
       link.click();
+      for (let i=0;i<50 && !document.querySelector('section[aria-label="Composio"]');i++) await new Promise(r=>setTimeout(r,100));
+      const provider = document.querySelector('section[aria-label="Composio"]');
+      if (!provider) throw new Error('缺少 Composio 供应商区域');
+      provider.querySelector('summary')?.click();
       for (let i=0;i<50 && ![...document.querySelectorAll('#app-main button')].some(button => button.textContent?.trim() === '配置 Composio');i++) await new Promise(r=>setTimeout(r,100));
       const configure = [...document.querySelectorAll('#app-main button')].find(button => button.textContent?.trim() === '配置 Composio');
       if (!configure) throw new Error('缺少连接器配置按钮');
@@ -344,6 +348,13 @@ app
       if(!dialog.textContent.includes('req_smoke401')) throw new Error('密钥错误未显示在输入框旁');
       if(!document.querySelector('input[aria-label="Composio 项目密钥"]')) throw new Error('错误后输入框消失: ' + dialog.innerHTML);
       submitKey('smoke-key');
+      const provider = document.querySelector('section[aria-label="Composio"]');
+      for(let i=0;i<50 && provider?.querySelector('[role="switch"]')?.disabled !== false;i++) await new Promise(r=>setTimeout(r,100));
+      const enable = provider?.querySelector('[role="switch"]');
+      if (!enable || enable.disabled) throw new Error('Composio 启用开关不可用');
+      enable.click();
+      for(let i=0;i<50 && enable.getAttribute('aria-checked')!=='true';i++) await new Promise(r=>setTimeout(r,100));
+      if (enable.getAttribute('aria-checked')!=='true') throw new Error('Composio 未启用');
       let row;
       for(let i=0;i<60 && !(row=document.querySelector('[role="group"][aria-label="gmail"]'));i++) await new Promise(r=>setTimeout(r,100));
       if(!row) throw new Error('配置后未显示应用目录');
@@ -355,7 +366,7 @@ app
       if(!connect || connect.disabled) throw new Error('Gmail 连接入口不可用');
       connect.click();
       for(let i=0;i<80;i++) {
-        const accounts=await window.delionBot.bridge.invoke('connectors:accounts');
+        const accounts=await window.delionBot.bridge.invoke('connectors:accounts', 'composio');
         if(accounts.some(item=>item.toolkit.slug==='gmail' && item.status==='ACTIVE')) break;
         await new Promise(r=>setTimeout(r,100));
       }
