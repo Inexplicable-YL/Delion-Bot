@@ -9,7 +9,10 @@ import (
 )
 
 func TestReadPagesAndIncompleteSearch(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	large := strings.Repeat("first\n", 34_000) + "target"
 	if err := os.WriteFile(filepath.Join(dir, "large.txt"), []byte(large), 0600); err != nil {
 		t.Fatal(err)
