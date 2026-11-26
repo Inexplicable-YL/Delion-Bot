@@ -17,14 +17,18 @@ import (
 const maxSize = 5 * 1024 * 1024
 
 type Request struct {
-	Action   string
-	Path     string
-	Content  string
-	Data     []byte
-	OldText  string
-	Pattern  string
-	Limit    int64
-	Writable bool
+	Action     string
+	Path       string
+	Content    string
+	Data       []byte
+	OldText    string
+	Pattern    string
+	Glob       string
+	MaxDepth   *int
+	FilesOnly  bool
+	SkipHidden bool
+	Limit      int64
+	Writable   bool
 }
 
 type Response struct {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strings"
 )
 
 type Match struct {
@@ -23,6 +24,11 @@ func grepFile(ctx context.Context, root *os.Root, name string, input Request) Re
 	expression, err := regexp.Compile(input.Pattern)
 	if err != nil {
 		return Response{Error: "无效的搜索模式"}
+	}
+	if input.Glob != "" {
+		if match, err := path.Match(input.Glob, name); err != nil || !match {
+			return Response{}
+		}
 	}
 	data, err := readFile(root, name, 200_000)
 	if err != nil {
@@ -72,6 +78,11 @@ func search(ctx context.Context, root *os.Root, input Request) Response {
 	if err != nil {
 		return Response{Error: "无效的搜索模式"}
 	}
+	if input.Glob != "" {
+		if _, err := path.Match(input.Glob, ""); err != nil {
+			return Response{Error: "无效的文件筛选模式"}
+		}
+	}
 	var reply Response
 	visited, remaining := 0, 8*1024*1024
 	err = fs.WalkDir(root.FS(), ".", func(name string, entry fs.DirEntry, err error) error {
@@ -92,7 +103,9 @@ func search(ctx context.Context, root *os.Root, input Request) Response {
 		if name == "." {
 			return nil
 		}
-		if internalName(entry.Name()) {
+		depth := strings.Count(name, "/") + 1
+		if internalName(entry.Name()) || (input.SkipHidden && strings.HasPrefix(entry.Name(), ".")) ||
+			(input.MaxDepth != nil && depth > *input.MaxDepth) {
 			if entry.IsDir() {
 				return fs.SkipDir
 			}
@@ -103,13 +116,18 @@ func search(ctx context.Context, root *os.Root, input Request) Response {
 		}
 		visible := path.Join(input.Path, name)
 		if expression == nil {
-			if match, _ := path.Match(input.Pattern, entry.Name()); match {
+			if match, _ := path.Match(input.Pattern, entry.Name()); match && (!input.FilesOnly || !entry.IsDir()) {
 				reply.Entries = append(reply.Entries, visible)
 			}
 			return nil
 		}
 		if entry.IsDir() {
 			return nil
+		}
+		if input.Glob != "" {
+			if match, _ := path.Match(input.Glob, entry.Name()); !match {
+				return nil
+			}
 		}
 		info, err := entry.Info()
 		if err != nil || info.Size() > 200_000 || info.Size() > int64(remaining) {

@@ -16,8 +16,9 @@ it('列出管道和命令列表中的每个程序', () => {
 it('多子命令工具按子命令区分授权', () => {
   expect(commandNames('git status && pnpm run test -- --watch', 'bash')).toEqual([
     'git status',
-    'pnpm run',
+    'pnpm run test',
   ]);
+  expect(commandNames('pnpm.CMD run lint', 'cmd')).toEqual(['pnpm run lint']);
   expect(commandNames('git -C .. push', 'bash')).toBeNull();
   expect(commandNames('git', 'bash')).toBeNull();
   expect(commandNames('GH.EXE pr comment 12 --body test', 'cmd')).toEqual(['gh pr comment']);
@@ -26,12 +27,15 @@ it('多子命令工具按子命令区分授权', () => {
   expect(commandNames('gh pr view 12 --json title -qenv', 'bash')).toBeNull();
   expect(commandNames('git branch -D example', 'bash')).toBeNull();
   expect(commandNames('git push --delete origin example', 'bash')).toBeNull();
+  expect(commandNames('/usr/bin/curl -X POST https://example.test', 'bash')).toBeNull();
+  expect(commandNames('cp local.txt /outside', 'bash')).toBeNull();
+  expect(commandNames('printf hello > report.txt', 'bash')).toBeNull();
 });
 
 it('引号和转义里的分隔符不会藏起程序', () => {
   expect(commandNames("grep 'a;b|c' f", 'bash')).toEqual(['grep']);
   expect(commandNames('grep \\" ; touch \\"', 'bash')).toEqual(['grep', 'touch']);
-  expect(commandNames("echo 'a & copy b'", 'cmd')).toEqual(['echo', 'copy']);
+  expect(commandNames("echo 'a & dir b'", 'cmd')).toEqual(['echo', 'dir']);
 });
 
 it('无法确定实际程序或包含删除时不提供授权', () => {

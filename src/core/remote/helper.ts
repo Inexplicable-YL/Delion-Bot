@@ -229,6 +229,10 @@ export interface ScopedFileOperation {
   data?: string;
   oldText?: string;
   pattern?: string;
+  glob?: string;
+  maxDepth?: number;
+  filesOnly?: boolean;
+  skipHidden?: boolean;
   limit?: number;
   writable?: boolean;
 }

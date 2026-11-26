@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, isAbsolute, join, posix } from 'node:path';
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { hostPorts } from '../../ports';
 import { helperSession, type ScopedCommandResult } from '../../remote/helper';
@@ -11,7 +11,8 @@ import { notifyRemoteChange } from '../../remote/events';
 import type { SessionRow } from '../session/store';
 import { localBash } from '../tasks';
 import { deniedMessage } from './approve-tool';
-import { commandNames, readOnlyCommand } from './command-names';
+import { commandNames, literalCommands, readOnlyCommand } from './command-names';
+import { commandPlan, executeCommandPlan } from './command-plan';
 import { macosSandboxLauncher, runMacosCommand } from './macos-command';
 import { redactModelPaths } from './model-paths';
 import {
@@ -21,7 +22,12 @@ import {
   scopedDirectories,
   type ScopedDirectory,
 } from './mode';
-import { readScopedReference, scopedFileTools } from './scoped-files';
+import {
+  commandCopyTarget,
+  copyCommandFile,
+  readScopedReference,
+  scopedFileTools,
+} from './scoped-files';
 import { runVcsReads, vcsReadCommands } from './read-vcs';
 
 const commandResult = (value: object, isError = false) => ({
@@ -261,6 +267,62 @@ export function runWindowsCommand(
   });
 }
 
+function analyzeCommand(
+  command: string,
+  shell: 'bash' | 'cmd',
+  root: ScopedDirectory,
+  directories: ScopedDirectory[],
+  hasInputs: boolean,
+  isolated: boolean,
+) {
+  if (directories.length) {
+    const windows = shell === 'cmd';
+    const file = brokerCommand(command, windows);
+    const plan = commandPlan(command, shell, root);
+    if (file) {
+      const path = file.params.path;
+      const hostPath = Boolean(
+        path &&
+        (root.remote ? posix.isAbsolute(path) : isAbsolute(path)) &&
+        !/^\/(?:project|privacy|share)(?:[\\/]|$)/.test(path) &&
+        (!windows || /^\s*(?:"(?:dir|type)"|dir|type)\s/i.test(command)),
+      );
+      return { kind: 'file' as const, file, plan, hostPath, readOnly: file.action !== 'mkdir' };
+    }
+    if (!hasInputs) {
+      const vcs = vcsReadCommands(command, shell, root);
+      if (vcs) return { kind: 'vcs' as const, vcs, readOnly: true };
+      if (!root.remote) {
+        const commands = literalCommands(command, shell);
+        const [name, ...args] = commands?.length === 1 ? commands[0]! : [];
+        if (name === 'cp' || (windows && name?.toLowerCase() === 'copy')) {
+          if (args[0] === '--' && name === 'cp') args.shift();
+          const [source, destination] = args;
+          if (
+            args.length === 2 &&
+            source &&
+            destination &&
+            !source.startsWith('-') &&
+            !destination.startsWith('-') &&
+            !/[?*]/.test(source + destination)
+          ) {
+            const target = commandCopyTarget(directories, destination);
+            if (target) return { kind: 'copy' as const, source, target, readOnly: false };
+          }
+        }
+      }
+    }
+    if (plan) return { kind: 'plan' as const, plan, readOnly: true };
+  }
+  const roots = root.name === '/privacy' ? ['/privacy', '/share'] : hasInputs ? [] : ['/project'];
+  return {
+    kind: 'shell' as const,
+    readOnly: directories.length > 0 && readOnlyCommand(command, shell, roots),
+    isolated:
+      isolated && hasInputs && /^(?:exec\s+)?(?:\/(?:bin|usr\/bin)\/)?(?:awk|sed)\s/.test(command),
+  };
+}
+
 export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   const mode = executionMode(meta);
   if (mode === 'full') return null;
@@ -277,25 +339,19 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
   const remote = root.remote;
   const windows = !remote && process.platform === 'win32';
   const shell = windows ? 'cmd' : 'bash';
-  const directReads = mode !== 'approval' && directories.length > 0;
-  const virtualRoots = root.name === '/privacy' ? ['/privacy', '/share'] : ['/project'];
-  const launcher = windows
-    ? join(hostPorts().paths.bundled('scopedfs'), 'scopedfs.exe')
-    : macosSandboxLauncher;
+  const isolated =
+    Boolean(remote) || (process.platform === 'darwin' && existsSync(macosSandboxLauncher));
   const { id: session } = owner;
-  const fileTools = mode !== 'approval' ? scopedFileTools(meta) : [];
+  const fileTools = scopedFileTools(meta);
   const chatPaths =
     root.name === '/privacy'
       ? ` In ordinary local chats, use /privacy and /share in command text. Scripts started from the initial working directory can use the relative paths privacy and share.${windows ? ' Use backslashes after the virtual root in cmd.exe built-in file arguments.' : ''}`
       : '';
-  const reads =
-    mode !== 'approval'
-      ? 'Verified reads run directly, including file inspection and supported git and gh queries. Run git and gh on their own or join verified Git and GitHub queries with &&. '
-      : '';
+  const reads = `${mode === 'approval' ? 'Commands require approval before execution.' : 'Verified reads run directly.'} Common file searches, text filters, Git and GitHub queries, and local public HTTP reads can use pipes and &&. Quote glob patterns. `;
   const runtime =
     mode === 'read-only'
       ? `Commands that may modify data are disabled. Use ${windows ? 'cmd.exe syntax or Get-Content and Get-ChildItem for file reads' : 'Bash syntax'}. Use the file tools for absolute local file reads.`
-      : `Run a ${windows ? 'Windows cmd.exe' : 'Bash'} command on the ${remote ? 'SSH host' : 'local computer'}. ${automatic ? 'Use file tools for changes when possible. Unverified commands require approval. ' : ''}Approved commands run with the current account permissions, including network and subprocesses. Project commands without input copies run in the project directory. Other commands run in a temporary directory.`;
+      : `Run a ${windows ? 'Windows cmd.exe' : 'Bash'} command on the ${remote ? 'SSH host' : 'local computer'}. ${automatic ? 'Use file tools for changes when possible. Simple local file copies inside a writable directory can run directly. Unverified commands require approval. ' : ''}Supported operations can use the file broker or controlled reads. Other approved commands run with the current account permissions, including network and subprocesses. Project shell commands without input copies run in the project directory. Other shell commands run in a temporary directory.`;
   return {
     name: 'sandbox_command',
     label: 'Sandbox command',
@@ -319,45 +375,18 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
       files = [...files];
       if (cancellation.aborted || command.includes('\0'))
         return commandResult({ error: '命令无效或已取消' }, true);
-      const operation = mode !== 'approval' && brokerCommand(command, windows);
-      if (operation) {
-        const tool = fileTools.find(({ name }) => name === operation.action);
-        if (tool) {
-          const input =
-            operation.action !== 'mkdir' && /^inputs[\\/](\d+)$/.exec(operation.params.path ?? '');
-          const path = input ? files[Number(input[1]) - 1] : operation.params.path;
-          if (!input || path)
-            return tool.execute(id, { ...operation.params, path }, cancellation, onUpdate, context);
-        }
-      }
-      const vcs = directReads && !files.length && vcsReadCommands(command, shell, root);
-      if (vcs) {
-        try {
-          const output = await runVcsReads(vcs, root, cancellation);
-          return commandResult(
-            { ...output, output: redactModelPaths(directories)(output.output) },
-            output.exitCode !== 0,
-          );
-        } catch {
-          return commandResult({ error: '无法完成命令读取' }, true);
-        }
-      }
-      const verifiedRead =
-        directReads &&
-        readOnlyCommand(
-          command,
-          shell,
-          root.name === '/project' && files.length ? [] : virtualRoots,
-        );
-      const isolatedInputRead =
-        mode === 'read-only' &&
-        !windows &&
-        files.length > 0 &&
-        /^(?:exec\s+)?(?:\/(?:bin|usr\/bin)\/)?(?:awk|sed)\s/.test(command) &&
-        (remote || (process.platform === 'darwin' && existsSync(launcher)));
-      if (mode === 'read-only' && !verifiedRead && !isolatedInputRead)
+      const analysis = analyzeCommand(
+        command,
+        shell,
+        root,
+        directories,
+        files.length > 0,
+        isolated,
+      );
+      const isolatedRead = mode === 'read-only' && analysis.kind === 'shell' && analysis.isolated;
+      if (mode === 'read-only' && !analysis.readOnly && !isolatedRead)
         return commandResult({ error: '只读模式下只能运行已确认无修改的命令' }, true);
-      if (approvalMode && !verifiedRead) {
+      if (mode === 'approval' || (automatic && analysis.kind === 'shell' && !analysis.readOnly)) {
         const names = commandNames(command, shell);
         const approval = await hostPorts().desktop.approveSandboxCommand?.({
           session,
@@ -375,6 +404,71 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
         if (!approval?.approved || cancellation.aborted)
           return commandResult({ error: deniedMessage('命令未获批准', approval) }, true);
       }
+      const approvedHostFile = mode === 'approval' && analysis.kind === 'file' && analysis.hostPath;
+      const plan =
+        analysis.kind === 'plan' || (analysis.kind === 'file' && !approvedHostFile)
+          ? analysis.plan
+          : null;
+      if (analysis.kind === 'file' && !approvedHostFile && (mode !== 'approval' || !plan)) {
+        const operation = analysis.file;
+        const tool = fileTools.find(({ name }) => name === operation.action);
+        if (tool) {
+          const input =
+            operation.action !== 'mkdir' && /^inputs[\\/](\d+)$/.exec(operation.params.path ?? '');
+          const path = input ? files[Number(input[1]) - 1] : operation.params.path;
+          if (!input || path)
+            return tool.execute(id, { ...operation.params, path }, cancellation, onUpdate, context);
+        }
+        if (!plan && mode !== 'approval')
+          return commandResult({ error: '无法读取命令所需的文件' }, true);
+      }
+      if (analysis.kind === 'copy') {
+        try {
+          const result = await copyCommandFile(
+            directories,
+            analysis.source,
+            analysis.target,
+            cancellation,
+          );
+          return commandResult(
+            { exitCode: result.error ? 1 : 0, output: '', ...result },
+            Boolean(result.error),
+          );
+        } catch {
+          return commandResult({ error: '无法复制文件' }, true);
+        }
+      }
+      if (analysis.kind === 'vcs') {
+        try {
+          const output = await runVcsReads(analysis.vcs, root, cancellation);
+          return commandResult(
+            { ...output, output: redactModelPaths(directories)(output.output) },
+            output.exitCode !== 0,
+          );
+        } catch {
+          return commandResult({ error: '无法完成命令读取' }, true);
+        }
+      }
+      if (plan) {
+        try {
+          const result = await executeCommandPlan(plan, directories, files, session, cancellation);
+          return commandResult(
+            { ...result, output: redactModelPaths(directories)(result.output) },
+            result.exitCode !== 0,
+          );
+        } catch (error) {
+          return commandResult(
+            {
+              error:
+                error instanceof Error
+                  ? redactModelPaths(directories)(error.message)
+                  : '无法完成命令读取',
+            },
+            true,
+          );
+        }
+      }
+      const verifiedRead = mode !== 'approval' && analysis.kind === 'shell' && analysis.readOnly;
       let directory: string | undefined;
       try {
         const runDirectories = root.name === '/privacy' ? scopedDirectories(meta) : directories;

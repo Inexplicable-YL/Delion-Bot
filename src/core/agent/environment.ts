@@ -128,7 +128,7 @@ export function agentEnvironment() {
           ? 'Mode: automatic approval. Use read, ls, web_search, and web_fetch for reads. Use the file tools for changes so the app can check the target and operation. Local chat and project files can be created or edited. External creation requires directory permission. Deletions, SSH writes, and commands the app cannot verify as read-only require approval.'
           : mode === 'read-only'
             ? 'Mode: read-only. Use file tools, sandbox_command, web search and fetch, read-only connectors, and read_skill to gather information. Commands and app operations must have verified read-only effects. File writes, downloads to disk, and other changes are disabled.'
-            : 'Mode: request approval. The app asks the user to approve writes, external requests, and tool calls whose effects may change data. Use sandbox_command for shell operations. Each approved command runs with the current execution account permissions, including file writes, subprocesses, and network. Use download_file to save an original binary to an allowed directory. Use read_skill to load an enabled skill. Use the delion tool for Delion app commands when it is available.';
+            : 'Mode: request approval. Use sandbox_command for commands. Supported operations use scoped execution after approval. Other approved commands run with the current execution account permissions. Use download_file to save an original binary to an allowed directory. Use read_skill to load an enabled skill. Use the delion tool for Delion app commands when it is available.';
         return {
           appendSystemPrompt: [
             RESTRICTED_PROMPT,

@@ -224,6 +224,7 @@ it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并
     onData(Buffer.from('src/a.ts:1:TODO'));
     return { code: 0, state: 'exited', lost: 0 };
   });
+  state.scopedFile.mockResolvedValue({ matches: [{ path: 'src/a.ts', line: 1, text: 'TODO' }] });
   const id = insertSession('p1');
   writePermissionMode(id, mode);
   const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
@@ -233,12 +234,12 @@ it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并
   const execute = (command: string) =>
     tool.execute('call', { command }, undefined, undefined, {} as never);
   expect(await execute('grep -rn TODO /project/src | head -n 5')).toMatchObject({
-    content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO' }) }],
+    content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO\n' }) }],
   });
   expect(await execute('git log --oneline -5')).toMatchObject({
     content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO' }) }],
   });
-  expect(await execute('gh pr checks 123')).toMatchObject({
+  expect(await execute('gh pr checks 123 | grep -F TODO | head -n 5')).toMatchObject({
     content: [{ text: JSON.stringify({ exitCode: 0, output: 'src/a.ts:1:TODO' }) }],
   });
   expect(approveSandboxCommand).not.toHaveBeenCalled();
@@ -255,8 +256,122 @@ it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并
   } else {
     expect(approveSandboxCommand).not.toHaveBeenCalled();
   }
-  expect(state.remoteExec).toHaveBeenCalledTimes(3);
+  expect(state.remoteExec).toHaveBeenCalledTimes(2);
+  expect(state.scopedFile).toHaveBeenCalledExactlyOnceWith(
+    '/srv/project',
+    expect.objectContaining({ action: 'grep', path: 'src' }),
+    expect.any(AbortSignal),
+  );
 });
+
+it('curl HEAD 重定向到非公开地址前再次检查权限', async () => {
+  database();
+  const host = hostPorts();
+  const approveToolAction = vi
+    .fn()
+    .mockResolvedValueOnce({ approved: true })
+    .mockResolvedValueOnce({ approved: false });
+  const approveSandboxCommand = vi.fn();
+  provideTestHostPorts({
+    ...host,
+    desktop: { ...host.desktop, approveToolAction, approveSandboxCommand },
+  });
+  const fetch = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: 'http://127.0.0.2/private' } }),
+    );
+  vi.stubGlobal('fetch', fetch);
+  const id = insertSession(null);
+  const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+    sessionId: id,
+  });
+  const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
+  const result = await tool.execute(
+    'call',
+    { command: 'curl -sIL https://127.0.0.1/' },
+    undefined,
+    undefined,
+    {} as never,
+  );
+  expect(result).toMatchObject({ isError: true });
+  expect(fetch).toHaveBeenCalledExactlyOnceWith(
+    expect.any(URL),
+    expect.objectContaining({ method: 'HEAD', redirect: 'manual' }),
+  );
+  expect(approveToolAction).toHaveBeenCalledTimes(2);
+  expect(approveSandboxCommand).not.toHaveBeenCalled();
+});
+
+it
+  .skipIf(
+    !existsSync(
+      join('.build', 'scopedfs', process.platform === 'win32' ? 'scopedfs.exe' : 'scopedfs'),
+    ),
+  )
+  .each(['read-only', 'approval', 'auto-approval'] as const)(
+  '%s 解析相同的搜索和管道并按权限执行',
+  async (mode) => {
+    database();
+    const host = hostPorts();
+    const approveSandboxCommand = vi.fn().mockResolvedValue({ approved: false });
+    provideTestHostPorts({ ...host, desktop: { ...host.desktop, approveSandboxCommand } });
+    const id = insertSession(null);
+    writePermissionMode(id, mode);
+    const share = chatShareDirectory(id);
+    const privacy = chatSessionDirectory(id);
+    writeFileSync(join(share, 'a.ts'), 'TODO\n');
+    writeFileSync(join(share, 'b.md'), 'TODO\n');
+    writeFileSync(join(share, 'manifest.json'), '{"name":"demo"}');
+    const bytes = Buffer.from([0, 1, 255, 128]);
+    writeFileSync(join(share, 'sample.bin'), bytes);
+    const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
+      sessionId: id,
+    });
+    const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
+    const run = (command: string) =>
+      tool.execute('call', { command }, undefined, undefined, {} as never);
+    const runWithPermission = (command: string) => {
+      if (mode === 'approval') approveSandboxCommand.mockResolvedValueOnce({ approved: true });
+      return run(command);
+    };
+    const output = (value: string) => ({
+      content: [{ text: JSON.stringify({ exitCode: 0, output: value }) }],
+    });
+    const search = 'rg -ni -g "*.ts" todo /share | head -n 1';
+    if (mode === 'approval') await expect(run(search)).resolves.toMatchObject({ isError: true });
+    await expect(runWithPermission(search)).resolves.toMatchObject(output('a.ts:1:TODO\n'));
+    await expect(runWithPermission('rg --files -g "*.ts" /share | wc -l')).resolves.toMatchObject(
+      output('1\n'),
+    );
+    const manifest =
+      process.platform === 'win32'
+        ? 'Get-Content -LiteralPath /share/manifest.json'
+        : '/bin/cat /share/manifest.json';
+    await expect(runWithPermission(`${manifest} | jq -r .name`)).resolves.toMatchObject(
+      output('demo\n'),
+    );
+    const copy = 'cp /share/sample.bin /privacy/copy.bin';
+    if (mode !== 'auto-approval') {
+      await expect(run(copy)).resolves.toMatchObject({ isError: true });
+      expect(existsSync(join(privacy, 'copy.bin'))).toBe(false);
+    }
+    if (mode !== 'read-only') {
+      await expect(runWithPermission(copy)).resolves.toMatchObject(output(''));
+      expect(readFileSync(join(privacy, 'copy.bin'))).toEqual(bytes);
+    }
+    expect(approveSandboxCommand).toHaveBeenCalledTimes(mode === 'approval' ? 6 : 0);
+    await expect(run('rg --pre cat TODO /share')).resolves.toMatchObject({ isError: true });
+    await expect(run('cat /share/a.ts | tee /privacy/out.txt')).resolves.toMatchObject({
+      isError: true,
+    });
+    await expect(run('cp /share/sample.bin ../copy.bin')).resolves.toMatchObject({ isError: true });
+    expect(existsSync(join(privacy, 'out.txt'))).toBe(false);
+    expect(approveSandboxCommand).toHaveBeenCalledTimes(
+      mode === 'read-only' ? 0 : mode === 'approval' ? 9 : 3,
+    );
+  },
+);
 
 it('请求批准提供联网和连接器，拒绝和取消均不调用连接器', async () => {
   database();

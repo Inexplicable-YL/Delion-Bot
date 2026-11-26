@@ -8,7 +8,12 @@ import { useRootFontSize } from '../../../ui/root-font-size';
 import { sanitizeHtml, sanitizeHtmlWithAssets } from './sanitize-html';
 import { showToast } from '../../../ui/Toast';
 import { parseRemoteNodeId, type TabId } from '../../workspace/contract';
-import { useWorkspaceStore, workspaceClient, workspaceEntryPath } from '../../workspace/view';
+import {
+  DownloadFileButton,
+  useWorkspaceStore,
+  workspaceClient,
+  workspaceEntryPath,
+} from '../../workspace/view';
 import { CodeViewer } from './CodeViewer';
 import { useContentLoader, type LoadedDocument } from './Loader';
 import { OfficeExportBanner, OfficePromptCard } from './OfficePrompt';
@@ -155,6 +160,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
       onOpenInFolder={openInFolder}
       onReload={load}
       controls={controls}
+      actions={entryId ? <DownloadFileButton entryId={entryId} /> : undefined}
     />
   );
   const viewerOwnsToolbar =

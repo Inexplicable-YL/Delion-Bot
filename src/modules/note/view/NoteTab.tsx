@@ -3,7 +3,12 @@ import { useState } from 'react';
 import { Button } from '../../../ui/Button';
 import { showToast } from '../../../ui/Toast';
 import { parseRemoteNodeId, type TabId } from '../../workspace/contract';
-import { useWorkspaceStore, workspaceClient, workspaceEntryPath } from '../../workspace/view';
+import {
+  DownloadFileButton,
+  useWorkspaceStore,
+  workspaceClient,
+  workspaceEntryPath,
+} from '../../workspace/view';
 import { DocumentToolbar } from '../../../ui/DocumentToolbar';
 import { useNoteDraftSource } from './DraftSource';
 import { MarkdownEditor } from './MarkdownEditor';
@@ -157,13 +162,15 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
         failed={draft.error !== null || error !== null}
         onOpenInFolder={parseRemoteNodeId(entryId) ? undefined : openInFolder}
         actions={
-          markdown && mode === 'live' ? (
+          markdown ? (
             <ExportMenu
               filename={draft.content.title}
               text={draft.text}
               resolveImage={(src) => source.resolveImage(entryId, src)}
             />
-          ) : undefined
+          ) : (
+            <DownloadFileButton entryId={entryId} />
+          )
         }
         onReload={() => {
           if (dirty) setConfirmReload(true);

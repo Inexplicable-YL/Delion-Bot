@@ -8,7 +8,16 @@ const PRINT_PARTITION = 'note-print';
 
 type ExportRequest =
   | { format: 'pdf'; title: string; html: string }
-  | { format: 'docx'; title: string; bytes: Uint8Array };
+  | { format: 'docx'; title: string; bytes: Uint8Array }
+  | { format: 'md'; title: string; text: string };
+
+const dialogTitles = { pdf: '下载 PDF', docx: '下载 Word', md: '下载 Markdown' };
+
+async function exportedContent(request: ExportRequest) {
+  if (request.format === 'pdf') return printPdf(request.html);
+  if (request.format === 'docx') return request.bytes;
+  return request.text;
+}
 
 async function printPdf(html: string): Promise<Uint8Array> {
   const directory = await mkdtemp(join(hostPorts().paths.temp(), 'delion-print-'));
@@ -39,12 +48,12 @@ async function printPdf(html: string): Promise<Uint8Array> {
 
 export async function exportNoteDocument(request: ExportRequest): Promise<string | null> {
   const target = await hostPorts().desktop.pickSavePath(hostPorts().workspaceClient(), {
-    title: request.format === 'pdf' ? '下载 PDF' : '下载 Word',
+    title: dialogTitles[request.format],
     defaultPath: `${request.title}.${request.format}`,
     extension: request.format,
   });
   if (!target) return null;
-  await writeFile(target, request.format === 'pdf' ? await printPdf(request.html) : request.bytes);
+  await writeFile(target, await exportedContent(request));
   hostPorts().desktop.reveal(target);
   return target;
 }

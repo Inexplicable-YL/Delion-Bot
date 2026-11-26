@@ -3,6 +3,7 @@ import {
   ArrowDownTrayIcon as Download,
   DocumentIcon as Document,
   DocumentTextIcon as DocumentText,
+  HashtagIcon as Hashtag,
 } from '@heroicons/react/24/outline';
 import { DocumentToolbarButton } from '../../../ui/DocumentToolbar';
 import {
@@ -19,7 +20,7 @@ import { noteContract } from '../contract';
 
 const noteClient = createClient(noteContract, window.delionBot?.bridge);
 
-type ExportFormat = 'pdf' | 'docx';
+type ExportFormat = 'pdf' | 'docx' | 'md';
 
 async function exportMarkdown(
   format: ExportFormat,
@@ -27,6 +28,7 @@ async function exportMarkdown(
   text: string,
   resolveImage: (src: string) => string,
 ) {
+  if (format === 'md') return noteClient.exportDocument({ format, title, text });
   const { fetchImage, parseMarkdown } = await import('./export-source');
   const tree = parseMarkdown(text);
   const loadImage = (src: string) => fetchImage(resolveImage(src));
@@ -67,6 +69,11 @@ export function ExportMenu({
         </DocumentToolbarButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem onSelect={() => run('md')}>
+          <Hashtag />
+          下载为 Markdown
+          <DropdownMenuShortcut>.md</DropdownMenuShortcut>
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => run('docx')}>
           <DocumentText />
           下载为 Word

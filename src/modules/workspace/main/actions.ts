@@ -16,6 +16,7 @@ import { resourceRefSchema, workspaceContract, type WorkspaceState } from '../co
 import { dialog, shell } from 'electron';
 import { emit, hostPorts } from '../../../core/ports';
 import { mkdirSync, watch, type FSWatcher } from 'node:fs';
+import { copyFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 
 const watchers = new Map<string, FSWatcher>();
@@ -238,6 +239,16 @@ export async function openFile(id: string) {
   if (!path) throw new Error('此内容没有本地文件');
   const error = await shell.openPath(path);
   if (error) throw new Error(error);
+}
+
+export async function downloadFile(id: string) {
+  prepareStorage();
+  const path = await workspaceFilePath(id);
+  const result = await dialog.showSaveDialog({ title: '下载文件', defaultPath: basename(path) });
+  if (result.canceled || !result.filePath) return null;
+  await copyFile(path, result.filePath);
+  shell.showItemInFolder(result.filePath);
+  return result.filePath;
 }
 
 export async function chooseDirectory() {

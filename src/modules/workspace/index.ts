@@ -17,6 +17,7 @@ import { resourceRefSchema, workspaceContract } from './contract';
 import { registerSearchProvider } from '../search';
 import {
   chooseDirectory,
+  downloadFile,
   downloadRemote,
   exportOfficePdfOf,
   listRemote,
@@ -169,6 +170,7 @@ export const workspaceModule = defineModule({
     remoteReferences,
     openLocal,
     openFile,
+    downloadFile,
     chooseDirectory,
     layout: loadWorkspaceLayout,
     saveLayout: ({ projectId, layout }) => saveWorkspaceLayout(projectId, layout),

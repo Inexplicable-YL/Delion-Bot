@@ -58,6 +58,7 @@ export async function fetchPublicWebPage(
   return new Promise((resolve, reject) => {
     const requestOptions: RequestOptions & { autoSelectFamily: true } = {
       agent: false,
+      method: options.method,
       autoSelectFamily: true,
       headers: {
         ...Object.fromEntries(new Headers(options.headers)),
@@ -75,7 +76,8 @@ export async function fetchPublicWebPage(
       for (const [key, value] of Object.entries(incoming.headers))
         if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
       const status = incoming.statusCode ?? 500;
-      const noBody = status === 204 || status === 205 || status === 304;
+      const noBody =
+        options.method === 'HEAD' || status === 204 || status === 205 || status === 304;
       if (noBody) incoming.resume();
       resolve(
         new Response(

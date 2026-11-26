@@ -212,6 +212,7 @@ export const workspaceContract = defineContract(
     remoteReferences: { input: projectId, output: z.custom<{ key: string; title: string }[]>() },
     openLocal: { input: entryId, output: z.void() },
     openFile: { input: entryId, output: z.void() },
+    downloadFile: { input: entryId, output: z.custom<string | null>() },
     chooseDirectory: { input: z.undefined(), output: z.string() },
     layout: { input: z.uuid().nullable(), output: z.custom<WorkbenchLayout | null>() },
     saveLayout: {

@@ -241,6 +241,63 @@ export async function readScopedReference(
   return result;
 }
 
+export type CommandInspection = Pick<
+  ScopedFileOperation,
+  'pattern' | 'glob' | 'maxDepth' | 'filesOnly' | 'skipHidden'
+> & { action: 'read' | 'ls' | 'find' | 'grep' };
+
+export function inspectCommandPath(
+  directories: ScopedDirectory[],
+  input: string,
+  request: CommandInspection,
+  signal: AbortSignal,
+): Promise<ScopedFileResponse> {
+  if (
+    !directories[0]?.remote &&
+    absoluteLocalPath(input) &&
+    (request.action === 'read' || request.action === 'ls')
+  )
+    return externalRead(input, request.action, MAX_IMAGE_BYTES, signal);
+  const { root, key } = targetPath(input, directories);
+  return runFileAction(root, { ...request, path: key, limit: MAX_IMAGE_BYTES }, signal);
+}
+
+export function commandCopyTarget(directories: ScopedDirectory[], destination: string) {
+  try {
+    const { root, key } = targetPath(destination, directories);
+    return root.remote ? null : { root, key };
+  } catch {
+    return null;
+  }
+}
+
+export async function copyCommandFile(
+  directories: ScopedDirectory[],
+  source: string,
+  { root, key }: NonNullable<ReturnType<typeof commandCopyTarget>>,
+  signal: AbortSignal,
+) {
+  const read = await inspectCommandPath(directories, source, { action: 'read' }, signal);
+  if (read.error) return read;
+  const stat = await runFileAction(root, { action: 'stat', path: key }, signal);
+  if (stat.kind === 'directory')
+    key = posix.join(key, posix.basename(source.replaceAll('\\', '/')));
+  const original = commandCopyTarget(directories, source);
+  if (original?.root === root && original.key === key) return { error: '源文件和目标文件相同' };
+  const checked = targetPath(`${root.name}/${key}`, directories);
+  signal.throwIfAborted();
+  return runFileAction(
+    root,
+    {
+      action: 'write',
+      path: checked.key,
+      data: read.data ?? '',
+      writable: true,
+    },
+    signal,
+  );
+}
+
 const textResult = (text: string, isError = false) => ({
   content: [{ type: 'text' as const, text }],
   details: undefined,

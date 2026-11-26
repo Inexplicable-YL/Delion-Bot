@@ -247,7 +247,7 @@ const ghEnvironment = {
   GH_FORCE_TTY: '',
 };
 
-function vcsReadCommand(tokens: string[], shell: 'bash' | 'cmd', root: ScopedDirectory) {
+export function vcsReadCommand(tokens: string[], shell: 'bash' | 'cmd', root: ScopedDirectory) {
   const [name, ...args] = tokens;
   if (name === 'git' || (shell === 'cmd' && /^git(?:\.exe)?$/i.test(name!))) {
     const read = gitRead(args, root);

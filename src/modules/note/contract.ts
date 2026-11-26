@@ -7,6 +7,7 @@ export const noteContract = defineContract('note', {
   exportDocument: {
     input: z.discriminatedUnion('format', [
       z.object({ format: z.literal('pdf'), title, html: z.string().max(200_000_000) }),
+      z.object({ format: z.literal('md'), title, text: z.string().max(200_000_000) }),
       z.object({
         format: z.literal('docx'),
         title,

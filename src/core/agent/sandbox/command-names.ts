@@ -20,6 +20,27 @@ const launchers = new Set([
   'pwsh',
 ]);
 const deletions = new Set(['rm', 'rmdir', 'unlink', 'shred', 'del', 'erase', 'rd']);
+const targetSensitive = new Set([
+  'cp',
+  'copy',
+  'xcopy',
+  'robocopy',
+  'mv',
+  'move',
+  'ren',
+  'rename',
+  'ln',
+  'mklink',
+  'chmod',
+  'chown',
+  'curl',
+  'wget',
+  'rsync',
+  'scp',
+  'sftp',
+  'tee',
+]);
+const scripts = new Set(['npm', 'pnpm', 'yarn', 'bun']);
 const subcommandPrograms = new Set([
   'git',
   'npm',
@@ -140,7 +161,7 @@ interface Word {
   special: boolean;
 }
 
-function commandWords(command: string, shell: Shell, andOnly = false): Word[][] | null {
+function commandWords(command: string, shell: Shell, operators?: ('&&' | '|')[]): Word[][] | null {
   if (substitution.test(command)) return null;
   const { quotes, escape, expansion, unquotedSpecial } = shells[shell];
   const segments: Word[][] = [[]];
@@ -169,7 +190,7 @@ function commandWords(command: string, shell: Shell, andOnly = false): Word[][] 
     } else if (quote) {
       if (char === quote) quote = null;
       else {
-        special ||= quote === '"' && char === expansion && !(andOnly && shell === 'cmd');
+        special ||= quote === '"' && char === expansion && !(operators && shell === 'cmd');
         word += char;
       }
     } else if (char === escape) {
@@ -180,15 +201,23 @@ function commandWords(command: string, shell: Shell, andOnly = false): Word[][] 
     } else if (shell === 'bash' && char === '#' && !word && !literal) {
       return null;
     } else if (separators.has(char) && !(char === '&' && (before === '>' || before === '<'))) {
-      if (andOnly && (char !== '&' || command[++i] !== '&')) return null;
+      if (operators) {
+        if (char === '&' && command[i + 1] === '&') {
+          operators.push('&&');
+          i++;
+        } else if (char === '|') operators.push('|');
+        else return null;
+      }
       finishWord();
       segments.push([]);
     } else if (/\s/.test(char)) {
       finishWord();
     } else {
       special ||=
-        (unquotedSpecial.test(char) && !(andOnly && shell === 'cmd' && char === '%')) ||
-        (shell === 'bash' && /[*?[]/.test(char) && (!word.includes('/') || /\/\.$/.test(word)));
+        (unquotedSpecial.test(char) && !(operators && shell === 'cmd' && char === '%')) ||
+        (shell === 'bash' &&
+          /[*?[]/.test(char) &&
+          (operators !== undefined || !word.includes('/') || /\/\.$/.test(word)));
       word += char;
     }
   }
@@ -200,7 +229,7 @@ function commandWords(command: string, shell: Shell, andOnly = false): Word[][] 
 export function commandNames(command: string, shell: Shell): string[] | null {
   const segments = commandWords(command, shell);
   if (!segments) return null;
-  const { skipped, compound } = shells[shell];
+  const { skipped, compound, discardedOutput } = shells[shell];
   const name = ({ text }: Word) => (shell === 'cmd' ? text.toLowerCase() : text);
   const names = new Set<string>();
   for (const words of segments) {
@@ -210,13 +239,23 @@ export function commandNames(command: string, shell: Shell): string[] | null {
     );
     if (start === -1) continue;
     const program = words[start]!;
-    const current = name(program).replace(/^(git|gh)\.exe$/, '$1');
+    const executable = name(program);
+    const base = executable
+      .split(/[\\/]/)
+      .at(-1)!
+      .replace(/\.(?:exe|cmd|bat)$/i, '');
+    const current = subcommandPrograms.has(base) && !/[\\/]/.test(executable) ? base : executable;
     if (
       !current ||
       (program.plain && compound.test(current)) ||
       /[$%<>(){}!]/.test(current) ||
-      launchers.has(current) ||
-      deletions.has(current)
+      launchers.has(base) ||
+      deletions.has(base) ||
+      targetSensitive.has(base)
+    )
+      return null;
+    if (
+      words.some(({ text, special }) => special && /[<>]/.test(text) && !discardedOutput.test(text))
     )
       return null;
     if (!subcommandPrograms.has(current)) {
@@ -226,6 +265,12 @@ export function commandNames(command: string, shell: Shell): string[] | null {
     const subcommand = words[start + 1];
     if (!subcommand?.plain || !/^[a-z][\w:-]*$/i.test(subcommand.text)) return null;
     const sub = name(subcommand);
+    if (scripts.has(current) && (sub === 'run' || sub === 'run-script')) {
+      const script = words[start + 2];
+      if (!script?.plain || !/^[a-z0-9][\w:.-]*$/i.test(script.text)) return null;
+      names.add(`${current} run ${script.text}`);
+      continue;
+    }
     if (
       current === 'git' &&
       ([
@@ -309,8 +354,24 @@ export function readOnlyCommand(
 }
 
 export function literalCommands(command: string, shell: Shell): string[][] | null {
+  const plan = literalPipelines(command, shell);
+  return plan?.every((pipeline) => pipeline.length === 1) ? plan.map(([tokens]) => tokens!) : null;
+}
+
+export function literalPipelines(command: string, shell: Shell): string[][][] | null {
   if (/[\r\n]/.test(command) || (shell === 'cmd' && /[!^]/.test(command))) return null;
-  const segments = commandWords(command, shell, true);
-  if (segments?.some((words) => !words.length || words.some(({ special }) => special))) return null;
-  return segments?.map((words) => words.map(({ text }) => text)) ?? null;
+  const operators: ('&&' | '|')[] = [];
+  const segments = commandWords(command, shell, operators);
+  if (
+    !segments ||
+    segments.length > 12 ||
+    segments.some((words) => !words.length || words.some(({ special }) => special))
+  )
+    return null;
+  const pipelines: string[][][] = [[]];
+  for (const [index, words] of segments.entries()) {
+    if (operators[index - 1] === '&&') pipelines.push([]);
+    pipelines.at(-1)!.push(words.map(({ text }) => text));
+  }
+  return pipelines;
 }
