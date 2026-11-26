@@ -4,7 +4,7 @@ import { Button } from '../../../ui/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../../ui/Popover';
 import { menuItem } from '../../../ui/menu-styles';
 import { ConnectorAppIcon, useConnectorCatalog } from '../../connectors/view';
-import { composioToolPrefix } from './connector-steps';
+import { isConnectorTool } from './connector-steps';
 import { replySources, type ReplySource } from './reply-sources';
 
 function SourceIcon({ source }: { source: ReplySource }) {
@@ -37,7 +37,7 @@ function SourceRow({ source }: { source: ReplySource }) {
 }
 
 export function ReplySources({ steps }: { steps: readonly AgentToolResult[] }) {
-  const hasConnectors = steps.some(({ name }) => name.startsWith(composioToolPrefix));
+  const hasConnectors = steps.some(({ name }) => isConnectorTool(name));
   const catalog = useConnectorCatalog(hasConnectors).data ?? [];
   const sources = replySources(steps, catalog);
   if (!sources.length) return null;

@@ -31,11 +31,11 @@ const echoConfig = {
 const storedConfigs = () =>
   JSON.parse(hostPorts().secrets.read('mcp-servers')!) as Record<string, unknown>[];
 
-async function until(assertion: () => void, timeoutMs = 5000) {
+async function until(assertion: () => void | Promise<void>, timeoutMs = 5000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
-      assertion();
+      await assertion();
       return;
     } catch (error) {
       if (Date.now() > deadline) throw error;
@@ -54,7 +54,7 @@ afterAll(() => {
 });
 
 beforeEach(async () => {
-  for (const view of listMcpServers()) await removeMcpServer(view.id);
+  for (const view of await listMcpServers()) await removeMcpServer(view.id);
 });
 
 describe('MCP 连接与工具发现', () => {
@@ -95,8 +95,8 @@ describe('MCP 连接与工具发现', () => {
   it('服务器进程退出：断连标 error、工具集清空，refresh 恢复', async () => {
     const [view] = await addMcpServer(echoConfig);
     await expect(executeMcpTool('mcp_echo_srv_die', {})).resolves.toMatchObject({ ok: true });
-    await until(() => {
-      const current = listMcpServers().find((item) => item.id === view!.id)!;
+    await until(async () => {
+      const current = (await listMcpServers()).find((item) => item.id === view!.id)!;
       expect(current).toMatchObject({ status: 'error', toolCount: null });
       expect(current.error).toContain('连接已断开');
     });

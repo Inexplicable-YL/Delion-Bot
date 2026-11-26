@@ -341,7 +341,12 @@ export function ChatComposer({
   const searchSelectedId = searchQuery.data?.selectedId ?? null;
   const searchFailed = searchQuery.isError;
   const showAgentActions = hero && configured && !modelUnavailable && !hideAgentActions;
-  const { configured: connectorsConfigured, accounts } = useConnectorAccounts();
+  const {
+    status: connectorStatus,
+    provider: connectorProvider,
+    configured: connectorsConfigured,
+    accounts,
+  } = useConnectorAccounts();
   const [connectorOrder] = useState(() =>
     connectorActions
       .map((action) => ({ action, order: Math.random() }))
@@ -349,18 +354,15 @@ export function ChatComposer({
       .map(({ action }) => action),
   );
   const connectedApps = new Set(
-    (connectorsConfigured.data ? accounts.data : undefined)
+    (connectorsConfigured ? accounts.data : undefined)
       ?.filter(({ status }) => status === 'ACTIVE')
       .map(({ toolkit }) => toolkit.slug),
   );
-  const connectorCatalog = useConnectorCatalog(
-    connectorsConfigured.data === true && connectedApps.size > 0,
-  );
+  const connectorCatalog = useConnectorCatalog(connectorsConfigured && connectedApps.size > 0);
   const availableConnectors = connectorCatalog.data?.filter(({ slug }) => connectedApps.has(slug));
-  const connectorsFailed =
-    connectorsConfigured.isError || accounts.isError || connectorCatalog.isError;
+  const connectorsFailed = connectorStatus.isError || accounts.isError || connectorCatalog.isError;
   const connectorsLoading =
-    connectorsConfigured.isFetching || accounts.isFetching || connectorCatalog.isFetching;
+    connectorStatus.isFetching || accounts.isFetching || connectorCatalog.isFetching;
   const { data: capabilities } = useQuery({
     queryKey: ['capabilities', 'builtin'],
     queryFn: () => capabilitiesClient.listBuiltinCapabilities(),
@@ -519,7 +521,8 @@ export function ChatComposer({
   const insertConnector = (app: ConnectorApp) => {
     const caret = editorRef.current?.selectionStart() ?? value.length;
     const prefix = caret > 0 && !/\s/.test(value[caret - 1]!) ? ' ' : '';
-    editorRef.current?.insertAt(caret, `${prefix}${connectorPrompt(app)} `);
+    if (!connectorProvider) return;
+    editorRef.current?.insertAt(caret, `${prefix}${connectorPrompt(app, connectorProvider)} `);
     editorRef.current?.focus();
   };
 

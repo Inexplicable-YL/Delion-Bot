@@ -25,3 +25,9 @@ it('输入缺字段或应用未知时回退为通用连接器文案', () => {
   const step = connectorStep('mcp_Composio_COMPOSIO_MULTI_EXECUTE_TOOL', null, [...catalog]);
   expect(step).toMatchObject({ done: '使用连接器', target: '', apps: [] });
 });
+
+it('Pipedream 工具按服务器前缀识别应用，动作取自工具名', () => {
+  const step = connectorStep('mcp_Pipedream_one_drive_list-files', {}, [...catalog]);
+  expect(step).toMatchObject({ done: '使用 OneDrive', target: 'list files' });
+  expect(step.apps.map((app) => app.slug)).toEqual(['one_drive']);
+});

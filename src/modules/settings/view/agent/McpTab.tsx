@@ -8,7 +8,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { McpServerView } from '../../../../core/protocol/capabilities';
 import { Button } from '../../../../ui/Button';
-import { CollapseChevron } from '../../../../ui/Collapse';
+import { CollapsibleSection } from '../../../../ui/Collapse';
 import { Switch } from '../../../../ui/Switch';
 import { cn } from '../../../../ui/cn';
 import { showToast } from '../../../../ui/Toast';
@@ -83,26 +83,7 @@ export function McpTab() {
   };
 
   return (
-    <details
-      open={open}
-      onToggle={(event) => {
-        if (expanded && event.currentTarget.open) {
-          event.currentTarget.scrollIntoView({ block: 'nearest' });
-        }
-      }}
-    >
-      <summary
-        className="cursor-pointer list-none rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink"
-        onClick={(event) => {
-          event.preventDefault();
-          setExpanded(!open);
-        }}
-      >
-        <h2 className="flex items-center gap-2 text-ui-title-3 text-ink">
-          <CollapseChevron className="text-ink-2" open={open} />
-          自定义连接器
-        </h2>
-      </summary>
+    <CollapsibleSection onOpenChange={setExpanded} open={open} title="自定义连接器">
       <div className="grid gap-6 pt-6">
         {window.delionBot ? (
           <Button
@@ -207,6 +188,6 @@ export function McpTab() {
           <McpFormDialog editing={dialog} onClose={() => setDialog(null)} onSaved={setServers} />
         )}
       </div>
-    </details>
+    </CollapsibleSection>
   );
 }
