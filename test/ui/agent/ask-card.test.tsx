@@ -59,9 +59,12 @@ it('“其他”只在填写内容后选中，并随答案发出', async () => {
   const onSubmit = vi.fn(async () => {});
   await render(onSubmit);
 
-  const other = host.querySelector<HTMLInputElement>('input[aria-label="其他回答"]')!;
+  const other = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="其他回答"]')!;
   const type = (value: string) => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(other, value);
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+      other,
+      value,
+    );
     other.dispatchEvent(new Event('input', { bubbles: true }));
   };
   await act(async () => other.focus());

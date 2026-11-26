@@ -13,7 +13,7 @@ export const askUserTool: ToolDefinition = {
   name: 'ask_user',
   label: 'ask_user',
   description:
-    'Ask the user one or more multiple-choice questions. The app shows the questions in place of the message input and ends your turn. The user answers in the next message. Call it alone as your last action. Use the reply language. Give each question 2 to 4 concise options. Options are mutually exclusive unless multiple is true. A description appears only on hover, so make each label understandable on its own. The app adds a free-text Other option, so omit it. A skipped question means you should use your judgment.',
+    'Ask the user one or more multiple-choice questions. The app shows the questions in place of the message input and ends your turn. The user answers in the next message. Call it alone as your last action. Use the reply language. Give each question 2 to 4 options. Options are mutually exclusive unless multiple is true. Each option has a concise label. A description is optional and appears under the label as one sentence on what the choice means or what follows from it. Within one question, give a description for every option or for none. The app adds a free-text Other option, so omit it. A skipped question means you should use your judgment.',
   parameters: {
     type: 'object',
     properties: {
@@ -41,9 +41,21 @@ export const askUserTool: ToolDefinition = {
     },
     required: ['questions'],
   } as unknown as ToolDefinition['parameters'],
-  execute: async () => ({
-    content: [{ type: 'text', text: 'The questions are shown to the user. Wait for the reply.' }],
-    details: undefined,
-    terminate: true,
-  }),
+  execute: async (
+    _id,
+    { questions }: { questions: { question: string; options: { description?: string }[] }[] },
+  ) => {
+    const mixed = questions.find(
+      ({ options }) => new Set(options.map(({ description }) => !!description?.trim())).size > 1,
+    );
+    if (mixed)
+      throw new Error(
+        `In "${mixed.question}", some options have a description and some do not. Give a description for every option or for none, then call ask_user again.`,
+      );
+    return {
+      content: [{ type: 'text', text: 'The questions are shown to the user. Wait for the reply.' }],
+      details: undefined,
+      terminate: true,
+    };
+  },
 };

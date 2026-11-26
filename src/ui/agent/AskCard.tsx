@@ -4,7 +4,6 @@ import { useId, useRef, useState } from 'react';
 import { Button } from '../Button';
 import { Card } from '../Card';
 import { cn } from '../cn';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 
 export type AskCardOption = { label: string; description?: string };
 export type AskCardGroup = { question: string; options: AskCardOption[]; multiple?: boolean };
@@ -49,12 +48,13 @@ function OptionRow({
   disabled: boolean;
   onSelect: () => void;
 }) {
-  const row = (
+  return (
     <button
       aria-checked={checked}
       autoFocus={autoFocus}
       className={cn(
         rowClass,
+        option.description && 'items-start',
         'enabled:hover:bg-hover enabled:aria-checked:bg-selected disabled:cursor-default',
       )}
       disabled={disabled}
@@ -63,19 +63,13 @@ function OptionRow({
       type="button"
     >
       <OptionLetter checked={checked} index={index} />
-      <span className="min-w-0 flex-1 truncate text-ui-body text-ink">{option.label}</span>
+      <span className="grid min-w-0 flex-1">
+        <span className="truncate text-ui-body text-ink">{option.label}</span>
+        {option.description && (
+          <span className="text-ui-callout text-ink-2">{option.description}</span>
+        )}
+      </span>
     </button>
-  );
-  if (!option.description) return row;
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="flex min-w-0">{row}</span>
-      </TooltipTrigger>
-      <TooltipContent align="start" side="top">
-        {option.description}
-      </TooltipContent>
-    </Tooltip>
   );
 }
 
@@ -92,27 +86,38 @@ function OtherRow({
   value: string;
   onChange: (value: string) => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   return (
     <div
       aria-checked={checked}
-      className={cn(rowClass, !disabled && 'cursor-text hover:bg-hover aria-checked:bg-selected')}
+      className={cn(
+        rowClass,
+        'items-start',
+        !disabled && 'cursor-text hover:bg-hover aria-checked:bg-selected',
+      )}
       onClick={() => input.current?.focus()}
     >
       <OptionLetter checked={checked} index={index} />
       {disabled ? (
         <span
-          className={cn('min-w-0 flex-1 truncate text-ui-body', value ? 'text-ink' : 'text-ink-2')}
+          className={cn(
+            'min-w-0 flex-1 py-0.5 break-words text-ui-body',
+            value ? 'text-ink' : 'text-ink-2',
+          )}
         >
           {value || '其他'}
         </span>
       ) : (
-        <input
+        <textarea
           aria-label="其他回答"
-          className="min-w-0 flex-1 bg-transparent text-ui-body text-ink outline-none placeholder:text-ink-2"
-          onChange={(event) => onChange(event.target.value)}
+          className="min-w-0 flex-1 resize-none bg-transparent py-0.5 text-ui-body text-ink outline-none [field-sizing:content] placeholder:text-ink-2"
+          onChange={(event) => onChange(event.target.value.replace(/\n/g, ' '))}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !event.nativeEvent.isComposing) event.preventDefault();
+          }}
           placeholder="其他"
           ref={input}
+          rows={1}
           value={value}
         />
       )}
