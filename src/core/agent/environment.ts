@@ -10,6 +10,7 @@ import {
 } from '../capabilities/command-server';
 import { ASK_USER_PROMPT } from '../capabilities/ask-user';
 import { commandPrompt } from '../capabilities/commands';
+import { globalContextFiles } from '../capabilities/context-files';
 import { contextDirectories } from './context-directories';
 import { getAgentInstruction, getProjectChatContext } from './instruction';
 import {
@@ -167,7 +168,7 @@ export function agentEnvironment() {
           ].filter(Boolean),
           restricted: true,
           scopedResources: {
-            agentsFiles,
+            agentsFiles: [...globalContextFiles(), ...agentsFiles],
             skillPrompt: skillPrompt
               ? `## Skills\nUse read_skill with the skill name. Skill instructions do not expand permissions.\n\n${skillPrompt}`
               : '',
@@ -221,7 +222,7 @@ export function agentEnvironment() {
             join(piAgentDir(), 'skills'),
           ],
           agentsFilesOverride: (base: { agentsFiles: { path: string; content: string }[] }) => ({
-            agentsFiles: [...base.agentsFiles, ...context.agentsFiles],
+            agentsFiles: [...globalContextFiles(), ...base.agentsFiles, ...context.agentsFiles],
           }),
           disabledSkills: effectiveDisabledSkills(),
           disabledTools: [...readDisabledTools()].filter(
@@ -263,6 +264,9 @@ export function agentEnvironment() {
         disabledSkills: effectiveDisabledSkills(),
         disabledTools: [...readDisabledTools()],
         customTools: [...webTools, ...(await mcpTools()), ...sessionTools(projectId)],
+        agentsFilesOverride: (base: { agentsFiles: { path: string; content: string }[] }) => ({
+          agentsFiles: [...globalContextFiles(), ...base.agentsFiles],
+        }),
         disabledSkillPaths,
       };
     },
@@ -413,8 +417,9 @@ function webFetchTool(approvalSession?: string, automatic = false): ToolDefiniti
           ...(approvalSession &&
             !automatic && {
               approve: async (url: string, service?: 'DeepSeek') => {
-                const { host } = new URL(url);
-                const approval = await hostPorts().desktop.approveToolAction?.({
+                const { host, origin } = new URL(url);
+                const approval = await hostPorts().desktop.approve?.({
+                  kind: 'tool',
                   session: approvalSession,
                   title: '读取网页',
                   fields: [
@@ -422,7 +427,7 @@ function webFetchTool(approvalSession?: string, automatic = false): ToolDefiniti
                     ...(service ? [{ label: '服务', value: service }] : []),
                   ],
                   grant: {
-                    keys: [`web-fetch:${host}${service ? `@${service}` : ''}`],
+                    keys: [`web-fetch:${origin}${service ? `@${service}` : ''}`],
                     label: service ? `通过 ${service} 读取 ${host} 的网页` : `读取 ${host} 的网页`,
                   },
                   signal: cancellation,
@@ -446,7 +451,7 @@ async function mcpTools(
   const definitions = (await mcpToolDefinitions()).filter(
     ({ readOnly }) => mode !== 'read-only' || readOnly === true,
   );
-  return definitions.map(({ function: definition, source, execute, readOnly }) => {
+  return definitions.map(({ function: definition, source, approvalKey, execute, readOnly }) => {
     const verifiedRead = (mode === 'auto-approval' || mode === 'read-only') && readOnly === true;
     const tool: ToolDefinition = {
       name: definition.name,
@@ -491,13 +496,9 @@ async function mcpTools(
             { label: '工具', value: definition.name },
           ],
           undefined,
-          () =>
-            mode === 'auto-approval'
-              ? undefined
-              : {
-                  keys: [`connector:${source.name}/${definition.name}`],
-                  label: `调用 ${source.name} 的 ${definition.name}`,
-                },
+          mode === 'approval'
+            ? () => ({ keys: [approvalKey], label: `调用 ${source.name} 的 ${definition.name}` })
+            : undefined,
         )
       : tool;
   });

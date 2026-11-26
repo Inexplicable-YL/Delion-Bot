@@ -4,14 +4,7 @@ import { hostPorts } from '../ports';
 import { helperSession } from './helper';
 import { remoteBackend, setContextMirrors, writeRemoteFile } from './operations';
 import { shellQuote, type RemoteTarget } from './transport';
-
-const CONTEXT_FILE_NAMES = [
-  'AGENTS.override.md',
-  'AGENTS.md',
-  'AGENTS.MD',
-  'CLAUDE.md',
-  'CLAUDE.MD',
-];
+import { CONTEXT_FILE_NAMES } from '../capabilities/context-files';
 
 const REPO_SKILL_DIR = '.agents/skills';
 const HOME_SKILL_DIR = '.delion-bot/skills';

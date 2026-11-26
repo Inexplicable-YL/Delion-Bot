@@ -85,7 +85,7 @@ export function permissionPrompt(
           ' for listing a directory, reading a file, or searching names and contents. Pass a directory separately from the glob or search pattern.'
         : '',
       root === '/project' && tools.has('read')
-        ? '- Before working in a project subdirectory, check for AGENTS.md along its path below /project. Apply each file to its directory and descendants.'
+        ? '- Before working in a project subdirectory, check each directory along its path below /project for AGENTS.override.md, AGENTS.md, or CLAUDE.md and use the first one found. Apply each file to its directory and descendants.'
         : '',
       tools.has('read') && (hasCommand || tools.has('delion'))
         ? '- Pass full_output_path to read to open a saved tool result. If output_truncated is true, the available output is incomplete.'
@@ -107,12 +107,12 @@ export function permissionPrompt(
           : '- Local creation and edits inside the listed roots can run directly. Deleting a file or modifying an existing file outside those roots requires approval. Creating an external file or directory requires permission for its exact parent and does not overwrite an existing target.'
         : '',
       mode === 'approval' && fileWriters.length
-        ? '- Give write and edit a target inside a listed root. The app will ask for approval when the operation needs it.'
+        ? '- File writes, edits, directory creation, and file deletion require approval. Local sessions may also use absolute paths for ordinary external targets.'
         : '',
       workspace && tools.has('download_file')
         ? '- Use download_file for the original binary from a public HTTPS URL, up to 5 MiB. Give a file path under ' +
           workspace +
-          (chat && mode === 'auto-approval' ? ' or /privacy' : '') +
+          (chat ? ' or /privacy' : '') +
           '. For a redirect, make a new call with the returned URL and the same intended destination.' +
           (mode === 'approval' || remote ? ' The download requires approval.' : '')
         : '',
