@@ -1,6 +1,11 @@
 import type { ConnectorApp } from '../../connectors/view';
 
 export const composioToolPrefix = 'mcp_Composio_';
+export const pipedreamToolPrefix = 'mcp_Pipedream_';
+
+export function isConnectorTool(name: string) {
+  return name.startsWith(composioToolPrefix) || name.startsWith(pipedreamToolPrefix);
+}
 
 export type ConnectorStep = {
   doing: string;
@@ -37,7 +42,7 @@ function appsOf(slugs: string[], catalog: readonly ConnectorApp[]) {
 }
 
 function readable(slug: string) {
-  return slug.toLowerCase().replaceAll('_', ' ').trim();
+  return slug.toLowerCase().replaceAll(/[_-]/g, ' ').trim();
 }
 
 function actionOf(slug: string, catalog: readonly ConnectorApp[]) {
@@ -50,6 +55,17 @@ export function connectorStep(
   input: unknown,
   catalog: readonly ConnectorApp[],
 ): ConnectorStep {
+  if (name.startsWith(pipedreamToolPrefix)) {
+    const tool = name.slice(pipedreamToolPrefix.length);
+    const app = connectorAppOf(tool, catalog);
+    const label = app ? ` ${app.name}` : '连接器';
+    return {
+      doing: `正在使用${label}`,
+      done: `使用${label}`,
+      target: actionOf(tool, catalog),
+      apps: app ? [app] : [],
+    };
+  }
   const tool = name.slice(composioToolPrefix.length);
   switch (tool) {
     case 'COMPOSIO_SEARCH_TOOLS': {

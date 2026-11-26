@@ -19,7 +19,7 @@ import { Reasoning, useReasoningSnippet } from '../../../ui/agent/Reasoning';
 import { ToolGroup, ToolStep, type ToolStepStatus } from '../../../ui/agent/Tool';
 import { Trace } from '../../../ui/agent/Trace';
 import { useConnectorCatalog, type ConnectorApp } from '../../connectors/view';
-import { composioToolPrefix, connectorStep } from './connector-steps';
+import { connectorStep, isConnectorTool } from './connector-steps';
 import { ChatMarkdown } from './Markdown';
 import { ToolBody } from './ToolViews';
 
@@ -41,8 +41,7 @@ const verbs: Record<string, { doing: string; done: string; noun: string }> = {
 };
 
 function verbOf(name: string) {
-  if (name.startsWith(composioToolPrefix))
-    return { doing: '正在使用连接器', done: '使用连接器', noun: '次' };
+  if (isConnectorTool(name)) return { doing: '正在使用连接器', done: '使用连接器', noun: '次' };
   return verbs[name] ?? { doing: `正在调用 ${name}`, done: `调用 ${name}`, noun: '次' };
 }
 
@@ -114,7 +113,7 @@ function editStat(result: AgentToolResult): { added: number; deleted: number } |
 }
 
 function describeStep(result: AgentToolResult, catalog: readonly ConnectorApp[]) {
-  const step = result.name.startsWith(composioToolPrefix)
+  const step = isConnectorTool(result.name)
     ? connectorStep(result.name, result.input, catalog)
     : undefined;
   return {
@@ -134,7 +133,7 @@ function ChatToolStep({ result, live }: { result: AgentToolResult; live: boolean
         : !live && result.finishedAt === undefined
           ? 'interrupted'
           : 'done';
-  const catalog = useConnectorCatalog(result.name.startsWith(composioToolPrefix)).data ?? [];
+  const catalog = useConnectorCatalog(isConnectorTool(result.name)).data ?? [];
   const { step, verb, target } = describeStep(result, catalog);
   const subagentTool =
     status === 'running' && result.name === 'task'
@@ -217,7 +216,7 @@ function ChatToolGroup({ results, live }: { results: AgentToolResult[]; live: bo
 }
 
 function CurrentStepLabel({ result }: { result: AgentToolResult }) {
-  const catalog = useConnectorCatalog(result.name.startsWith(composioToolPrefix)).data ?? [];
+  const catalog = useConnectorCatalog(isConnectorTool(result.name)).data ?? [];
   const { verb, target } = describeStep(result, catalog);
   return <>{`${result.finishedAt === undefined ? verb.doing : verb.done} ${target.short}`}</>;
 }

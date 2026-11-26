@@ -142,16 +142,15 @@ function connectError(sdk: McpSdk, error: unknown): string {
   return errorMessage(error);
 }
 
-let managedConfig: () => McpServerConfig | null = () => null;
+let managedConfigs: () => Promise<McpServerConfig[]> = async () => [];
 
-export function provideManagedMcp(config: () => McpServerConfig | null): void {
-  managedConfig = config;
+export function provideManagedMcp(configs: () => Promise<McpServerConfig[]>): void {
+  managedConfigs = configs;
 }
 
-function syncFromConfigs(): string | undefined {
-  const configs = readMcpConfigs();
-  const managed = managedConfig();
-  if (managed) configs.push(managed);
+async function syncFromConfigs(): Promise<Set<string>> {
+  const managed = await managedConfigs();
+  const configs = [...readMcpConfigs(), ...managed];
   for (const [id, entry] of servers)
     if (!configs.some((config) => config.id === id)) {
       void closeConnection(entry);
@@ -171,7 +170,7 @@ function syncFromConfigs(): string | undefined {
         connecting: null,
       });
   }
-  return managed?.id;
+  return new Set(managed.map((config) => config.id));
 }
 
 function dropAdoptedTools(entry: ManagedServer): void {
@@ -300,13 +299,15 @@ function findServer(id: string): ManagedServer {
 }
 
 export async function mcpToolDefinitions(): Promise<DynamicToolDefinition[]> {
-  let managedId: string | undefined;
+  let managedIds: Set<string>;
   try {
-    managedId = syncFromConfigs();
-    if (managedId) {
-      const entry = findServer(managedId);
-      if (entry.status !== 'connected') await connectServer(entry);
-    }
+    managedIds = await syncFromConfigs();
+    await Promise.all(
+      [...managedIds]
+        .map(findServer)
+        .filter((entry) => entry.status !== 'connected')
+        .map(connectServer),
+    );
   } catch {
     return [];
   }
@@ -318,7 +319,7 @@ export async function mcpToolDefinitions(): Promise<DynamicToolDefinition[]> {
     if (!entry.config.enabled || entry.status !== 'connected') continue;
     for (const { namespaced, tool } of entry.tools) {
       const config = entry.config;
-      const readOnly = config.id === managedId && declaredReadOnly(tool);
+      const readOnly = managedIds.has(config.id) && declaredReadOnly(tool);
       definitions.push({
         type: 'function',
         function: {
@@ -375,9 +376,9 @@ export async function executeMcpTool(
     }
   | { ok: false; error: { code: string; message: string } }
 > {
-  let managedId: string | undefined;
+  let managedIds: Set<string>;
   try {
-    managedId = syncFromConfigs();
+    managedIds = await syncFromConfigs();
   } catch (error) {
     return { ok: false, error: { code: 'NOT_CONFIGURED', message: errorMessage(error) } };
   }
@@ -421,7 +422,10 @@ export async function executeMcpTool(
     };
   if (
     expectedReadOnlyTool &&
-    (tool !== expectedReadOnlyTool || ownerId !== managedId || !declaredReadOnly(tool))
+    (tool !== expectedReadOnlyTool ||
+      !ownerId ||
+      !managedIds.has(ownerId) ||
+      !declaredReadOnly(tool))
   )
     return {
       ok: false,
@@ -472,10 +476,10 @@ export async function executeMcpTool(
   }
 }
 
-export function listMcpServers(): McpServerView[] {
-  const managedId = syncFromConfigs();
+export async function listMcpServers(): Promise<McpServerView[]> {
+  const managedIds = await syncFromConfigs();
   return [...servers.values()]
-    .filter((entry) => entry.config.id !== managedId)
+    .filter((entry) => !managedIds.has(entry.config.id))
     .map(serverView)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -486,7 +490,7 @@ export async function addMcpServer(input: McpServerInput): Promise<McpServerView
   if (configs.some((existing) => existing.name === config.name))
     throw new Error(`已有同名服务器：${config.name}`);
   saveMcpServers([...configs, mcpConfigSchema.parse(config)]);
-  syncFromConfigs();
+  await syncFromConfigs();
   await connectServer(findServer(config.id));
   return listMcpServers();
 }
@@ -503,7 +507,7 @@ export async function updateMcpServer(id: string, patch: McpServerPatch): Promis
     JSON.stringify({ ...next, enabled: previous.enabled }) !== JSON.stringify(previous);
   configs[index] = next;
   saveMcpServers(configs);
-  syncFromConfigs();
+  await syncFromConfigs();
   const entry = findServer(id);
   if (!entry.config.enabled) {
     await closeConnection(entry);
@@ -517,12 +521,12 @@ export async function removeMcpServer(id: string): Promise<McpServerView[]> {
   const configs = readMcpConfigs();
   if (!configs.some((config) => config.id === id)) throw new Error('MCP 服务器不存在');
   saveMcpServers(configs.filter((config) => config.id !== id));
-  syncFromConfigs();
+  await syncFromConfigs();
   return listMcpServers();
 }
 
 export async function refreshMcpServer(id: string): Promise<McpServerView[]> {
-  syncFromConfigs();
+  await syncFromConfigs();
   const entry = findServer(id);
   if (!entry.config.enabled) return listMcpServers();
   await connectServer(entry);

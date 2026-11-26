@@ -211,13 +211,16 @@ it('新对话只建议可用的 Agent 操作，点击时将任务写入聊天草
   queryClient.setQueryData(['capabilities', 'skills'], []);
   queryClient.setQueryData(webSearchKey, { entries, selectedId: null });
   queryClient.setQueryDefaults(['connectors'], { staleTime: Infinity });
-  queryClient.setQueryData(['connectors', 'configured'], true);
+  queryClient.setQueryData(['connectors', 'status'], {
+    active: 'pipedream',
+    configured: { composio: false, pipedream: true },
+  });
   queryClient.setQueryData(
-    ['connectors', 'catalog'],
+    ['connectors', 'pipedream', 'catalog'],
     [{ slug: 'gmail', name: 'Gmail', logo: 'https://example.test/gmail.png' }],
   );
   queryClient.setQueryData(
-    ['connectors', 'accounts'],
+    ['connectors', 'pipedream', 'accounts'],
     [
       { id: 'gmail', status: 'ACTIVE', toolkit: { slug: 'gmail' } },
       { id: 'calendar', status: 'INITIATED', toolkit: { slug: 'googlecalendar' } },
@@ -241,7 +244,7 @@ it('新对话只建议可用的 Agent 操作，点击时将任务写入聊天草
 
   await act(async () =>
     queryClient.setQueryData(
-      ['connectors', 'accounts'],
+      ['connectors', 'pipedream', 'accounts'],
       ['gmail', 'googlecalendar', 'slack', 'notion'].map((slug) => ({
         id: slug,
         status: 'ACTIVE',

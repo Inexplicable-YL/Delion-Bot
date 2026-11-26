@@ -72,3 +72,25 @@ it('合并搜索与网页读取结果，保留连接器返回的邮件和资源�
     { title: 'Guide', domain: 'docs.example.com', url: 'https://docs.example.com/guide' },
   ]);
 });
+
+it('Pipedream 工具结果带应用图标，无链接时以应用作为来源', () => {
+  const catalog = [
+    { slug: 'gmail', name: 'Gmail', logo: 'gmail.svg' },
+    { slug: 'notion', name: 'Notion', logo: 'notion.svg' },
+  ] as const;
+  const steps: AgentToolResult[] = [
+    {
+      id: '1',
+      name: 'mcp_Pipedream_notion_notion-search',
+      input: {},
+      output: {
+        text: JSON.stringify({ results: [{ title: 'Roadmap', url: 'https://notion.so/roadmap' }] }),
+      },
+    },
+    { id: '2', name: 'mcp_Pipedream_gmail_gmail-send-email', input: {}, output: { text: 'sent' } },
+  ];
+  expect(replySources(steps, [...catalog])).toEqual([
+    { title: 'Roadmap', domain: 'notion.so', url: 'https://notion.so/roadmap', logo: 'notion.svg' },
+    { title: 'Gmail', domain: 'mail.google.com', logo: 'gmail.svg' },
+  ]);
+});

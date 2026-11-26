@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { AgentToolResult } from '../../../core/protocol/agent';
 import type { ConnectorApp } from '../../connectors/view';
-import { composioToolPrefix, connectorAppOf } from './connector-steps';
+import { composioToolPrefix, connectorAppOf, pipedreamToolPrefix } from './connector-steps';
 
 export type ReplySource = { title: string; domain: string; url?: string; logo?: string };
 
@@ -108,6 +108,28 @@ export function replySources(
     } else if (name === 'web_fetch') {
       const page = webPage.safeParse(parseJson(output.text)).data;
       if (page) add(linkSource(page.source.url, page.title));
+    } else if (name.startsWith(pipedreamToolPrefix)) {
+      const app = connectorAppOf(name.slice(pipedreamToolPrefix.length), catalog);
+      const gmail = app?.slug === 'gmail';
+      const payload =
+        parseJson(output.text) ?? parseJson(output.text.slice(output.text.lastIndexOf('\n') + 1));
+      const links = [
+        ...(mcpDetails.safeParse(output.details).data?.links ?? []).flatMap(({ url, title }) =>
+          linkSource(url, title, app?.logo),
+        ),
+        ...resultSources(payload, app, gmail),
+      ];
+      add(
+        links.length
+          ? links
+          : [
+              {
+                title: app?.name ?? 'Pipedream',
+                domain: gmail ? 'mail.google.com' : 'Pipedream',
+                logo: app?.logo,
+              },
+            ],
+      );
     } else if (name.startsWith('mcp_')) {
       const metadata = mcpDetails.safeParse(output.details).data;
       const fallback = {

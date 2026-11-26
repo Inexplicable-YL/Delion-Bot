@@ -53,4 +53,46 @@ function CollapseChevron({ open, className }: { open: boolean; className?: strin
   );
 }
 
-export { Collapse, CollapseChevron };
+function CollapsibleSection({
+  action,
+  children,
+  onOpenChange,
+  open,
+  title,
+}: {
+  action?: ReactNode;
+  children: ReactNode;
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+  title: ReactNode;
+}) {
+  const [toggled, setToggled] = useState(false);
+  return (
+    <details
+      open={open}
+      onToggle={(event) => {
+        if (toggled && event.currentTarget.open) {
+          event.currentTarget.scrollIntoView({ block: 'nearest' });
+        }
+      }}
+    >
+      <summary
+        className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-control focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-ink"
+        onClick={(event) => {
+          event.preventDefault();
+          setToggled(true);
+          onOpenChange(!open);
+        }}
+      >
+        <h2 className="flex items-center gap-2 text-ui-title-3 text-ink">
+          <CollapseChevron className="text-ink-2" open={open} />
+          {title}
+        </h2>
+        {action && <span onClick={(event) => event.stopPropagation()}>{action}</span>}
+      </summary>
+      {children}
+    </details>
+  );
+}
+
+export { Collapse, CollapseChevron, CollapsibleSection };

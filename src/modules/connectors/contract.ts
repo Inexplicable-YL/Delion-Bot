@@ -58,6 +58,46 @@ export const recommendedApps: (keyof typeof featuredApps)[] = [
   'figma',
   'zoom',
 ];
+export const pipedreamApps = {
+  gmail: 'gmail',
+  outlook: 'microsoft_outlook',
+  googlecalendar: 'google_calendar',
+  googlemeet: 'google_meet',
+  zoom: 'zoom',
+  googledrive: 'google_drive',
+  googledocs: 'google_docs',
+  googlesheets: 'google_sheets',
+  notion: 'notion',
+  airtable: 'airtable_oauth',
+  dropbox: 'dropbox',
+  one_drive: 'microsoft_onedrive',
+  github: 'github',
+  gitlab: 'gitlab',
+  linear: 'linear_app',
+  jira: 'jira',
+  sentry: 'sentry',
+  vercel: 'vercel_token_auth',
+  slack: 'slack',
+  microsoft_teams: 'microsoft_teams',
+  discord: 'discord',
+  lark: 'lark',
+  trello: 'trello',
+  asana: 'asana',
+  clickup: 'clickup',
+  todoist: 'todoist',
+  figma: 'figma',
+  canva: 'canva',
+  miro: 'miro',
+  youtube: 'youtube_data_api',
+  twitter: 'twitter',
+  reddit: 'reddit',
+} satisfies Record<keyof typeof featuredApps, string>;
+export const providers = ['composio', 'pipedream'] as const;
+export const provider = z.enum(providers);
+export const providerNames = {
+  composio: 'Composio',
+  pipedream: 'Pipedream',
+} satisfies Record<(typeof providers)[number], string>;
 export const toolkit = z.enum(
   Object.keys(featuredApps) as [keyof typeof featuredApps, ...(keyof typeof featuredApps)[]],
 );
@@ -69,16 +109,36 @@ export const account = z.object({
   status: z.string(),
 });
 export const authorization = z.object({
-  connected_account_id: z.string(),
+  connected_account_id: z.string().optional(),
   redirect_url: z.url({ protocol: /^https$/ }),
 });
+const secret = z.string().trim().min(1).max(4096);
+export const credentials = z.discriminatedUnion('provider', [
+  z.object({ provider: z.literal('composio'), key: secret }),
+  z.object({
+    provider: z.literal('pipedream'),
+    clientId: secret,
+    clientSecret: secret,
+    projectId: z
+      .string()
+      .trim()
+      .regex(/^proj_[a-zA-Z0-9]+$/, '项目 ID 以 proj_ 开头。'),
+  }),
+]);
 export const connectorsContract = defineContract('connectors', {
-  configured: { input: z.undefined(), output: z.boolean() },
-  setup: { input: z.string().trim().min(1).max(4096), output: z.void() },
-  catalog: { input: z.undefined(), output: z.array(app) },
-  accounts: { input: z.undefined(), output: z.array(account) },
-  connect: { input: toolkit, output: authorization },
-  disconnect: { input: z.string().min(1), output: z.void() },
+  status: {
+    input: z.undefined(),
+    output: z.object({
+      active: provider.nullable(),
+      configured: z.record(provider, z.boolean()),
+    }),
+  },
+  activate: { input: provider.nullable(), output: z.void() },
+  setup: { input: credentials, output: z.void() },
+  catalog: { input: provider, output: z.array(app) },
+  accounts: { input: provider, output: z.array(account) },
+  connect: { input: z.object({ provider, slug: toolkit }), output: authorization },
+  disconnect: { input: z.object({ provider, id: z.string().min(1) }), output: z.void() },
 });
 declare module '../../app/module' {
   interface NavTargets {
