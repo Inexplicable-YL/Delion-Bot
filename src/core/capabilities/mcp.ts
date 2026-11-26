@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { CallToolResult, McpTransport, Tool } from '@earendil-works/pi-mcp';
 import { z } from 'zod';
 import type {
@@ -13,6 +13,7 @@ interface DynamicToolDefinition {
   type: 'function';
   function: { name: string; description: string; parameters: unknown };
   source: { name: string; domain?: string };
+  approvalKey: string;
   readOnly?: boolean;
   execute(
     input: unknown,
@@ -31,6 +32,7 @@ async function loadMcpSdk(): Promise<McpSdk> {
 }
 
 const CONNECT_TIMEOUT_MS = 10_000;
+const TOOL_TIMEOUT_MS = 120_000;
 const STDERR_TAIL_CHARS = 500;
 const CLIENT_INFO = { name: 'Delion Bot', version: '0.0.0' };
 
@@ -86,8 +88,10 @@ export const mcpServerPatchSchema = z.object({
   headers: variablesField.optional(),
 });
 
+export type ManagedMcpServerConfig = McpServerConfig & { approvalId?: string };
+
 interface ManagedServer {
-  config: McpServerConfig;
+  config: ManagedMcpServerConfig;
   client: InstanceType<McpSdk['McpClient']> | null;
   status: McpServerView['status'];
   toolCount: number | null;
@@ -142,9 +146,9 @@ function connectError(sdk: McpSdk, error: unknown): string {
   return errorMessage(error);
 }
 
-let managedConfigs: () => Promise<McpServerConfig[]> = async () => [];
+let managedConfigs: () => Promise<ManagedMcpServerConfig[]> = async () => [];
 
-export function provideManagedMcp(configs: () => Promise<McpServerConfig[]>): void {
+export function provideManagedMcp(configs: () => Promise<ManagedMcpServerConfig[]>): void {
   managedConfigs = configs;
 }
 
@@ -317,8 +321,10 @@ export async function mcpToolDefinitions(): Promise<DynamicToolDefinition[]> {
   const definitions: DynamicToolDefinition[] = [];
   for (const entry of servers.values()) {
     if (!entry.config.enabled || entry.status !== 'connected') continue;
+    const config = entry.config;
+    const approvalId =
+      config.approvalId ?? createHash('sha256').update(JSON.stringify(config)).digest('hex');
     for (const { namespaced, tool } of entry.tools) {
-      const config = entry.config;
       const readOnly = managedIds.has(config.id) && declaredReadOnly(tool);
       definitions.push({
         type: 'function',
@@ -331,6 +337,7 @@ export async function mcpToolDefinitions(): Promise<DynamicToolDefinition[]> {
           name: config.name,
           ...(config.transport === 'http' && { domain: new URL(config.url).hostname }),
         },
+        approvalKey: 'connector-tool:' + JSON.stringify([approvalId, tool.name]),
         readOnly,
         execute: (input, signal, requireReadOnly) =>
           executeMcpTool(namespaced, input, config, signal, requireReadOnly && tool),
@@ -439,7 +446,7 @@ export async function executeMcpTool(
     const result = await entry.client.callTool(
       tool.name,
       (input ?? {}) as Record<string, unknown>,
-      { signal },
+      { signal, timeoutMs: TOOL_TIMEOUT_MS },
     );
     if (result.isError) {
       const payload = toolResultPayload(sdk, result);
@@ -466,6 +473,11 @@ export async function executeMcpTool(
       ),
     };
   } catch (error) {
+    if (error instanceof sdk.McpTimeoutError)
+      return {
+        ok: false,
+        error: { code: 'TIMEOUT', message: `MCP 工具调用超时（${TOOL_TIMEOUT_MS / 1000}s）` },
+      };
     return {
       ok: false,
       error: {

@@ -13,6 +13,7 @@ import {
   listMcpServers,
   mcpServerPatchSchema,
   mcpToolDefinitions,
+  provideManagedMcp,
   refreshMcpServer,
   removeMcpServer,
   updateMcpServer,
@@ -109,6 +110,29 @@ describe('MCP 连接与工具发现', () => {
     expect(refreshed[0]).toMatchObject({ status: 'connected', toolCount: 3, error: null });
   }, 20000);
 
+  it('工具调用两分钟未响应时退出，连接仍可执行下一次调用', async () => {
+    await addMcpServer(echoConfig);
+    vi.useFakeTimers();
+    try {
+      const settled = vi.fn();
+      const pending = executeMcpTool('mcp_echo_srv_echo', { message: 'never-reply' }).then(settled);
+      await vi.advanceTimersByTimeAsync(119_999);
+      expect(settled).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await pending;
+      expect(settled).toHaveBeenCalledWith({
+        ok: false,
+        error: { code: 'TIMEOUT', message: expect.any(String) },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    await expect(executeMcpTool('mcp_echo_srv_echo', { message: 'next' })).resolves.toMatchObject({
+      ok: true,
+      result: { text: 'echo:next' },
+    });
+  }, 20000);
+
   it('归一化同名冲突：路由按登记执行', async () => {
     await addMcpServer({ ...echoConfig, name: 'a', env: { DELION_TOOL_NAME: 'b_echo' } });
     const views = await addMcpServer({ ...echoConfig, name: 'a-b' });
@@ -128,6 +152,7 @@ describe('MCP 连接与工具发现', () => {
 describe('MCP 配置管理与持久化', () => {
   it('update 禁用即断开、重新启用重连；配置持久化于加密文件', async () => {
     const [created] = await addMcpServer(echoConfig);
+    const [tool] = await mcpToolDefinitions();
     const stored = storedConfigs();
     expect(stored).toHaveLength(1);
     expect(stored[0]).toMatchObject({ id: created!.id, name: 'echo-srv', enabled: true });
@@ -144,7 +169,29 @@ describe('MCP 配置管理与持久化', () => {
     });
     const enabled = await updateMcpServer(created!.id, { enabled: true });
     expect(enabled[0]).toMatchObject({ status: 'connected', toolCount: 3 });
+    expect((await mcpToolDefinitions())[0]?.approvalKey).toBe(tool?.approvalKey);
+    await updateMcpServer(created!.id, { env: { TEST_CONFIG: 'replacement' } });
+    expect((await mcpToolDefinitions())[0]?.approvalKey).not.toBe(tool?.approvalKey);
   }, 30000);
+
+  it('托管连接轮换凭据时保留工具授权，更换连接时重新授权', async () => {
+    let id = 'old-token';
+    let approvalId = 'calendar-connection';
+    provideManagedMcp(async () => [{ ...echoConfig, id, enabled: true, approvalId }]);
+    try {
+      const [first] = await mcpToolDefinitions();
+      id = 'new-token';
+      const [rotated] = await mcpToolDefinitions();
+      expect(rotated?.approvalKey).toBe(first?.approvalKey);
+      id = 'replacement-token';
+      approvalId = 'replacement-connection';
+      const [replacement] = await mcpToolDefinitions();
+      expect(replacement?.approvalKey).not.toBe(first?.approvalKey);
+    } finally {
+      provideManagedMcp(async () => []);
+      await listMcpServers();
+    }
+  }, 20000);
 });
 
 describe('Streamable HTTP', () => {

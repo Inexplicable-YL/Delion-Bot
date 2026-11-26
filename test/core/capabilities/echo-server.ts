@@ -64,6 +64,7 @@ function handle(message: JsonRpcRequest) {
     const name = message.params?.name;
     const args = message.params?.arguments ?? {};
     if (name === echoToolName) {
+      if (args.message === 'never-reply') return;
       write({
         jsonrpc: '2.0',
         id: message.id,
