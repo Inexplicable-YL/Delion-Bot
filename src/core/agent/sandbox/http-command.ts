@@ -1,5 +1,6 @@
 import { fetchPublicWebPage } from '../../capabilities/public-web-fetch';
 import { approveNonPublicRead } from './approve-tool';
+import { maxCommandOutputBytes } from './command-output';
 
 const curlOptions = {
   s: 'silent',
@@ -358,7 +359,7 @@ export async function runHttpCommand(
         body: write?.body,
       },
       (target) => {
-        if (write) throw new Error('受控 HTTP 写入仅支持公开地址');
+        if (write) throw new Error('Scoped HTTP writes support public addresses only.');
         return approveNonPublicRead(session, target, cancellation);
       },
     );
@@ -374,16 +375,16 @@ export async function runHttpCommand(
       : null;
     if (follow && location) {
       await response.body?.cancel();
-      if (hops >= redirects) throw new Error('网页重定向次数过多');
+      if (hops >= redirects) throw new Error('Too many redirects.');
       const next = httpURL(new URL(location, url).href);
-      if (!next) throw new Error('仅支持无凭据的 HTTP 或 HTTPS 地址');
+      if (!next) throw new Error('Only credential-free HTTP or HTTPS addresses are supported.');
       url = next;
       continue;
     }
     const failed = Boolean(
       fail && (response.status >= 400 || (fail === 'check-status' && !response.ok)),
     );
-    const limit = save ? 5 * 1024 * 1024 : discard ? 5 * 1024 * 1024 : 128 * 1024;
+    const limit = save || discard ? 5 * 1024 * 1024 : maxCommandOutputBytes;
     const chunks: Uint8Array[] = [];
     let bytes = 0;
     let truncated = false;
@@ -410,7 +411,7 @@ export async function runHttpCommand(
         return {
           exitCode: 1,
           output: '',
-          error: truncated ? '文件超过 5 MiB' : 'HTTP ' + response.status,
+          error: truncated ? 'The file exceeds 5 MiB.' : 'HTTP ' + response.status,
         };
       await save(Buffer.concat(chunks), cancellation);
     }
@@ -431,13 +432,17 @@ export async function runHttpCommand(
           : { '%%': '%', '\\n': '\n', '\\r': '\r', '\\t': '\t' }[match]!,
     );
     return {
-      exitCode: failed ? 22 : 0,
+      exitCode: failed ? 22 : truncated && !discard ? null : 0,
       output:
         responseHeaders.join('\r\n') +
         (save || discard ? '' : Buffer.concat(chunks).toString('utf8')) +
-        (truncated && !discard ? '\n[输出已截断]' : '') +
         diagnostics,
-      ...(failed && { error: 'HTTP ' + response.status }),
+      ...(failed
+        ? { error: 'HTTP ' + response.status }
+        : truncated && !discard
+          ? { error: 'The HTTP response exceeded the capture limit.' }
+          : {}),
+      ...(truncated && !discard && { output_truncated: true }),
     };
   }
 }

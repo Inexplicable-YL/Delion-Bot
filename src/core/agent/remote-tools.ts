@@ -2,8 +2,6 @@ import type { ToolDefinition } from '@earendil-works/pi-coding-agent';
 import type { RemoteBackend } from '../remote/operations';
 import { loadPi } from './pi';
 
-const GREP_MAX_LINE_LENGTH = 500;
-
 const asTool = (definition: unknown): ToolDefinition => definition as ToolDefinition;
 
 export async function remoteGrepTool(cwd: string, backend: RemoteBackend): Promise<ToolDefinition> {
@@ -35,7 +33,14 @@ export async function remoteGrepTool(cwd: string, backend: RemoteBackend): Promi
       );
       if (!result.matches.length)
         return {
-          content: [{ type: 'text' as const, text: 'No matches found' }],
+          content: [
+            {
+              type: 'text' as const,
+              text: result.truncated
+                ? 'Search was incomplete. Refine the query and search again.'
+                : 'No matches found',
+            },
+          ],
           details: undefined,
         };
       const output: string[] = [];
@@ -47,18 +52,13 @@ export async function remoteGrepTool(cwd: string, backend: RemoteBackend): Promi
         if (previous && (previous.path !== match.path || first > previous.line + 1))
           output.push('--');
         for (const line of before) output.push(`${match.path}-${line.line}- ${line.text}`);
-        output.push(
-          `${match.path}:${match.line}: ${pi.truncateLine(match.text, GREP_MAX_LINE_LENGTH).text}`,
-        );
+        output.push(`${match.path}:${match.line}: ${pi.truncateLine(match.text).text}`);
         for (const line of after) output.push(`${match.path}-${line.line}- ${line.text}`);
         previous = { path: match.path, line: after.at(-1)?.line ?? match.line };
       }
-      const truncated = pi.truncateHead(output.join('\n'), {
-        maxLines: pi.DEFAULT_MAX_LINES,
-        maxBytes: pi.DEFAULT_MAX_BYTES,
-      });
+      const truncated = pi.truncateHead(output.join('\n'));
       const cut = truncated.truncated || result.truncated;
-      const text = cut ? `${truncated.content}\n\n[输出已截断]` : truncated.content;
+      const text = cut ? `${truncated.content}\n\n[Output truncated]` : truncated.content;
       return { content: [{ type: 'text' as const, text }], details: undefined };
     },
   });

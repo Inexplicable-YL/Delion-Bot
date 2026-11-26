@@ -6,6 +6,7 @@ import { delimiter, dirname, isAbsolute, join, posix } from 'node:path';
 import { helperSession, type ScopedCommandResult } from '../../remote/helper';
 import { shellQuote } from '../../remote/transport';
 import { literalCommands } from './command-names';
+import { maxCommandOutputBytes } from './command-output';
 import type { ScopedDirectory } from './mode';
 
 const gitFlags = {
@@ -303,6 +304,7 @@ async function runVcsProgram(
   args: string[],
   root: ScopedDirectory,
   signal: AbortSignal,
+  limit = maxCommandOutputBytes,
 ): Promise<ScopedCommandResult> {
   signal.throwIfAborted();
   const ghLogs =
@@ -315,10 +317,9 @@ async function runVcsProgram(
     ...(program === 'gh' && ghEnvironment),
     GIT_CEILING_DIRECTORIES: (root.remote ? posix.dirname : dirname)(root.host),
   };
-  const limit = 128 * 1024;
   if (root.remote) {
-    let output = Buffer.alloc(0);
-    let truncated = false;
+    const chunks: Buffer[] = [];
+    let bytes = 0;
     const invocation = [program, ...args].map(shellQuote).join(' ');
     const command = ghLogs
       ? `XDG_CACHE_HOME=$(/usr/bin/mktemp -d /tmp/delion-gh.XXXXXXXXXX) && export XDG_CACHE_HOME && trap '/bin/rm -rf -- "$XDG_CACHE_HOME"' EXIT && command -p ${invocation}`
@@ -329,15 +330,21 @@ async function runVcsProgram(
       timeoutMs: 20_000,
       env: { ...settings, BASH_ENV: '' },
       onData(chunk) {
-        truncated ||= output.length + chunk.length > limit;
-        if (output.length < limit)
-          output = Buffer.concat([output, chunk.subarray(0, limit - output.length)]);
+        if (bytes < limit) chunks.push(chunk.subarray(0, limit - bytes));
+        bytes += chunk.length;
       },
     });
+    const error = result.lost
+      ? `SSH transfer lost ${result.lost} bytes of output.`
+      : bytes > limit
+        ? 'VCS output exceeded the capture limit.'
+        : result.state === 'timeout'
+          ? 'VCS command timed out.'
+          : undefined;
     return {
-      exitCode: truncated ? null : result.code,
-      output: output.toString('utf8'),
-      ...(truncated ? { error: '命令输出超过大小限制' } : {}),
+      exitCode: error ? null : result.code,
+      output: Buffer.concat(chunks).toString('utf8'),
+      ...(error && { error, output_truncated: true }),
     };
   }
   const windows = process.platform === 'win32';
@@ -346,7 +353,7 @@ async function runVcsProgram(
     .filter((entry) => isAbsolute(entry))
     .map((entry) => join(entry, windows ? `${program}.exe` : program))
     .find((path) => statSync(path, { throwIfNoEntry: false })?.isFile());
-  if (!executable) return { exitCode: null, output: '', error: `找不到 ${program}` };
+  if (!executable) return { exitCode: null, output: '', error: `Cannot find ${program}.` };
   const cache = ghLogs ? await mkdtemp(join(tmpdir(), 'delion-gh-')) : undefined;
   try {
     return await new Promise((resolve) => {
@@ -370,7 +377,14 @@ async function runVcsProgram(
           resolve({
             exitCode: error ? (typeof error.code === 'number' ? error.code : null) : 0,
             output: stdout + stderr,
-            ...(error && typeof error.code !== 'number' && { error: `${program} 无法完成读取` }),
+            ...(error &&
+              typeof error.code !== 'number' && {
+                error:
+                  error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+                    ? 'VCS output exceeded the capture limit.'
+                    : `${program} could not complete the read.`,
+                output_truncated: true,
+              }),
           }),
       );
       child.stdin?.on('error', () => {});
@@ -394,6 +408,7 @@ async function runVcsRead(
       ['--no-pager', 'config', '--null', '--name-only', '--get-regexp', '^filter\\.'],
       root,
       signal,
+      128 * 1024,
     );
     const keys = result.output.split('\0').filter(Boolean);
     if (
@@ -401,7 +416,11 @@ async function runVcsRead(
       (keys.length && !result.output.endsWith('\0')) ||
       keys.some((key) => !/^filter\.[\w.-]+\.(?:[\w-]+)$/.test(key))
     )
-      return { exitCode: null, output: '', error: '无法验证 Git 过滤器配置' };
+      return {
+        exitCode: null,
+        output: '',
+        error: 'Unable to verify the Git filter configuration.',
+      };
     for (const filter of new Set(keys.map((key) => key.slice(0, key.lastIndexOf('.'))))) {
       for (const key of ['clean', 'smudge', 'process', 'required'])
         config.push('-c', `${filter}.${key}=${key === 'required' ? 'false' : ''}`);
@@ -420,8 +439,13 @@ export async function runVcsReads(
   for (const read of reads) {
     const result = await runVcsRead(read, root, cancellation);
     output += result.output;
-    if (output.length > 128 * 1024)
-      return { exitCode: null, output: output.slice(0, 128 * 1024), error: '命令输出超过大小限制' };
+    if (Buffer.byteLength(output) > maxCommandOutputBytes)
+      return {
+        exitCode: null,
+        output,
+        error: 'VCS output exceeded the capture limit.',
+        output_truncated: true,
+      };
     if (result.exitCode !== 0) return { ...result, output };
   }
   return { exitCode: 0, output };

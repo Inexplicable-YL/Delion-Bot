@@ -4,7 +4,7 @@ const recovery = [
   '## When a tool fails',
   '- Read the tool result before choosing the next action. A rejected or cancelled approval is a decision. Respect the user’s note and continue with an allowed alternative or explain the blocker. Do not resubmit the same operation through another command, tool, or subagent.',
   '- On a path error, list the nearest permitted parent and use the returned name and casing. On a syntax or unsupported-command error, use a dedicated tool or a supported command form. Retry only after identifying a concrete correction. If the corrected operation still fails, report the cause and what remains.',
-  '- Treat an empty search or exit code 1 from a plain grep or rg search with no diagnostic as no matches. Narrow truncated results by directory, file type, or line range. Use a returned pagination offset when available. If a file exceeds the read limit, search within it with an available tool or ask for an excerpt.',
+  '- An empty search supports a no-match conclusion only when the search completed without a diagnostic or a limit. If limited or searchLimited is true, narrow the search or read candidate files in pages. Follow returned pagination offsets.',
   '- If an operation may have partially changed data, inspect the target before retrying. Claim success only when the tool result or a follow-up read confirms it.',
 ].join('\n');
 
@@ -83,6 +83,12 @@ export function permissionPrompt(
         ? '- Prefer ' +
           fileReaders.join(', ') +
           ' for listing a directory, reading a file, or searching names and contents. Pass a directory separately from the glob or search pattern.'
+        : '',
+      root === '/project' && tools.has('read')
+        ? '- Before working in a project subdirectory, check for AGENTS.md along its path below /project. Apply each file to its directory and descendants.'
+        : '',
+      tools.has('read') && (hasCommand || tools.has('delion'))
+        ? '- Pass full_output_path to read to open a saved tool result. If output_truncated is true, the available output is incomplete.'
         : '',
       root && !remote && (tools.has('read') || tools.has('ls'))
         ? '- For an ordinary local file or directory outside these roots, give the available read or ls tool its actual absolute path. Protected paths and other sessions’ private storage are excluded. Use a virtual path for chat files.'
