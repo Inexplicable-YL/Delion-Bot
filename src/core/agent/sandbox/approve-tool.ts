@@ -3,7 +3,7 @@ import { hostPorts, type Approval, type ApprovalGrant } from '../../ports';
 
 export const deniedMessage = (message: string, approval: Approval | undefined) =>
   approval && !approval.approved && approval.note
-    ? `${message}。用户说明：${approval.note}`
+    ? `${message}. User note: ${approval.note}`
     : message;
 
 export async function approveNonPublicRead(session: string, url: URL, signal: AbortSignal) {
@@ -13,7 +13,7 @@ export async function approveNonPublicRead(session: string, url: URL, signal: Ab
     fields: [{ label: '地址', value: url.toString() }],
     signal,
   });
-  if (!approval?.approved) throw new Error(deniedMessage('网络访问未获批准', approval));
+  if (!approval?.approved) throw new Error(deniedMessage('Network access not approved', approval));
 }
 
 export function approveTool(
@@ -32,7 +32,8 @@ export function approveTool(
     async execute(id, input, signal, onUpdate, context) {
       const args = structuredClone(input);
       const cancellation = signal ?? new AbortController().signal;
-      if (cancellation.aborted) return denied('操作未获批准或已取消', undefined);
+      if (cancellation.aborted)
+        return denied('The operation was not approved or was cancelled', undefined);
       if (readOnly?.(args)) return tool.execute(id, args, cancellation, onUpdate, context);
       const approval = await hostPorts().desktop.approveToolAction?.({
         session,
@@ -43,7 +44,7 @@ export function approveTool(
       });
       if (approval?.approved && !cancellation.aborted)
         return tool.execute(id, args, cancellation, onUpdate, context);
-      return denied('操作未获批准或已取消', approval);
+      return denied('The operation was not approved or was cancelled', approval);
     },
   };
 }

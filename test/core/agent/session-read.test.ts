@@ -201,7 +201,7 @@ describe('pageTurns', () => {
     expect(clipped!.truncated).toBe(true);
     expect(clipped!.user).toBe('问 h');
     expect(clipped!.reply!.length).toBeLessThan(1100);
-    expect(clipped!.reply).toContain('已截断，原文 5000 字');
+    expect(clipped!.reply).toContain('truncated; 5000 characters total');
   });
 });
 
@@ -263,10 +263,10 @@ describe('session_search / session_read', () => {
       title: '复习计划',
       turns: [{ turnId: 't1', user: '复习哪些章节', reply: '第三到第五章', status: 'completed' }],
     });
-    await expect(call('p1', 'session_read', { sessionId: 's2' })).rejects.toThrow('已归档');
-    await expect(call('p1', 'session_read', { sessionId: 's3' })).rejects.toThrow('已归档');
+    await expect(call('p1', 'session_read', { sessionId: 's2' })).rejects.toThrow('archived');
+    await expect(call('p1', 'session_read', { sessionId: 's3' })).rejects.toThrow('archived');
     await expect(
       call('p1', 'session_read', { sessionId: 's1', turnId: 't1', turns: 2 }),
-    ).rejects.toThrow('不能与');
+    ).rejects.toThrow('cannot be combined with');
   });
 });

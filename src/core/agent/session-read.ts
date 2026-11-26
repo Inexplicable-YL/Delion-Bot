@@ -77,7 +77,7 @@ export function sessionTurns(branch: SessionEntry[], runningTurn?: string): Sess
     if (turn.turnId === runningTurn) return { ...turn, status: 'running' };
     if (last?.stopReason === 'aborted') return { ...turn, status: 'stopped' };
     if (last?.stopReason === 'error')
-      return { ...turn, status: 'interrupted', error: last.errorMessage ?? '未知错误' };
+      return { ...turn, status: 'interrupted', error: last.errorMessage ?? 'Unknown error' };
     if (!last || last.stopReason === 'toolUse') return turn;
     const reply = last.content.flatMap((block) => (block.type === 'text' ? [block.text] : []));
     return { ...turn, status: 'completed', reply: reply.join('\n\n').trim() || null };
@@ -87,7 +87,9 @@ export function sessionTurns(branch: SessionEntry[], runningTurn?: string): Sess
 const sizeOf = (turn: SessionTurn) => turn.user.length + (turn.reply?.length ?? 0);
 
 function cut(text: string, room: number) {
-  return text.length <= room ? text : `${text.slice(0, room)}…（已截断，原文 ${text.length} 字）`;
+  return text.length <= room
+    ? text
+    : `${text.slice(0, room)}… (truncated; ${text.length} characters total)`;
 }
 
 function clip(turn: SessionTurn, limit: number): SessionTurn {
@@ -106,13 +108,15 @@ export function pageTurns(
 ): { turns: SessionTurn[]; before?: string } {
   if ('turnId' in options) {
     const turn = turns.find((item) => item.turnId === options.turnId);
-    if (!turn) throw new Error(`这个会话的当前分支里没有这一轮：${options.turnId}`);
+    if (!turn)
+      throw new Error(`Turn ${options.turnId} is not in the current branch of this session.`);
     return { turns: [clip(turn, limit)] };
   }
   const end = options.before
     ? turns.findIndex((item) => item.turnId === options.before)
     : turns.length;
-  if (end < 0) throw new Error(`这个会话的当前分支里没有这一轮：${options.before}`);
+  if (end < 0)
+    throw new Error(`Turn ${options.before} is not in the current branch of this session.`);
   const picked: SessionTurn[] = [];
   let used = 0;
   let start = end;
@@ -132,7 +136,10 @@ function readableSession(id: string, projectId: string | null) {
     .database()
     .prepare('SELECT title FROM sessions WHERE id=? AND project_id IS ? AND archived = 0')
     .get(id, projectId) as { title: string } | undefined;
-  if (!found) throw new Error('当前项目里没有这个会话，或它已归档；先用 session_search 查找');
+  if (!found)
+    throw new Error(
+      'This session is not in the current project or is archived. Use session_search first.',
+    );
   return found;
 }
 
@@ -195,7 +202,7 @@ Pass turns (default 10) and optionally before to page backward, or pass only tur
         params: { sessionId: string; turns?: number; before?: string; turnId?: string },
       ) => {
         if (params.turnId && (params.turns !== undefined || params.before))
-          throw new Error('turnId 不能与 turns、before 同时使用');
+          throw new Error('turnId cannot be combined with turns or before.');
         const { title } = readableSession(params.sessionId, projectId);
         const { branch, runningTurn } = sessionBranch(params.sessionId);
         const page = pageTurns(
