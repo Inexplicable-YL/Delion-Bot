@@ -1,10 +1,17 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { row } from '../../../core/agent/session/store';
-import { emit, hostPorts, type Approval, type ApprovalGrant } from '../../../core/ports';
+import {
+  emit,
+  hostPorts,
+  type Approval,
+  type ApprovalGrant,
+  type ApprovalRequest,
+} from '../../../core/ports';
 import { systemNotifyToast } from '../../notifications';
-import { chatContract, type PermissionRequest } from '../contract';
+import { chatContract, type PermissionDecision, type PermissionRequest } from '../contract';
 
-type Decision = { decision: 'once' | 'always' | 'deny'; note?: string };
+type Decision = { decision: PermissionDecision; note?: string };
+type Resolution = Decision | { decision: 'grant'; note?: never };
 type GrantTarget = { scope: 'session' | 'project'; id: string };
 
 const pending = new Map<
@@ -12,8 +19,8 @@ const pending = new Map<
   {
     sessionId: string;
     request: PermissionRequest;
-    grant?: { keys: string[]; target: GrantTarget };
-    decide: (decision: Decision) => void;
+    grant?: ApprovalGrant & { target: GrantTarget };
+    decide: (decision: Resolution) => boolean;
   }
 >();
 const sessionGrants = new Map<string, Set<string>>();
@@ -38,10 +45,13 @@ function saveGrant(target: GrantTarget, keys: string[]) {
       .run(projectGrantsKey(target.id), JSON.stringify([...granted]));
 }
 
-const covers = (target: GrantTarget, keys: string[]) => {
+function covers(target: GrantTarget, grant: ApprovalGrant): boolean {
   const granted = grantedKeys(target);
-  return keys.every((key) => granted.has(key));
-};
+  return (
+    grant.keys.every((key) => granted.has(key)) ||
+    (grant.directory !== undefined && granted.has(grant.directory.key))
+  );
+}
 
 export function permissionRequests(sessionId: string): PermissionRequest[] {
   return [...pending.values()]
@@ -52,66 +62,125 @@ export function permissionRequests(sessionId: string): PermissionRequest[] {
 export function decidePermissionRequest(input: { sessionId: string; id: string } & Decision) {
   const entry = pending.get(input.id);
   if (!entry || entry.sessionId !== input.sessionId) return false;
-  if (input.decision === 'always' && !entry.grant) return false;
-  entry.decide(input);
-  if (input.decision !== 'always' || !entry.grant) return true;
+  if (!entry.decide(input)) return false;
+  if ((input.decision !== 'always' && input.decision !== 'directory') || !entry.grant) return true;
   const { target } = entry.grant;
   for (const other of [...pending.values()])
     if (
       other.grant?.target.scope === target.scope &&
       other.grant.target.id === target.id &&
-      covers(target, other.grant.keys)
+      covers(target, other.grant)
     )
-      other.decide({ decision: 'once' });
+      other.decide({ decision: 'grant' });
   return true;
 }
 
 export function requestChatPermission(
   sessionId: string,
-  input: Omit<PermissionRequest, 'id' | 'grant'> & { grant?: ApprovalGrant },
+  input: Omit<PermissionRequest, 'id' | 'grant'> & {
+    capability: ApprovalRequest['kind'];
+    grant?: ApprovalGrant;
+  },
   signal: AbortSignal,
 ): Promise<Approval> {
-  if (signal.aborted) return Promise.resolve({ approved: false });
-  const { grant, ...request } = input;
-  const projectId = grant && row(sessionId).project_id;
+  const { capability, grant, ...request } = input;
+  const session = row(sessionId);
+  const projectId = session.project_id;
   const target: GrantTarget | undefined =
     grant &&
     (projectId ? { scope: 'project', id: projectId } : { scope: 'session', id: sessionId });
-  if (grant && target && covers(target, grant.keys)) return Promise.resolve({ approved: true });
   const id = randomUUID();
+  const db = hostPorts().database();
+  const record = (decision: PermissionDecision | 'cancelled', keys = grant?.keys ?? []) =>
+    db
+      .prepare(
+        `INSERT INTO permission_decisions
+        (request_id, session_id, project_id, capability, title, decision, scope, grant_fingerprints, decided_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        sessionId,
+        projectId,
+        capability,
+        request.title,
+        decision,
+        target?.scope ?? 'once',
+        JSON.stringify(keys.map((key) => createHash('sha256').update(key).digest('hex'))),
+        new Date().toISOString(),
+      );
+  if (signal.aborted) {
+    record('cancelled');
+    return Promise.resolve({ approved: false });
+  }
+  if (grant && target && covers(target, grant)) return Promise.resolve({ approved: true });
   const waiting = permissionRequests(sessionId).length > 0;
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const notify = () =>
       emit(chatContract, 'permissionRequestsChanged', {
         sessionId,
         requests: permissionRequests(sessionId),
       });
     const abort = () => decide({ decision: 'deny' });
-    const decide = ({ decision, note }: Decision) => {
+    const decide = (resolution: Resolution) => {
+      const { decision, note } = resolution;
+      const outcome = signal.aborted ? 'cancelled' : decision;
+      const savedKeys =
+        outcome === 'always'
+          ? grant?.keys
+          : outcome === 'directory' && grant?.directory
+            ? [grant.directory.key]
+            : undefined;
+      if ((outcome === 'always' || outcome === 'directory') && !savedKeys) return false;
       pending.delete(id);
       signal.removeEventListener('abort', abort);
-      if (decision === 'always' && grant && target) saveGrant(target, grant.keys);
-      resolve(
-        decision !== 'deny' && !signal.aborted
-          ? { approved: true }
-          : { approved: false, ...(note && { note }) },
-      );
-      notify();
+      try {
+        if (outcome === 'grant') {
+          resolve({ approved: true });
+          return true;
+        }
+        if (savedKeys && target?.scope === 'project') {
+          db.transaction(() => {
+            record(outcome, savedKeys);
+            saveGrant(target, savedKeys);
+          })();
+        } else {
+          record(outcome, savedKeys);
+          if (savedKeys && target) saveGrant(target, savedKeys);
+        }
+        resolve(
+          outcome === 'deny' || outcome === 'cancelled'
+            ? { approved: false, ...(note && { note }) }
+            : { approved: true },
+        );
+        return true;
+      } catch (error) {
+        reject(error);
+        return false;
+      } finally {
+        notify();
+      }
     };
     pending.set(id, {
       sessionId,
       request: {
         id,
         ...request,
-        ...(grant && target && { grant: { label: grant.label, scope: target.scope } }),
+        ...(grant &&
+          target && {
+            grant: {
+              label: grant.label,
+              scope: target.scope,
+              ...(grant.directory && { directoryLabel: grant.directory.label }),
+            },
+          }),
       },
-      ...(grant && target && { grant: { keys: grant.keys, target } }),
+      ...(grant && target && { grant: { ...grant, target } }),
       decide,
     });
     signal.addEventListener('abort', abort, { once: true });
     notify();
     if (waiting) return;
-    const session = row(sessionId);
     systemNotifyToast('需要你的审批', `${session.title} · ${request.title}`, () =>
       emit(chatContract, 'permissionRequestOpened', {
         sessionId,

@@ -7,7 +7,8 @@ export const deniedMessage = (message: string, approval: Approval | undefined) =
     : message;
 
 export async function approveNonPublicRead(session: string, url: URL, signal: AbortSignal) {
-  const approval = await hostPorts().desktop.approveToolAction?.({
+  const approval = await hostPorts().desktop.approve?.({
+    kind: 'tool',
     session,
     title: '读取非公开网络地址',
     fields: [{ label: '地址', value: url.toString() }],
@@ -22,10 +23,7 @@ export function approveTool(
   title: string,
   fields?: { label: string; value: string }[],
   readOnly?: (input: unknown) => boolean,
-  grant: (input: unknown) => ApprovalGrant | undefined = () => ({
-    keys: [`tool:${tool.name}`],
-    label: title,
-  }),
+  grant?: (input: unknown) => ApprovalGrant,
 ): ToolDefinition {
   return {
     ...tool,
@@ -35,11 +33,12 @@ export function approveTool(
       if (cancellation.aborted)
         return denied('The operation was not approved or was cancelled', undefined);
       if (readOnly?.(args)) return tool.execute(id, args, cancellation, onUpdate, context);
-      const approval = await hostPorts().desktop.approveToolAction?.({
+      const approval = await hostPorts().desktop.approve?.({
+        kind: 'tool',
         session,
         title,
         fields: [...(fields ?? []), { label: '参数', value: JSON.stringify(args ?? {}) }],
-        grant: grant(args),
+        ...(grant && { grant: grant(args) }),
         signal: cancellation,
       });
       if (approval?.approved && !cancellation.aborted)

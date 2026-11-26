@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { invalidateSessions } from '../../../core/agent/session/run';
+import type { ManagedMcpServerConfig } from '../../../core/capabilities/mcp';
 import { hostPorts } from '../../../core/ports';
-import type { McpServerConfig } from '../../../core/protocol/capabilities';
 import { credentials, pipedreamApps, toolkit, type account } from '../contract';
 
 const config = z.object({
@@ -220,12 +220,13 @@ export async function disconnect(id: string) {
     { method: 'DELETE' },
   );
 }
-export async function mcp(): Promise<McpServerConfig[]> {
+export async function mcp(): Promise<ManagedMcpServerConfig[]> {
   const value = saved();
   if (!value?.apps.length) return [];
   const current = await accessToken(value);
   return value.apps.map((slug) => ({
     id: `${current.id}-${slug}`,
+    approvalId: `${value.id}-${slug}`,
     name: `Pipedream ${slug}`,
     enabled: true,
     transport: 'http',

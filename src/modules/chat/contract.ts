@@ -20,14 +20,22 @@ const replyImageSource = z.union([
 ]);
 const replyImage = z.object({ sessionId, image: replyImageSource });
 const chatImage = z.object({ id: z.uuid(), name: z.string().min(1).max(255) });
+const permissionDecision = z.enum(['once', 'always', 'directory', 'deny']);
 const permissionRequest = z.object({
   id: z.uuid(),
   kind: z.enum(['full', 'operation']),
   title: z.string(),
   fields: z.array(z.object({ label: z.string(), value: z.string() })),
-  grant: z.object({ label: z.string(), scope: z.enum(['session', 'project']) }).optional(),
+  grant: z
+    .object({
+      label: z.string(),
+      scope: z.enum(['session', 'project']),
+      directoryLabel: z.string().optional(),
+    })
+    .optional(),
 });
 
+export type PermissionDecision = z.infer<typeof permissionDecision>;
 export type PermissionRequest = z.infer<typeof permissionRequest>;
 
 export type ReplyImageSource = z.infer<typeof replyImageSource>;
@@ -69,7 +77,7 @@ const procedures = {
     input: z.object({
       sessionId,
       id: z.uuid(),
-      decision: z.enum(['once', 'always', 'deny']),
+      decision: permissionDecision,
       note: z.string().trim().max(2000).optional(),
     }),
     output: z.boolean(),

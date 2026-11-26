@@ -51,6 +51,42 @@ describe('current database format', () => {
     ]);
   });
 
+  it('keeps at most 10,000 approval decisions and purges expired rows on write and reopen', () => {
+    freshRoot();
+    const db = getDatabase();
+    const insert = db.prepare(
+      `INSERT INTO permission_decisions VALUES (?, 'session', NULL, 'tool', 'Approve', 'once', 'once', '[]', ?)`,
+    );
+    const expired = '2020-01-01T00:00:00.000Z';
+    insert.run('expired', expired);
+    expect(
+      db.prepare("SELECT request_id FROM permission_decisions WHERE request_id = 'expired'").get(),
+    ).toBeUndefined();
+    db.prepare(
+      `WITH RECURSIVE decisions(id) AS (
+        SELECT 1 UNION ALL SELECT id + 1 FROM decisions WHERE id < 10001
+      )
+      INSERT INTO permission_decisions
+      SELECT id, 'session', NULL, 'tool', 'Approve', 'once', 'once', '[]', ? FROM decisions`,
+    ).run(new Date().toISOString());
+    expect(db.prepare('SELECT COUNT(*) AS count FROM permission_decisions').get()).toEqual({
+      count: 10000,
+    });
+    expect(
+      db.prepare('SELECT request_id FROM permission_decisions ORDER BY rowid LIMIT 1').get(),
+    ).toEqual({ request_id: '2' });
+    db.prepare("UPDATE permission_decisions SET decided_at = ? WHERE request_id = '2'").run(
+      expired,
+    );
+    closeDatabase();
+
+    expect(
+      getDatabase().prepare('SELECT COUNT(*) AS count FROM permission_decisions').get(),
+    ).toEqual({
+      count: 9999,
+    });
+  });
+
   it('rejects a database from a newer version without clearing its data', () => {
     const root = freshRoot();
     const db = new Database(join(root, 'delion.db'));

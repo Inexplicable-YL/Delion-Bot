@@ -48,11 +48,12 @@ export async function setSessionPermissionMode(
     const request = new AbortController();
     fullAccessRequests.set(id, request);
     try {
-      const confirmed = await hostPorts().desktop.confirmFullAccess?.({
+      const approval = await hostPorts().desktop.approve?.({
+        kind: 'full',
         session: id,
         signal: request.signal,
       });
-      if (!confirmed || request.signal.aborted) return snapshot(id);
+      if (!approval?.approved || request.signal.aborted) return snapshot(id);
     } finally {
       fullAccessRequests.delete(id);
     }

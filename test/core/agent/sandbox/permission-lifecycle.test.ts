@@ -57,17 +57,24 @@ import {
 } from '../../../../src/core/agent/session/store';
 import { runningTasks } from '../../../../src/core/agent/tasks';
 import { locateBash } from '../../../../src/modules/terminal';
-import { hostPorts } from '../../../../src/core/ports';
+import { hostPorts, type Approval, type ApprovalRequest } from '../../../../src/core/ports';
 import { provideTestHostPorts } from '../../host-mock';
 import { askInput as input, reply, startMockModel, stopMockModel } from '../../mock-model';
 
 const confirmFullAccess =
-  vi.fn<NonNullable<ReturnType<typeof hostPorts>['desktop']['confirmFullAccess']>>();
+  vi.fn<(request: Extract<ApprovalRequest, { kind: 'full' }>) => Promise<boolean>>();
 const approveFileChange =
-  vi.fn<NonNullable<ReturnType<typeof hostPorts>['desktop']['approveFileChange']>>();
+  vi.fn<(request: Extract<ApprovalRequest, { kind: 'file' }>) => Promise<Approval>>();
 provideTestHostPorts({
   database: () => state.db!,
-  desktop: { ...hostPorts().desktop, confirmFullAccess, approveFileChange },
+  desktop: {
+    ...hostPorts().desktop,
+    approve: async (request) => {
+      if (request.kind === 'full') return { approved: await confirmFullAccess(request) };
+      if (request.kind === 'file') return approveFileChange(request);
+      return { approved: false };
+    },
+  },
   paths: {
     userData: () => join(root, 'user'),
     storage: () => join(root, 'storage'),
@@ -123,6 +130,7 @@ it('完全访问在宿主明确确认后才生效', async () => {
   confirm(true);
   expect((await pending).permissionMode).toBe('full');
   expect(confirmFullAccess).toHaveBeenLastCalledWith({
+    kind: 'full',
     session: parent,
     signal: expect.any(AbortSignal),
   });

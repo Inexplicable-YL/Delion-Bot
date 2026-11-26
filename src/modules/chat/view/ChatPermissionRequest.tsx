@@ -7,10 +7,8 @@ import { cn } from '../../../ui/cn';
 import { ConfirmDialog } from '../../../ui/Dialog';
 import { IconButton } from '../../../ui/IconButton';
 import { showToast } from '../../../ui/Toast';
-import type { PermissionRequest } from '../contract';
+import type { PermissionDecision, PermissionRequest } from '../contract';
 import { chatClient } from './client';
-
-type Decision = 'once' | 'always' | 'deny';
 
 const optionRow =
   'flex min-h-control-sm w-full min-w-0 items-center gap-2.5 rounded-control px-2 text-left text-ui-body transition-colors duration-fast';
@@ -27,7 +25,7 @@ export function ChatPermissionRequest({
   const [note, setNote] = useState('');
   const [detailed, setDetailed] = useState(false);
   const decision = useMutation({
-    mutationFn: async (choice: Decision) => {
+    mutationFn: async (choice: PermissionDecision) => {
       await chatClient.decidePermissionRequest({
         sessionId,
         id: request.id,
@@ -38,7 +36,7 @@ export function ChatPermissionRequest({
     onError: (cause) =>
       showToast({ variant: 'error', title: '提交决定失败', description: errorMessage(cause) }),
   });
-  const decide = (choice: Decision) => {
+  const decide = (choice: PermissionDecision) => {
     if (!decision.isPending) decision.mutate(choice);
   };
   if (request.kind === 'full')
@@ -57,14 +55,24 @@ export function ChatPermissionRequest({
         destructive
       />
     );
-  const options: { label: string; choice: Decision }[] = [
+  const grant = request.grant;
+  const grantScope = grant?.scope === 'project' ? '本项目' : '本会话';
+  const options: { label: string; choice: PermissionDecision }[] = [
     { label: '允许本次', choice: 'once' },
-    ...(request.grant
+    ...(grant
       ? [
           {
-            label: `${request.grant.scope === 'project' ? '本项目' : '本会话'}中始终允许${request.grant.label}`,
+            label: `${grantScope}中始终允许${grant.label}`,
             choice: 'always' as const,
           },
+          ...(grant.directoryLabel
+            ? [
+                {
+                  label: `${grantScope}中始终允许${grant.directoryLabel}`,
+                  choice: 'directory' as const,
+                },
+              ]
+            : []),
         ]
       : []),
     { label: note.trim() ? '拒绝并告诉 Agent' : '拒绝', choice: 'deny' },
@@ -169,7 +177,7 @@ export function ChatPermissionRequest({
               <span aria-hidden="true" className="w-2.5 shrink-0 text-ink-2 tabular-nums">
                 {index + 1}
               </span>
-              <span className="min-w-0 flex-1 truncate">{label}</span>
+              <span className="min-w-0 flex-1 wrap-anywhere py-1">{visible(label)}</span>
             </button>
           ))}
           <input

@@ -377,8 +377,14 @@ export function sandboxCommandTool(
         analysis.kind === 'plan' || (analysis.kind === 'file' && !approvedHostFile)
           ? analysis.plan
           : null;
+      const delegatedMkdir =
+        analysis.kind === 'file' &&
+        analysis.file.action === 'mkdir' &&
+        !approvedHostFile &&
+        !plan &&
+        fileTools.some(({ name }) => name === 'mkdir');
       if (
-        mode === 'approval' ||
+        (mode === 'approval' && !delegatedMkdir) ||
         (automatic && (plan?.requiresApproval || (analysis.kind === 'shell' && !analysis.readOnly)))
       ) {
         const permissions = plan
@@ -407,11 +413,16 @@ export function sandboxCommandTool(
             }
           : names
             ? {
-                keys: names.map((name) => `host-command:${name}`),
+                keys: names.map(
+                  (name) =>
+                    'host-command:' +
+                    JSON.stringify([remote ? targetKey(remote) : 'local', root.host, name]),
+                ),
                 label: `运行 ${names.join('、')} 命令`,
               }
             : undefined;
-        const approval = await hostPorts().desktop.approveSandboxCommand?.({
+        const approval = await hostPorts().desktop.approve?.({
+          kind: 'command',
           session,
           command,
           files,

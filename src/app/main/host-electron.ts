@@ -94,7 +94,8 @@ async function requestPermission(
   signal: AbortSignal,
 ) {
   const window = workspaceWindow();
-  if (!window || signal.aborted) return { approved: false } as const;
+  if (!window || signal.aborted)
+    return requestChatPermission(session, request, AbortSignal.abort());
   const closed = new AbortController();
   const abort = () => closed.abort();
   window.once('closed', abort);
@@ -106,46 +107,59 @@ async function requestPermission(
 }
 
 const desktop: Desktop = {
-  approveToolAction: ({ session, title, fields, grant, signal }) =>
-    requestPermission(session, { kind: 'operation', title, fields, grant }, signal),
-  approveSandboxCommand: ({ session, command, files, remote, grant, signal }) =>
-    requestPermission(
-      session,
-      {
-        kind: 'operation',
-        title: '运行受限命令',
-        fields: [
-          { label: '命令', value: command },
-          { label: '执行位置', value: remote ?? '本机' },
-          ...(files.length ? [{ label: '输入文件', value: files.join('\n') }] : []),
-        ],
-        grant,
-      },
-      signal,
-    ),
-  confirmFullAccess: async ({ session, signal }) =>
-    (
-      await requestPermission(
+  approve: (request) => {
+    const { session, signal, kind: capability } = request;
+    if (request.kind === 'full')
+      return requestPermission(
         session,
-        { kind: 'full', title: '启用完全访问？', fields: [] },
+        { capability, kind: 'full', title: '启用完全访问？', fields: [] },
         signal,
-      )
-    ).approved,
-  approveFileChange: ({ session, action, path, oldText, content, grant, signal }) =>
-    requestPermission(
+      );
+    if (request.kind === 'tool') {
+      const { title, fields, grant } = request;
+      return requestPermission(
+        session,
+        { capability, kind: 'operation', title, fields, grant },
+        signal,
+      );
+    }
+    if (request.kind === 'command') {
+      const { command, files, remote, grant } = request;
+      return requestPermission(
+        session,
+        {
+          capability,
+          kind: 'operation',
+          title: '运行受限命令',
+          fields: [
+            { label: '命令', value: command },
+            { label: '执行位置', value: remote ?? '本机' },
+            ...(files.length ? [{ label: '输入文件', value: files.join('\n') }] : []),
+          ],
+          grant,
+        },
+        signal,
+      );
+    }
+    const { action, path, oldText, content, grant } = request;
+    return requestPermission(
       session,
       {
+        capability,
         kind: 'operation',
-        title: action === 'edit' ? '编辑文件' : '写入文件',
+        title: { write: '写入文件', edit: '编辑文件', mkdir: '创建目录', delete: '删除文件' }[
+          action
+        ],
         fields: [
-          { label: '文件', value: path },
+          { label: '路径', value: path },
           ...(oldText === undefined ? [] : [{ label: '替换前', value: oldText }]),
           ...(content === undefined ? [] : [{ label: '写入内容', value: content }]),
         ],
         grant,
       },
       signal,
-    ),
+    );
+  },
   async pickFiles(owner) {
     const window = windowOf(owner);
     if (!window) return [];
@@ -235,8 +249,8 @@ export const electronPorts: HostPorts = {
         return;
       }
       if (clients.size && channel === `${agentContract.namespace}:session-update`) {
-        const { sessionId, chat } = args[0] as EventPayload<typeof agentContract, 'session-update'>;
-        const transcript = chat.messages[0]?.compacted ? liveCompactionTranscript(sessionId) : null;
+        const { sessionId } = args[0] as EventPayload<typeof agentContract, 'session-update'>;
+        const transcript = liveCompactionTranscript(sessionId);
         if (transcript) {
           const payload: EventPayload<typeof chatContract, 'compactionChanged'> = {
             sessionId,

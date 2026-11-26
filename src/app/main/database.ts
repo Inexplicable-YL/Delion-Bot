@@ -5,6 +5,13 @@ import { hostPorts } from '../../core/ports';
 
 let database: Database.Database | null = null;
 
+const prunePermissionDecisions = `
+  DELETE FROM permission_decisions
+  WHERE decided_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-90 days');
+  DELETE FROM permission_decisions
+  WHERE rowid <= (SELECT MAX(rowid) FROM permission_decisions) - 10000;
+`;
+
 const schema: string[] = [
   `CREATE TABLE IF NOT EXISTS remotes (
     id TEXT PRIMARY KEY,
@@ -70,6 +77,22 @@ const schema: string[] = [
     parent_id TEXT
   )`,
   `CREATE INDEX IF NOT EXISTS idx_sessions_visibility ON sessions(project_id, archived, pinned, updated_at DESC)`,
+  `CREATE TABLE IF NOT EXISTS permission_decisions (
+    request_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    project_id TEXT,
+    capability TEXT NOT NULL,
+    title TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    grant_fingerprints TEXT NOT NULL,
+    decided_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS permission_decisions_by_time ON permission_decisions(decided_at)`,
+  `CREATE TRIGGER IF NOT EXISTS prune_permission_decisions AFTER INSERT ON permission_decisions
+    BEGIN
+      ${prunePermissionDecisions}
+    END`,
 ];
 
 const createConsentRecords = `CREATE TABLE IF NOT EXISTS consent_records (
@@ -99,6 +122,7 @@ export function getDatabase(): Database.Database {
         db.exec("UPDATE sessions SET title_temporary=1 WHERE message_count=0 AND title='新对话'");
       }
       for (const statement of schema) db.exec(statement);
+      db.exec(prunePermissionDecisions);
       db.exec(createConsentRecords);
       db.pragma(`user_version = ${SCHEMA_VERSION}`);
     })();
