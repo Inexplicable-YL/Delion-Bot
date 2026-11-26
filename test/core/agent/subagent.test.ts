@@ -53,7 +53,7 @@ import {
 
 provideTestHostPorts({
   database: () => state.db!,
-  desktop: { ...hostPorts().desktop, approveToolAction: async () => ({ approved: true }) },
+  desktop: { ...hostPorts().desktop, approve: async () => ({ approved: true }) },
 });
 
 const taskCalls = (...calls: object[]) => ({

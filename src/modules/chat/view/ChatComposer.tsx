@@ -320,6 +320,10 @@ export function ChatComposer({
     : draft;
   const hasMedia = images.length > 0 || attachments.length > 0;
   const expanded = hasMedia || (value.length > 0 && (wrapped || value.includes('\n')));
+  const permissionOnRight = !expanded && Boolean(permissionMode && onPermissionMode && !sidechat);
+  const contextIndicator = configured && contextUsage && (
+    <ContextIndicator cacheHitRate={cacheHitRateText(contextUsage)} usage={contextUsage} />
+  );
   const [menu, setMenu] = useState<MenuState>(null);
   const [index, setIndex] = useState(0);
   const menuListId = `${useId()}-list`;
@@ -783,6 +787,7 @@ export function ChatComposer({
           onSelectSearch={sidechat ? undefined : (id) => void selectSearchEntry(id)}
           permissionMode={permissionMode}
         />
+        {permissionOnRight && contextIndicator}
         {permissionMode && onPermissionMode && !sidechat && (
           <ChatPermissionPicker
             mode={permissionMode}
@@ -799,9 +804,7 @@ export function ChatComposer({
               tasks={tasks}
             />
           )}
-          {configured && contextUsage && (
-            <ContextIndicator cacheHitRate={cacheHitRateText(contextUsage)} usage={contextUsage} />
-          )}
+          {!permissionOnRight && contextIndicator}
           {configured && !sidechat && (
             <ChatModelPicker
               effort={effort}
