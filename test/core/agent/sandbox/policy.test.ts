@@ -20,6 +20,7 @@ const state = vi.hoisted(() => ({
   scopedFile: vi.fn(),
   remoteExec: vi.fn(),
   writeRemoteFile: vi.fn(),
+  disabledTools: vi.fn(() => new Set<string>()),
   mcpDefinitions:
     vi.fn<
       () => ReturnType<
@@ -44,7 +45,7 @@ vi.mock('../../../../src/core/capabilities/command-server', () => ({
   startDomainBridge: () => state.bridge(),
 }));
 vi.mock('../../../../src/core/capabilities/tools', () => ({
-  readDisabledTools: () => new Set<string>(),
+  readDisabledTools: state.disabledTools,
   setBuiltinCapabilities: () => {},
 }));
 vi.mock('../../../../src/core/remote/helper', async (original) => ({
@@ -124,6 +125,7 @@ afterEach(() => {
   state.remoteExec.mockReset();
   state.writeRemoteFile.mockReset();
   state.mcpDefinitions.mockReset();
+  state.disabledTools.mockReset();
   vi.unstubAllGlobals();
   db?.close();
 });
@@ -227,9 +229,19 @@ it.each(['auto-approval', 'read-only'] as const)('%s 直接运行只读命令并
   state.scopedFile.mockResolvedValue({ matches: [{ path: 'src/a.ts', line: 1, text: 'TODO' }] });
   const id = insertSession('p1');
   writePermissionMode(id, mode);
-  const { customTools } = await agentEnvironment().sessionOptions('p1', '/project', {
-    sessionId: id,
-  });
+  const { customTools, appendSystemPrompt } = await agentEnvironment().sessionOptions(
+    'p1',
+    '/project',
+    {
+      sessionId: id,
+    },
+  );
+  const prompt = appendSystemPrompt.join('\n');
+  expect(prompt).toContain('the SSH project host (Linux)');
+  expect(prompt).toContain('Virtual working directory: /project');
+  expect(prompt).toContain('git status --short');
+  expect(prompt).not.toContain('/srv/project');
+  expect(prompt).not.toContain('user@remote');
   const tool = customTools.find(({ name }) => name === 'sandbox_command')!;
   const execute = (command: string) =>
     tool.execute('call', { command }, undefined, undefined, {} as never);
@@ -402,9 +414,17 @@ it('请求批准提供联网和连接器，拒绝和取消均不调用连接器'
   ]);
   const id = insertSession(null);
   writePermissionMode(id, 'approval');
-  const { customTools } = await agentEnvironment().sessionOptions(null, '/privacy', {
-    sessionId: id,
-  });
+  const { customTools, appendSystemPrompt } = await agentEnvironment().sessionOptions(
+    null,
+    '/privacy',
+    {
+      sessionId: id,
+    },
+  );
+  const prompt = appendSystemPrompt.join('\n');
+  expect(prompt).toContain('Mode: request approval');
+  expect(prompt).toContain('approval, including read commands');
+  expect(prompt).toContain('After approval, supported commands use scoped execution');
   expect(customTools.map((tool) => tool.name)).toEqual(
     expect.arrayContaining(['download_file', 'web_search', 'web_fetch', 'mail_send', 'delion']),
   );
@@ -665,10 +685,28 @@ describe('受限普通对话', () => {
     expect(prompt).toContain('/privacy');
     expect(prompt).toContain('/share');
     expect(prompt).toContain('Read existing files from /privacy and /share');
+    expect(prompt).toContain('Mode: read-only');
+    expect(prompt).toContain('Retry only after identifying a concrete correction');
+    expect(prompt).not.toContain('Use download_file');
     expect(prompt).not.toContain(id);
     expect(prompt).not.toContain('DELION_COMMAND');
     expect(prompt).not.toContain(join(root, 'storage', 'chat-sessions'));
     expect(state.bridge).not.toHaveBeenCalled();
+  });
+
+  it('模型提示只推荐当前启用的命令和联网工具', async () => {
+    database();
+    state.disabledTools.mockReturnValue(new Set(['sandbox_command', 'web_search']));
+    const id = insertSession(null);
+    writePermissionMode(id, 'read-only');
+    const { appendSystemPrompt } = await agentEnvironment().sessionOptions(null, '/privacy', {
+      sessionId: id,
+    });
+    const prompt = appendSystemPrompt.join('\n');
+    expect(prompt).toContain('Prefer web_fetch for web queries');
+    expect(prompt).not.toContain('web_search');
+    expect(prompt).not.toContain('sandbox_command');
+    expect(prompt).not.toContain('rg --files');
   });
 
   it('完全访问保留命令桥，项目默认可直接修改自己的文件', async () => {

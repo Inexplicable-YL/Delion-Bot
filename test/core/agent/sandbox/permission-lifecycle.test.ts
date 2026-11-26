@@ -135,6 +135,7 @@ it('完全访问在宿主明确确认后才生效', async () => {
 
 it('受限模型收到虚拟目录，现有消息中的宿主路径也会被替换', async () => {
   const id = (await newSession(null)).sessionId!;
+  await setSessionPermissionMode(id, 'auto-approval');
   const privacy = chatSessionDirectory(id);
   const share = chatShareDirectory(id);
   const requests: RecordedRequest[] = [];
@@ -148,6 +149,7 @@ it('受限模型收到虚拟目录，现有消息中的宿主路径也会被替�
     const context = JSON.stringify(requests.at(-1)?.body);
     expect(context).toContain('/privacy');
     expect(context).toContain('/share');
+    expect(context).toContain('Mode: automatic approval');
     expect(context).not.toContain(JSON.stringify(privacy).slice(1, -1));
     expect(context).not.toContain(JSON.stringify(share).slice(1, -1));
     expect(context).not.toMatch(/[a-z]:\/privacy/i);
@@ -180,6 +182,7 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
   );
   expect(fullTools).toContain('web_fetch');
   expect(fullTools).toContain('session_read');
+  expect(JSON.stringify(fullRequests[0]?.body)).toContain('Mode: full access');
   stopFull();
 
   const switched = await setSessionPermissionMode(parent, 'read-only');
@@ -217,7 +220,10 @@ it('回合中拒绝切换；完全权限的后台进程和命令桥在切到受�
     'web_fetch',
     'web_search',
   ]);
-  expect(JSON.stringify(restrictedRequests.at(-1)?.body)).toContain('/privacy');
+  const restrictedContext = JSON.stringify(restrictedRequests.at(-1)?.body);
+  expect(restrictedContext).toContain('/privacy');
+  expect(restrictedContext).toContain('Mode: read-only');
+  expect(restrictedContext).not.toContain('Mode: full access');
   stopRestricted();
 }, 30_000);
 

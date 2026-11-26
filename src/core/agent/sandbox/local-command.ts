@@ -343,19 +343,10 @@ export function sandboxCommandTool(meta: SessionRow): ToolDefinition | null {
     Boolean(remote) || (process.platform === 'darwin' && existsSync(macosSandboxLauncher));
   const { id: session } = owner;
   const fileTools = scopedFileTools(meta);
-  const chatPaths =
-    root.name === '/privacy'
-      ? ` In ordinary local chats, use /privacy and /share in command text. Scripts started from the initial working directory can use the relative paths privacy and share.${windows ? ' Use backslashes after the virtual root in cmd.exe built-in file arguments.' : ''}`
-      : '';
-  const reads = `${mode === 'approval' ? 'Commands require approval before execution.' : 'Verified reads run directly.'} Common file searches, text filters, Git and GitHub queries, and local public HTTP reads can use pipes and &&. Quote glob patterns. `;
-  const runtime =
-    mode === 'read-only'
-      ? `Commands that may modify data are disabled. Use ${windows ? 'cmd.exe syntax or Get-Content and Get-ChildItem for file reads' : 'Bash syntax'}. Use the file tools for absolute local file reads.`
-      : `Run a ${windows ? 'Windows cmd.exe' : 'Bash'} command on the ${remote ? 'SSH host' : 'local computer'}. ${automatic ? 'Use file tools for changes when possible. Simple local file copies inside a writable directory can run directly. Unverified commands require approval. ' : ''}Supported operations can use the file broker or controlled reads. Other approved commands run with the current account permissions, including network and subprocesses. Project shell commands without input copies run in the project directory. Other shell commands run in a temporary directory.`;
   return {
     name: 'sandbox_command',
     label: 'Sandbox command',
-    description: `${reads}${runtime}${chatPaths} Input copies are available as inputs/1, inputs/2, and so on, in the order supplied. Use stdout for results.`,
+    description: `Run a command under the current session permissions. Native syntax is ${windows ? 'cmd.exe' : 'Bash'}. Use the scoped examples in the permission instructions. Optional files are addressed as inputs/1, inputs/2, and so on. Use stdout for results.`,
     parameters: {
       type: 'object',
       properties: {
