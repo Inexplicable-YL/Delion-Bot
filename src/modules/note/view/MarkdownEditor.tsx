@@ -372,7 +372,7 @@ export function MarkdownEditor({
   return (
     <div ref={syncEditor} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div ref={attachEditor} className="min-h-0 w-full flex-1 overflow-hidden" />
-      {editorStateKey !== undefined && (
+      {editorStateKey !== undefined && languageForFilename(filename).kind !== 'markdown' && (
         <div className="flex h-6 shrink-0 items-center justify-end border-t px-3 text-ui-subhead text-ink-2">
           行 {cursor.line}，列 {cursor.column}
         </div>

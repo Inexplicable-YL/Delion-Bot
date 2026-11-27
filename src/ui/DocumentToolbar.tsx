@@ -112,7 +112,7 @@ export function DocumentToolbar({
   const source = mode === 'source';
   return (
     <div
-      className="flex min-h-row-regular min-w-0 shrink-0 items-center gap-3 px-3 text-ui-callout"
+      className="flex min-h-row-regular min-w-0 shrink-0 items-center gap-3 px-app text-ui-callout"
       role="toolbar"
       aria-label="文件操作"
     >
@@ -166,12 +166,13 @@ export function DocumentToolbar({
           </>
         ) : null}
       </span>
-      {controls && (
-        <div className="flex shrink-0 items-center gap-0.5 rounded-pill bg-field p-0.5">
-          {controls}
-        </div>
-      )}
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className="glass flex shrink-0 items-center gap-1 rounded-pill px-1 py-0.5">
+        {controls && (
+          <>
+            {controls}
+            <DocumentToolbarDivider />
+          </>
+        )}
         {onModeChange && (
           <DocumentToolbarButton
             label={source ? previewLabel : '源码模式'}
