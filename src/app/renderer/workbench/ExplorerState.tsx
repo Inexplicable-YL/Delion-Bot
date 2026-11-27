@@ -24,16 +24,16 @@ if (typeof window !== 'undefined') {
 
 export function useExplorerVisible(): boolean {
   const narrow = useExplorerState((s) => s.narrow);
-  const collapsedForReply = useWorkbenchLayout((s) => s.explorerCollapsedForReply);
+  const autoCollapsed = useWorkbenchLayout((s) => s.explorerAutoCollapsed);
   const mobileOpen = useMobileDrawer((s) => s.drawer === 'explorer');
   const collapsed = usePreferences((s) => s.workspaceSidebarCollapsed);
-  return narrow ? mobileOpen : !collapsed && !collapsedForReply;
+  return narrow ? mobileOpen : !collapsed && !autoCollapsed;
 }
 
 export function showExplorer() {
   if (useExplorerState.getState().narrow) useMobileDrawer.getState().setDrawer('explorer');
   else {
-    useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
+    useWorkbenchLayout.setState({ explorerAutoCollapsed: false });
     usePreferences.getState().setPreference('workspaceSidebarCollapsed', false);
   }
 }

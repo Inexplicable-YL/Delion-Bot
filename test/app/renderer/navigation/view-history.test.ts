@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceEntry, WorkspaceState } from '../../../../src/modules/workspace/contract';
 import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
 import { useNavigationStore } from '../../../../src/app/renderer/navigation/view';
@@ -47,7 +47,7 @@ describe('打开回复引用的文件', () => {
       projectId: null,
       ready: false,
       pendingReveal: null,
-      explorerCollapsedForReply: false,
+      explorerAutoCollapsed: false,
     });
     usePreferences.setState({ workspaceSidebarCollapsed: false });
   });
@@ -62,10 +62,10 @@ describe('打开回复引用的文件', () => {
     expect(useMobileDrawer.getState().drawer).toBeNull();
     await useWorkbenchLayout.getState().init('p1');
     expect(groups().map((group) => group.active)).toEqual(['chat:session', fileTab]);
-    expect(useWorkbenchLayout.getState().explorerCollapsedForReply).toBe(true);
+    expect(useWorkbenchLayout.getState().explorerAutoCollapsed).toBe(true);
     expect(usePreferences.getState().workspaceSidebarCollapsed).toBe(false);
     useNavigationStore.getState().goBack();
-    expect(useWorkbenchLayout.getState().explorerCollapsedForReply).toBe(false);
+    expect(useWorkbenchLayout.getState().explorerAutoCollapsed).toBe(false);
   });
 
   it('重复从首页打开同一会话的引用时复用已有标签及分组', async () => {
@@ -85,7 +85,7 @@ describe('打开回复引用的文件', () => {
     useWorkbenchLayout.getState().openTab('chat:session');
     useNavigationStore.getState().openReplyFile(path, 'session', 'p1');
     expect(groups().map((group) => group.tabs)).toEqual([['chat:session', fileTab]]);
-    expect(useWorkbenchLayout.getState().explorerCollapsedForReply).toBe(false);
+    expect(useWorkbenchLayout.getState().explorerAutoCollapsed).toBe(false);
   });
 
   it('opens HTML references in a preview tab even when a source tab already exists', async () => {
@@ -178,5 +178,41 @@ describe('导航历史', () => {
     useNavigationStore.getState().openProject('');
     expect(useNavigationStore.getState().backStack).toEqual([]);
     expect(useNavigationStore.getState().projectId).toBeNull();
+  });
+});
+
+describe('从首页进入工作台时的目录折叠', () => {
+  const surface = document.createElement('div');
+
+  function enterProject(surfaceWidth: number) {
+    seed('home', null);
+    useWorkbenchLayout.setState({ explorerAutoCollapsed: false });
+    usePreferences.setState({ workspaceSidebarCollapsed: false, workspaceSidebarWidth: 300 });
+    Object.defineProperty(surface, 'clientWidth', { configurable: true, value: surfaceWidth });
+    useNavigationStore.getState().openProject('p1');
+    return useWorkbenchLayout.getState().explorerAutoCollapsed;
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', () => ({ matches: false }));
+    document.documentElement.style.setProperty('--container-reading', '45rem');
+    document.documentElement.style.fontSize = '16px';
+    surface.dataset.workbenchSurface = 'page';
+    document.body.append(surface);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    surface.remove();
+  });
+
+  it('目录会让标签区窄于回复阅读宽度时临时折叠，不改偏好', () => {
+    expect(enterProject(900)).toBe(true);
+    expect(usePreferences.getState().workspaceSidebarCollapsed).toBe(false);
+    useNavigationStore.getState().navigate('home');
+    expect(useWorkbenchLayout.getState().explorerAutoCollapsed).toBe(false);
+  });
+
+  it('标签区足够宽时保留目录', () => {
+    expect(enterProject(1400)).toBe(false);
   });
 });

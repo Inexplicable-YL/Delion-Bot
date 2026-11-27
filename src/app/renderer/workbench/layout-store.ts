@@ -48,7 +48,7 @@ type Store = {
   root: LayoutNode;
   focus: string;
   maximized: string | null;
-  explorerCollapsedForReply: boolean;
+  explorerAutoCollapsed: boolean;
   ready: boolean;
   pendingReveal: {
     tabId: TabId;
@@ -134,7 +134,7 @@ export const useWorkbenchLayout = create<Store>((set, get) => ({
   root: createDefaultLayout().root,
   focus: 'primary',
   maximized: null,
-  explorerCollapsedForReply: false,
+  explorerAutoCollapsed: false,
   ready: false,
   pendingReveal: null,
   persistTimer: null,

@@ -29,6 +29,7 @@ import {
   Explorer,
   type ExplorerItem,
   type ExplorerPending,
+  isChatStoragePath,
   useWorkspaceStore,
 } from '../../../modules/workspace/view';
 import { sourceOf } from '../../views';
@@ -122,6 +123,7 @@ export function ProjectFileTree({
   onActivate?: (id: string) => void;
 }) {
   const afterMenuClose = useAfterMenuClose();
+  const directory = useWorkspaceStore((state) => state.workspace.directory);
   const [localError, setLocalError] = useState<string | null>(null);
   const trimmedQuery = query.trim();
   const [term] = useDebounce(trimmedQuery, 250);
@@ -187,7 +189,7 @@ export function ProjectFileTree({
     }
   }
   const visible = entries.filter((entry) => included.has(entry.id));
-  const runFileCommand = (title: string, command: () => Promise<void> | undefined) => {
+  const runFileCommand = (title: string, command: () => Promise<unknown> | undefined) => {
     void Promise.resolve(command()).catch((cause: unknown) =>
       showToast({ variant: 'error', title, description: errorMessage(cause) }),
     );
@@ -444,14 +446,25 @@ export function ProjectFileTree({
                 )}
                 {!item.container && (
                   <>
-                    <DropdownMenuItem
-                      onSelect={() =>
-                        runFileCommand('定位失败', () => workspaceClient.openLocal(item.id))
-                      }
-                    >
-                      <FolderOpen />
-                      在文件夹中显示
-                    </DropdownMenuItem>
+                    {isChatStoragePath(directory, item.id) ? (
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          runFileCommand('下载失败', () => workspaceClient.downloadFile(item.id))
+                        }
+                      >
+                        <Download />
+                        下载
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem
+                        onSelect={() =>
+                          runFileCommand('定位失败', () => workspaceClient.openLocal(item.id))
+                        }
+                      >
+                        <FolderOpen />
+                        在文件夹中显示
+                      </DropdownMenuItem>
+                    )}
                     {archived ? (
                       <DropdownMenuItem
                         onSelect={() => afterMenuClose.defer(() => selectNode(item.id))}

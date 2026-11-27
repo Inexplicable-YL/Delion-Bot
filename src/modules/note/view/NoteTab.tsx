@@ -5,6 +5,7 @@ import { showToast } from '../../../ui/Toast';
 import { parseRemoteNodeId, type TabId } from '../../workspace/contract';
 import {
   DownloadFileButton,
+  isChatStoragePath,
   useWorkspaceStore,
   workspaceClient,
   workspaceEntryPath,
@@ -51,6 +52,7 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
   const source = useNoteDraftSource();
   const draft = useNoteDrafts((state) => (entryId === null ? undefined : state.drafts[entryId]));
   const entries = useWorkspaceStore((state) => state.workspace.entries);
+  const directory = useWorkspaceStore((state) => state.workspace.directory);
   const [failure, setFailure] = useState<{ entryId: string; message: string } | null>(null);
   const error = failure && failure.entryId === entryId ? failure.message : null;
   const [confirmReload, setConfirmReload] = useState(false);
@@ -160,7 +162,11 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
         saving={draft.saving}
         dirty={dirty}
         failed={draft.error !== null || error !== null}
-        onOpenInFolder={parseRemoteNodeId(entryId) ? undefined : openInFolder}
+        onOpenInFolder={
+          parseRemoteNodeId(entryId) || isChatStoragePath(directory, entryId)
+            ? undefined
+            : openInFolder
+        }
         actions={
           markdown ? (
             <ExportMenu

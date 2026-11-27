@@ -7,6 +7,7 @@ import {
 } from '../../../modules/chat/view';
 import { previewable, useWorkbenchLayout } from '../workbench/layout-store';
 import { openTarget } from '../workbench/open-target';
+import { explorerSqueezesTabs } from '../workbench/explorer-width';
 import { walkGroups } from '../workbench/layout-schema';
 import { useEntryDialog } from '../workspace/entry-dialog-store';
 import { useMobileDrawer } from '../shell/mobile-drawer';
@@ -85,6 +86,10 @@ function rememberProject(id: string | null): void {
   try {
     localStorage.setItem(projectStorageKey, id ?? '');
   } catch {}
+}
+
+function enteringWorkbenchFromHome(from: AppView, to: AppView): boolean {
+  return from === 'home' && to === 'workbench' && explorerSqueezesTabs();
 }
 
 function currentProjectLive(): boolean {
@@ -209,7 +214,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
         if (target) set({ target });
       } else {
         useMobileDrawer.getState().setDrawer(null);
-        useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
+        useWorkbenchLayout.setState({
+          explorerAutoCollapsed: enteringWorkbenchFromHome(state.view, view),
+        });
         set({
           view,
           target,
@@ -230,7 +237,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       if (prev === undefined || !leaveViews(() => get().goBack())) return false;
       rememberProject(prev.projectId);
       useMobileDrawer.getState().setDrawer(null);
-      useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
+      useWorkbenchLayout.setState({
+        explorerAutoCollapsed: enteringWorkbenchFromHome(state.view, prev.view),
+      });
       set({
         view: prev.view,
         target: prev.target,
@@ -249,7 +258,9 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       if (next === undefined || !leaveViews(() => get().goForward())) return false;
       rememberProject(next.projectId);
       useMobileDrawer.getState().setDrawer(null);
-      useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
+      useWorkbenchLayout.setState({
+        explorerAutoCollapsed: enteringWorkbenchFromHome(state.view, next.view),
+      });
       set({
         view: next.view,
         target: next.target,
@@ -269,7 +280,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       if (!get().navigate('workbench')) return false;
       useMobileDrawer.getState().setDrawer(null);
       if (get().projectId !== next) {
-        useWorkbenchLayout.setState({ explorerCollapsedForReply: false });
+        if (fromWorkbench) useWorkbenchLayout.setState({ explorerAutoCollapsed: false });
         if (fromWorkbench && currentProjectLive()) {
           set((state) => ({ backStack: [...state.backStack, routeOf(state)], forwardStack: [] }));
         }
@@ -334,7 +345,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
         if (layout.maximized) layout.setMaximized(null);
         if (!openExistingReplyFile(key)) openTarget(documentTabId(key), { aside: true });
       });
-      if (opened) useWorkbenchLayout.setState({ explorerCollapsedForReply: true });
+      if (opened) useWorkbenchLayout.setState({ explorerAutoCollapsed: true });
       return opened;
     },
     openTerminal: (projectId) => revealInProject(`terminal:${projectId}`, projectId),

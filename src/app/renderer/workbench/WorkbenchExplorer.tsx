@@ -55,6 +55,7 @@ import { useMobileDrawer } from '../shell/mobile-drawer';
 import { RemotePortsDialog } from '../workspace/RemotePortsDialog';
 import { openTarget } from './open-target';
 import { useExplorerState, useExplorerVisible } from './ExplorerState';
+import { explorerWidth } from './explorer-width';
 import { useViewportWidth } from '../../../ui/use-viewport-width';
 import { cn } from '../../../ui/cn';
 import { overlayFade } from '../../../ui/motion';
@@ -276,7 +277,7 @@ export function WorkbenchExplorer({
     else onAction(action, id);
   };
 
-  const effectiveWidth = Math.min(width, Math.max(200, Math.round(viewportWidth * 0.28)));
+  const effectiveWidth = explorerWidth(width, viewportWidth);
   const wrapHeaderActions = !narrow && changesProjectId !== null && effectiveWidth < 220;
   const sectionClass = 'flex h-8 items-center gap-1 px-3 text-ui-subhead text-ink-2';
   const eyebrowClass = 'px-3 pt-3 pb-1 text-ui-subhead text-ink-2';

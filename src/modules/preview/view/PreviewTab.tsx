@@ -10,6 +10,7 @@ import { showToast } from '../../../ui/Toast';
 import { parseRemoteNodeId, type TabId } from '../../workspace/contract';
 import {
   DownloadFileButton,
+  isChatStoragePath,
   useWorkspaceStore,
   workspaceClient,
   workspaceEntryPath,
@@ -57,6 +58,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
   const target = parsePreviewTabId(tabId);
   const entryId = target && 'entryId' in target ? target.entryId : null;
   const entries = useWorkspaceStore((state) => state.workspace.entries);
+  const directory = useWorkspaceStore((state) => state.workspace.directory);
   const htmlMode = useHtmlPreviewModes((modes) => modes[tabId] ?? 'live');
   const query = useQuery({
     queryKey: ['preview', tabId, rootSize],
@@ -129,7 +131,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
   const branch = previewBranchOf(doc);
   const path = entryId ? workspaceEntryPath(entries, entryId) : [];
   const openInFolder =
-    entryId && !parseRemoteNodeId(entryId)
+    entryId && !parseRemoteNodeId(entryId) && !isChatStoragePath(directory, entryId)
       ? () => {
           if (window.delionBot)
             void workspaceClient.openLocal(entryId).catch((cause) =>
