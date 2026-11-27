@@ -11,16 +11,6 @@ import {
 import { mermaidConfig, renderMermaid } from '../../preview/view';
 import { findMath, renderMath } from './math';
 
-function activeLines(state: EditorState): Set<number> {
-  const lines = new Set<number>();
-  for (const range of state.selection.ranges) {
-    const from = state.doc.lineAt(range.from).number;
-    const to = state.doc.lineAt(range.to).number;
-    for (let line = from; line <= to; line += 1) lines.add(line);
-  }
-  return lines;
-}
-
 class ImageWidget extends WidgetType {
   constructor(
     readonly src: string,
@@ -210,7 +200,6 @@ const marks = Object.fromEntries(
 const quoteLine = line('cm-md-quote');
 const codeLine = line('cm-md-codeblock');
 const hrLine = line('cm-md-hr');
-const imageSource = mark('cm-md-image-src');
 const bullets = ['•', '◦', '▪'].map((glyph) =>
   Decoration.replace({ widget: new BulletWidget(glyph) }),
 );
@@ -237,10 +226,6 @@ function inCode(state: EditorState, pos: number): boolean {
     node = node.parent;
   }
   return true;
-}
-
-function touches(state: EditorState, from: number, to: number): boolean {
-  return state.selection.ranges.some((range) => range.from <= to && range.to >= from);
 }
 
 type SyntaxNode = ReturnType<typeof syntaxTree>['topNode'];
@@ -344,10 +329,7 @@ function blockWidgets(state: EditorState, resolveImage: ImageResolver): Decorati
     enter: (node) => {
       if (node.name === 'Image') {
         const line = imageLine(state, node.node);
-        const widget =
-          line && !touches(state, line.from, line.to)
-            ? imageWidget(state, node.node, resolveImage, true)
-            : null;
+        const widget = line ? imageWidget(state, node.node, resolveImage, true) : null;
         if (line && widget)
           ranges.push({
             from: line.from,
@@ -361,7 +343,7 @@ function blockWidgets(state: EditorState, resolveImage: ImageResolver): Decorati
         const whole =
           /^[ \t>]*$/.test(state.sliceDoc(from, node.from)) &&
           state.doc.lineAt(node.to).to === node.to;
-        if (whole && !touches(state, from, node.to))
+        if (whole)
           ranges.push({
             from,
             to: node.to,
@@ -377,7 +359,7 @@ function blockWidgets(state: EditorState, resolveImage: ImageResolver): Decorati
       if (!info || state.sliceDoc(info.from, info.to).trim().toLowerCase() !== 'mermaid')
         return false;
       const body = node.node.getChild('CodeText');
-      if (!touches(state, node.from, node.to) && body)
+      if (body)
         ranges.push({
           from: node.from,
           to: node.to,
@@ -390,7 +372,7 @@ function blockWidgets(state: EditorState, resolveImage: ImageResolver): Decorati
     },
   });
   for (const math of findMath(state.sliceDoc(), 0, (pos) => inCode(state, pos))) {
-    if (!math.display || touches(state, math.from, math.to)) continue;
+    if (!math.display) continue;
     const first = state.doc.lineAt(math.from);
     const last = state.doc.lineAt(math.to);
     const whole = first.from === math.from && last.to === math.to;
@@ -415,17 +397,17 @@ const blockField = (resolveImage: ImageResolver) =>
   StateField.define<DecorationSet>({
     create: (state) => blockWidgets(state, resolveImage),
     update: (value, transaction) =>
-      transaction.docChanged ||
-      transaction.selection ||
-      syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
+      transaction.docChanged || syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
         ? blockWidgets(transaction.state, resolveImage)
         : value,
     provide: (field) => EditorView.decorations.from(field),
   });
 
-function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
+function build(
+  view: EditorView,
+  resolveImage: ImageResolver,
+): { decorations: DecorationSet; atomic: DecorationSet } {
   const { state } = view;
-  const active = activeLines(state);
   const ranges: Range[] = [];
   const lineOf = (pos: number) => state.doc.lineAt(pos);
   for (const { from, to } of view.visibleRanges) {
@@ -435,7 +417,6 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
       enter: (node) => {
         const name = node.name;
         const startLine = lineOf(node.from);
-        const editing = active.has(startLine.number);
         const heading = /^(?:ATX|Setext)Heading([1-6])$/.exec(name);
         if (heading) {
           ranges.push({
@@ -446,14 +427,13 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
           return;
         }
         if (name === 'HorizontalRule') {
-          if (!editing)
-            ranges.push(
-              { from: startLine.from, to: startLine.from, value: hrLine },
-              { from: node.from, to: node.to, value: hidden },
-            );
+          ranges.push(
+            { from: startLine.from, to: startLine.from, value: hrLine },
+            { from: node.from, to: node.to, value: hidden },
+          );
           return false;
         }
-        if (name === 'ListMark' && !editing && node.node.parent?.parent?.name === 'BulletList') {
+        if (name === 'ListMark' && node.node.parent?.parent?.name === 'BulletList') {
           if (node.node.nextSibling?.name === 'Task') return;
           let depth = 0;
           for (let list = node.node.parent.parent.parent; list; list = list.parent)
@@ -461,7 +441,7 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
           ranges.push({ from: node.from, to: node.to, value: bullets[depth % bullets.length]! });
           return;
         }
-        if (name === 'TaskMarker' && !editing) {
+        if (name === 'TaskMarker') {
           const item = node.node.parent!.parent!;
           const from = item.parent?.name === 'BulletList' ? item.from : node.from;
           const checked = state.sliceDoc(node.from + 1, node.from + 2).toLowerCase() === 'x';
@@ -488,10 +468,10 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
         }
         if (name === 'Image') {
           const widget = imageWidget(state, node.node, resolveImage);
-          if (!widget || (!editing && imageLine(state, node.node))) return false;
+          if (!widget || imageLine(state, node.node)) return false;
           const end = lineOf(node.to).to;
           ranges.push(
-            { from: node.from, to: node.to, value: editing ? imageSource : hidden },
+            { from: node.from, to: node.to, value: hidden },
             { from: end, to: end, value: Decoration.widget({ widget, side: 1 }) },
           );
           return false;
@@ -499,7 +479,7 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
         const style = marks[name];
         if (style && node.to > node.from)
           ranges.push({ from: node.from, to: node.to, value: style });
-        if (!editing && hiddenMarks.has(name) && node.to > node.from) {
+        if (hiddenMarks.has(name) && node.to > node.from) {
           const after =
             name === 'HeaderMark' && state.sliceDoc(node.to, node.to + 1) === ' ' ? 1 : 0;
           ranges.push({ from: node.from, to: node.to + after, value: hidden });
@@ -510,7 +490,7 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
   for (const { from, to } of view.visibleRanges) {
     const start = state.doc.lineAt(from).from;
     for (const math of findMath(state.sliceDoc(start, to), start, (pos) => inCode(state, pos))) {
-      if (math.display || active.has(lineOf(math.from).number)) continue;
+      if (math.display) continue;
       ranges.push({
         from: math.from,
         to: math.to,
@@ -520,8 +500,12 @@ function build(view: EditorView, resolveImage: ImageResolver): DecorationSet {
   }
   ranges.sort((a, b) => a.from - b.from || a.value.startSide - b.value.startSide);
   const builder = new RangeSetBuilder<Decoration>();
-  for (const range of ranges) builder.add(range.from, range.to, range.value);
-  return builder.finish();
+  const atomic = new RangeSetBuilder<Decoration>();
+  for (const range of ranges) {
+    builder.add(range.from, range.to, range.value);
+    if (range.value.point && range.to > range.from) atomic.add(range.from, range.to, range.value);
+  }
+  return { decorations: builder.finish(), atomic: atomic.finish() };
 }
 
 const theme = EditorView.theme({
@@ -575,7 +559,6 @@ const theme = EditorView.theme({
     padding: 'calc(var(--spacing) * 1) calc(var(--spacing) * 3)',
   },
   '.cm-md-table th': { fontWeight: '600', backgroundColor: 'var(--inset)' },
-  '.cm-md-image-src': { color: 'var(--ink-3)', fontSize: '0.86em' },
   '.cm-md-image-block': { display: 'flow-root' },
   '.cm-md-image': {
     display: 'block',
@@ -644,26 +627,33 @@ export function markdownImageInsert(
 }
 
 export function markdownLivePreview(resolveImage: ImageResolver): Extension {
+  const blocks = blockField(resolveImage);
+  const inline = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      atomic: DecorationSet;
+      constructor(view: EditorView) {
+        ({ decorations: this.decorations, atomic: this.atomic } = build(view, resolveImage));
+      }
+      update(update: ViewUpdate) {
+        if (
+          update.docChanged ||
+          update.viewportChanged ||
+          syntaxTree(update.startState) !== syntaxTree(update.state)
+        )
+          ({ decorations: this.decorations, atomic: this.atomic } = build(
+            update.view,
+            resolveImage,
+          ));
+      }
+    },
+    { decorations: (plugin) => plugin.decorations },
+  );
   return [
     theme,
-    blockField(resolveImage),
-    ViewPlugin.fromClass(
-      class {
-        decorations: DecorationSet;
-        constructor(view: EditorView) {
-          this.decorations = build(view, resolveImage);
-        }
-        update(update: ViewUpdate) {
-          if (
-            update.docChanged ||
-            update.viewportChanged ||
-            update.selectionSet ||
-            syntaxTree(update.startState) !== syntaxTree(update.state)
-          )
-            this.decorations = build(update.view, resolveImage);
-        }
-      },
-      { decorations: (plugin) => plugin.decorations },
-    ),
+    blocks,
+    inline,
+    EditorView.atomicRanges.of((view) => view.state.field(blocks)),
+    EditorView.atomicRanges.of((view) => view.plugin(inline)?.atomic ?? Decoration.none),
   ];
 }

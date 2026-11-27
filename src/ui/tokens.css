@@ -271,6 +271,10 @@
   --text-ui-body--line-height: 1.25rem;
   --text-ui-body--font-weight: 400;
   --text-ui-body--letter-spacing: -0.006em;
+  --text-ui-chat-body: calc(var(--text-ui-body) + 1px);
+  --text-ui-chat-body--line-height: calc(var(--text-ui-body--line-height) + 2px);
+  --text-ui-chat-body--font-weight: var(--text-ui-body--font-weight);
+  --text-ui-chat-body--letter-spacing: var(--text-ui-body--letter-spacing);
   --text-ui-callout: 0.8125rem;
   --text-ui-callout--line-height: 1.125rem;
   --text-ui-callout--font-weight: 400;

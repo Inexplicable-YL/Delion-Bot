@@ -40,16 +40,10 @@ describe('markdownLivePreview', () => {
     expect(editor.state.sliceDoc()).toBe(doc);
   });
 
-  it('光标不在的行隐藏标记，光标所在行显示原文', () => {
-    const away = mount('# 标题\n\n**粗体**', 0);
-    const boldLine = away.contentDOM.querySelectorAll('.cm-line')[2]!;
-    expect(boldLine.textContent).toBe('粗体');
-    expect(away.contentDOM.querySelector('.cm-md-h1')?.textContent).toBe('# 标题');
-    away.destroy();
-
-    const here = mount('# 标题\n\n**粗体**', '# 标题\n\n**'.length);
-    expect(here.contentDOM.querySelectorAll('.cm-line')[2]!.textContent).toBe('**粗体**');
-    expect(here.contentDOM.querySelector('.cm-md-h1')?.textContent).toBe('标题');
+  it('光标所在行也隐藏标记，只显示渲染后的文字', () => {
+    const editor = mount('# 标题\n\n**粗体**', '# 标题\n\n**'.length);
+    expect(editor.contentDOM.querySelectorAll('.cm-line')[2]!.textContent).toBe('粗体');
+    expect(editor.contentDOM.querySelector('.cm-md-h1')?.textContent).toBe('标题');
   });
 
   it('粘贴图片：落盘后在光标处插入相对路径引用，其余正文不动', async () => {

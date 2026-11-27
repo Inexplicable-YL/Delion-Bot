@@ -354,6 +354,42 @@ svg[viewBox='0 0 24 24'][data-slot='icon']:is(.size-5, .size-6),
   font-size: 0.8125rem;
 }
 
+:where([data-user-bubble], [data-assistant-body]) {
+  & h1 {
+    font-size: calc(var(--text-ui-title-3) + 1px);
+    line-height: var(--text-ui-chat-body--line-height);
+  }
+
+  & :is(h2, h3, h6, th, td, [data-streamdown='code-block-body']) {
+    font-size: var(--text-ui-chat-body);
+    line-height: var(--text-ui-chat-body--line-height);
+  }
+
+  & h4 {
+    font-size: calc(var(--text-lg) + 1px);
+    line-height: calc(var(--text-lg) * var(--text-lg--line-height) + 2px);
+  }
+
+  & h5 {
+    font-size: calc(var(--text-base) + 1px);
+    line-height: calc(var(--text-base) * var(--text-base--line-height) + 2px);
+  }
+
+  & :not(pre) > code {
+    font-size: calc(var(--text-ui-callout) + 1px);
+    line-height: calc(var(--text-ui-callout--line-height) + 2px);
+  }
+
+  & table {
+    font-size: calc(var(--text-ui-subhead) + 1px);
+    line-height: calc(var(--text-ui-subhead--line-height) + 2px);
+  }
+
+  & [data-streamdown='code-block-body'] > pre > code > span::before {
+    font-size: calc(var(--text-ui-callout) + 1px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

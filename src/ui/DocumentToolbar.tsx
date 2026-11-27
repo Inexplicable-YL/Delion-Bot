@@ -89,7 +89,6 @@ export function DocumentToolbar({
   onModeChange,
   previewLabel = '返回即时渲染',
   saving,
-  dirty,
   failed,
   onOpenInFolder,
   onReload,
@@ -101,7 +100,6 @@ export function DocumentToolbar({
   onModeChange?: (mode: DocumentMode) => void;
   previewLabel?: string;
   saving?: boolean;
-  dirty?: boolean;
   failed?: boolean;
   onOpenInFolder?: () => void;
   onReload: () => void;
@@ -158,11 +156,6 @@ export function DocumentToolbar({
           <>
             <Spinner size="xs" />
             保存中…
-          </>
-        ) : dirty ? (
-          <>
-            <span aria-hidden className="size-1.5 rounded-pill bg-current" />
-            未保存
           </>
         ) : null}
       </span>

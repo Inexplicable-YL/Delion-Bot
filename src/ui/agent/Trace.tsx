@@ -9,7 +9,7 @@ import { useNow } from '../use-now';
 import { ThinkingMark } from './ThinkingMark';
 
 const toggleClass =
-  'group/row flex h-7 w-full min-w-0 items-center gap-2 text-left text-ui-body text-ink-2 transition-colors duration-base hover:text-ink focus-visible:outline-none focus-visible:text-ink aria-expanded:text-ink';
+  'group/row flex h-7 w-full min-w-0 items-center gap-2 text-left text-ui-chat-body text-ink-2 transition-colors duration-base hover:text-ink focus-visible:outline-none focus-visible:text-ink aria-expanded:text-ink';
 
 const nestedClass = 'ml-1.75 border-l border-line pl-4';
 

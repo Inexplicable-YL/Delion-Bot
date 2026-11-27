@@ -155,68 +155,72 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       aria-label={`文件：${draft.content.title}`}
     >
-      <DocumentToolbar
-        path={path.length ? path : [draft.content.title]}
-        mode={mode}
-        onModeChange={markdown ? (next) => rememberNoteMode(entryId, next) : undefined}
-        saving={draft.saving}
-        dirty={dirty}
-        failed={draft.error !== null || error !== null}
-        onOpenInFolder={
-          parseRemoteNodeId(entryId) || isChatStoragePath(directory, entryId)
-            ? undefined
-            : openInFolder
-        }
-        actions={
-          markdown ? (
-            <ExportMenu
-              filename={draft.content.title}
-              text={draft.text}
-              resolveImage={(src) => source.resolveImage(entryId, src)}
-            />
-          ) : (
-            <DownloadFileButton entryId={entryId} />
-          )
-        }
-        onReload={() => {
-          if (dirty) setConfirmReload(true);
-          else runReload();
-        }}
-      />
-      {(error || draft.error) && (
-        <div
-          role="alert"
-          className="shrink-0 break-words border-b px-4 py-2 text-ui-subhead text-danger"
-        >
-          {error ?? draft.error}
-          {error && (
-            <button className="ml-3 underline" onClick={runReload}>
-              重试
-            </button>
-          )}
-          {draft.error && (
-            <>
-              <button className="ml-3 underline" onClick={() => void source.save(entryId)}>
-                重试保存
-              </button>
-              {source.saveAsNewNote && (
-                <button
-                  className="ml-3 underline"
-                  onClick={() => source.saveAsNewNote?.(entryId, draft.text)}
-                >
-                  另存为新笔记
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      )}
-      {draft.content.truncated && (
-        <p className="shrink-0 border-b px-4 py-2 text-ui-subhead text-ink-2">
-          文件超过 1 MB，这里只读显示开头部分。要编辑完整内容请用外部编辑器打开。
-        </p>
-      )}
       <MarkdownEditor
+        toolbar={(controls) => (
+          <>
+            <DocumentToolbar
+              controls={markdown ? controls : undefined}
+              path={path.length ? path : [draft.content.title]}
+              mode={mode}
+              onModeChange={markdown ? (next) => rememberNoteMode(entryId, next) : undefined}
+              saving={draft.saving}
+              failed={draft.error !== null || error !== null}
+              onOpenInFolder={
+                parseRemoteNodeId(entryId) || isChatStoragePath(directory, entryId)
+                  ? undefined
+                  : openInFolder
+              }
+              actions={
+                markdown ? (
+                  <ExportMenu
+                    filename={draft.content.title}
+                    text={draft.text}
+                    resolveImage={(src) => source.resolveImage(entryId, src)}
+                  />
+                ) : (
+                  <DownloadFileButton entryId={entryId} />
+                )
+              }
+              onReload={() => {
+                if (dirty) setConfirmReload(true);
+                else runReload();
+              }}
+            />
+            {(error || draft.error) && (
+              <div
+                role="alert"
+                className="shrink-0 break-words border-b px-4 py-2 text-ui-subhead text-danger"
+              >
+                {error ?? draft.error}
+                {error && (
+                  <button className="ml-3 underline" onClick={runReload}>
+                    重试
+                  </button>
+                )}
+                {draft.error && (
+                  <>
+                    <button className="ml-3 underline" onClick={() => void source.save(entryId)}>
+                      重试保存
+                    </button>
+                    {source.saveAsNewNote && (
+                      <button
+                        className="ml-3 underline"
+                        onClick={() => source.saveAsNewNote?.(entryId, draft.text)}
+                      >
+                        另存为新笔记
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+            {draft.content.truncated && (
+              <p className="shrink-0 border-b px-4 py-2 text-ui-subhead text-ink-2">
+                文件超过 1 MB，这里只读显示开头部分。要编辑完整内容请用外部编辑器打开。
+              </p>
+            )}
+          </>
+        )}
         key={markdown ? mode : 'code'}
         value={draft.text}
         filename={draft.content.title}

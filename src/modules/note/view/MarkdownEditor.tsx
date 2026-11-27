@@ -1,5 +1,19 @@
-import { useId, useRef, useState } from 'react';
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
+import { useId, useRef, useState, type ReactNode } from 'react';
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+  redo,
+  redoDepth,
+  undo,
+  undoDepth,
+} from '@codemirror/commands';
+import {
+  ArrowUturnLeftIcon as Undo,
+  ArrowUturnRightIcon as Redo,
+  DocumentDuplicateIcon as Copy,
+} from '@heroicons/react/24/outline';
 import { markdown, markdownKeymap, markdownLanguage } from '@codemirror/lang-markdown';
 import { LanguageDescription, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
@@ -10,6 +24,11 @@ import { search, searchKeymap } from '@codemirror/search';
 import { codeHighlightStyle, markdownHighlightStyle, useEditorSettings } from '../../preview/view';
 import { markdownLivePreview, type ImageResolver } from './live-preview';
 import { formatByName } from '../../../core/protocol/files';
+import { errorMessage } from '../../../core/protocol/contract';
+import { DocumentToolbarButton, DocumentToolbarDivider } from '../../../ui/DocumentToolbar';
+import { showToast } from '../../../ui/Toast';
+import { selectionFormat, type SelectionFormat } from './markdown-format';
+import { SelectionToolbar } from './SelectionToolbar';
 
 const editorTheme = EditorView.theme({
   '&': {
@@ -41,7 +60,7 @@ const editorTheme = EditorView.theme({
     paddingLeft: '1.5rem',
   },
   '&.cm-source-file .cm-gutters': { borderRight: '1px solid var(--line)' },
-  '&.cm-document': { fontSize: '1rem' },
+  '&.cm-document': { fontSize: 'calc(1rem - 1px)' },
   '&.cm-document .cm-scroller': {
     fontFamily: 'var(--font-sans)',
     lineHeight: '1.75',
@@ -76,6 +95,7 @@ const editorCallbacks = Facet.define<EditorCallbacks, EditorCallbacks>({
 const callbacksConf = new Compartment();
 
 type EditorOptions = {
+  value: string;
   filename: string | undefined;
   wordWrap: boolean;
   readOnly: boolean;
@@ -88,7 +108,38 @@ type EditorHandlers = {
   onSave: () => void;
   finishComposition: () => void;
   onCursor: (cursor: { line: number; column: number }) => void;
+  onState: (view: EditorView) => void;
 };
+
+type EditorSnapshot = {
+  canUndo: boolean;
+  canRedo: boolean;
+  focused: boolean;
+  format: SelectionFormat | null;
+};
+
+function snapshotOf(view: EditorView): EditorSnapshot {
+  const { state } = view;
+  return {
+    canUndo: undoDepth(state) > 0,
+    canRedo: redoDepth(state) > 0,
+    focused: view.hasFocus,
+    format: state.selection.main.empty ? null : selectionFormat(state),
+  };
+}
+
+function selectionRect(view: EditorView | undefined) {
+  if (!view) return new DOMRect();
+  const { from, to } = view.state.selection.main;
+  const start = view.coordsAtPos(from, 1);
+  const end = view.coordsAtPos(to, -1);
+  if (!start || !end) return new DOMRect();
+  const height = end.bottom - start.top;
+  if (end.top === start.top)
+    return new DOMRect(start.left, start.top, Math.max(end.right - start.left, 1), height);
+  const content = view.contentDOM.getBoundingClientRect();
+  return new DOMRect(content.left, start.top, content.width, height);
+}
 
 type EditorSession = { state: EditorState; scrollTop: number };
 
@@ -141,6 +192,7 @@ export function MarkdownEditor({
   readOnly = false,
   extensions: extraExtensions = [],
   alwaysWrap = false,
+  toolbar,
 }: {
   value: string;
   filename?: string;
@@ -157,6 +209,7 @@ export function MarkdownEditor({
   readOnly?: boolean;
   extensions?: Extension[];
   alwaysWrap?: boolean;
+  toolbar?: (controls: ReactNode) => ReactNode;
 }) {
   const editor = useRef<{
     view: EditorView;
@@ -166,6 +219,16 @@ export function MarkdownEditor({
   const generatedKey = useId();
   const [instanceKey] = useState(editorStateKey ?? generatedKey);
   const [cursor, setCursor] = useState({ line: 1, column: 1 });
+  const [snapshot, setSnapshot] = useState<EditorSnapshot | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [anchor] = useState(() => ({
+    current: {
+      getBoundingClientRect: () => selectionRect(editor.current?.view),
+      get contextElement() {
+        return editor.current?.view.contentDOM;
+      },
+    },
+  }));
   const documentLayout =
     livePreview !== undefined && languageForFilename(filename).kind === 'markdown';
   const wordWrap = useEditorSettings((state) => state.wordWrap) || alwaysWrap || documentLayout;
@@ -238,6 +301,8 @@ export function MarkdownEditor({
             column: update.state.selection.main.head - position.from + 1,
           });
         }
+        if (update.docChanged || update.selectionSet || update.focusChanged)
+          handlers.get(instanceKey)?.onState(update.view);
         if (
           update.docChanged &&
           !update.transactions.some((transaction) => transaction.annotation(externalSync))
@@ -309,12 +374,20 @@ export function MarkdownEditor({
         });
       },
       onCursor: setCursor,
+      onState: (view) => setSnapshot(snapshotOf(view)),
     };
+    const startSelecting = () => setSelecting(true);
+    const stopSelecting = () => setSelecting(false);
     handlers.set(instanceKey, boundHandlers);
     current.scrollDOM.addEventListener('scroll', handleScroll);
+    current.contentDOM.addEventListener('mousedown', startSelecting);
+    window.addEventListener('mouseup', stopSelecting);
     editor.current = { view: current, replaceText, options: null };
     updateCursor();
+    setSnapshot(snapshotOf(current));
     return () => {
+      current.contentDOM.removeEventListener('mousedown', startSelecting);
+      window.removeEventListener('mouseup', stopSelecting);
       if (!persistent || sessions.get(instanceKey) === session) {
         session.state = current.state;
         session.scrollTop = current.scrollDOM.scrollTop;
@@ -330,7 +403,7 @@ export function MarkdownEditor({
     const mounted = editor.current;
     if (!element || !mounted) return;
     const { view: current, options: previous } = mounted;
-    mounted.options = { filename, wordWrap, readOnly, ariaLabel, placeholderText };
+    mounted.options = { value, filename, wordWrap, readOnly, ariaLabel, placeholderText };
     const effects = [];
     if (current.state.facet(editorCallbacks) !== callbacks)
       effects.push(callbacksConf.reconfigure(editorCallbacks.of(callbacks)));
@@ -367,11 +440,55 @@ export function MarkdownEditor({
         });
     }
     if (effects.length) current.dispatch({ effects });
-    mounted.replaceText(value);
+    if (previous?.value !== value) mounted.replaceText(value);
+  };
+  const run = (command?: (view: EditorView) => unknown) => {
+    const view = editor.current?.view;
+    if (!view) return;
+    view.focus();
+    command?.(view);
+  };
+  const copy = () => {
+    const text = editor.current?.view.state.sliceDoc() ?? value;
+    navigator.clipboard
+      .writeText(text)
+      .catch((cause) =>
+        showToast({ variant: 'error', title: '复制失败', description: errorMessage(cause) }),
+      );
   };
   return (
     <div ref={syncEditor} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {toolbar?.(
+        <>
+          <DocumentToolbarButton label="复制全文" onClick={copy}>
+            <Copy />
+          </DocumentToolbarButton>
+          <DocumentToolbarDivider />
+          <DocumentToolbarButton
+            label="撤销"
+            disabled={readOnly || !snapshot?.canUndo}
+            onClick={() => run(undo)}
+          >
+            <Undo />
+          </DocumentToolbarButton>
+          <DocumentToolbarButton
+            label="重做"
+            disabled={readOnly || !snapshot?.canRedo}
+            onClick={() => run(redo)}
+          >
+            <Redo />
+          </DocumentToolbarButton>
+        </>,
+      )}
       <div ref={attachEditor} className="min-h-0 w-full flex-1 overflow-hidden" />
+      {documentLayout && !readOnly && snapshot?.format && (
+        <SelectionToolbar
+          anchor={anchor}
+          format={snapshot.format}
+          visible={snapshot.focused && !selecting}
+          run={run}
+        />
+      )}
       {editorStateKey !== undefined && languageForFilename(filename).kind !== 'markdown' && (
         <div className="flex h-6 shrink-0 items-center justify-end border-t px-3 text-ui-subhead text-ink-2">
           行 {cursor.line}，列 {cursor.column}

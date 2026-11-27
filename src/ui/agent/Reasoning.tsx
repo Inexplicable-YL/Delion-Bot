@@ -53,7 +53,7 @@ export function Reasoning({
         <div
           data-reasoning-body
           className={cn(
-            'overflow-y-auto text-ui-body whitespace-pre-wrap text-ink-2',
+            'overflow-y-auto text-ui-chat-body whitespace-pre-wrap text-ink-2',
             streaming ? 'flex max-h-40 flex-col-reverse' : 'max-h-72',
           )}
         >
