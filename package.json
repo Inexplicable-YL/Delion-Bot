@@ -58,6 +58,7 @@
     "@earendil-works/pi-ai": "1.1.0",
     "@earendil-works/pi-coding-agent": "1.1.0",
     "@earendil-works/pi-mcp": "1.1.0",
+    "@replit/codemirror-indentation-markers": "6.5.3",
     "better-sqlite3": "13.0.3",
     "electron-updater": "6.8.10",
     "node-pty": "1.1.0",

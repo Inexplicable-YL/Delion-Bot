@@ -155,6 +155,7 @@ export function Explorer({
   const virtualizer = useVirtualizer({
     count: visible.length,
     getScrollElement: scrollElement,
+    initialOffset: () => scrollElement()?.scrollTop ?? 0,
     estimateSize: () => rowHeight,
     getItemKey,
     scrollMargin,
@@ -168,7 +169,8 @@ export function Explorer({
     },
   });
   const [position] = useState(() => ({
-    selection: '',
+    selected: null as string | null,
+    folderRevealKey: undefined as string | undefined,
     pendingAnchor: -1,
     frame: 0,
     focus: null as number | null,
@@ -198,7 +200,6 @@ export function Explorer({
     return () => {
       observer.disconnect();
       cancelAnimationFrame(position.frame);
-      position.selection = '';
       position.pendingAnchor = -1;
     };
   });
@@ -206,33 +207,37 @@ export function Explorer({
     root.current = tree;
     if (!tree) return;
     onTreeCommit?.();
-    const selection = JSON.stringify([virtualized, selected, expanded, folderReveal?.key]);
-    const selectionChanged = position.selection !== selection;
+    const folderRevealKey = folderReveal?.key;
+    const selectionChanged =
+      position.selected !== selected ||
+      (folderRevealKey !== undefined && position.folderRevealKey !== folderRevealKey);
     const pendingChanged = position.pendingAnchor !== pendingAnchor;
-    const scrollBehavior = () =>
-      window.matchMedia('(pointer: fine) and (prefers-reduced-motion: no-preference)').matches
+    const syncPosition = () => {
+      position.selected = selected;
+      position.folderRevealKey = folderRevealKey;
+      position.pendingAnchor = pendingAnchor;
+      if (virtualized && pendingChanged && pendingAnchor >= 0) {
+        virtualizer.scrollToIndex(pendingAnchor, { align: 'auto' });
+        return;
+      }
+      if (!selectionChanged || selected === null) return;
+      const index = visible.findIndex((row) => row.item.id === selected);
+      if (index < 0) return;
+      const behavior = window.matchMedia(
+        '(pointer: fine) and (prefers-reduced-motion: no-preference)',
+      ).matches
         ? 'smooth'
         : 'auto';
-    position.selection = selection;
-    position.pendingAnchor = pendingAnchor;
-    if (virtualized && (selectionChanged || pendingChanged)) {
-      cancelAnimationFrame(position.frame);
-      position.frame = requestAnimationFrame(() => {
-        if (pendingChanged && pendingAnchor >= 0) {
-          virtualizer.scrollToIndex(pendingAnchor, { align: 'auto' });
-          return;
-        }
-        if (selectionChanged && selected) {
-          const index = visible.findIndex((row) => row.item.id === selected);
-          if (index >= 0)
-            virtualizer.scrollToIndex(index, { align: 'auto', behavior: scrollBehavior() });
-        }
-      });
-    }
-    if (!virtualized && selectionChanged && selected)
-      tree
-        .querySelector('[role="treeitem"][aria-selected="true"]')
-        ?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: scrollBehavior() });
+      if (virtualized) virtualizer.scrollToIndex(index, { align: 'auto', behavior });
+      else
+        tree
+          .querySelector(`[data-tree-index="${index}"]`)
+          ?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior });
+    };
+    cancelAnimationFrame(position.frame);
+    if (virtualized && (selectionChanged || pendingChanged))
+      position.frame = requestAnimationFrame(syncPosition);
+    else syncPosition();
   };
   const virtualRows = virtualizer.getVirtualItems();
   const rendered = virtualized

@@ -1,8 +1,26 @@
 import { HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
+import { EditorView } from '@codemirror/view';
+import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 
 const fade = (role: string, percent: number) =>
   `color-mix(in srgb, var(--syntax-${role}) ${percent}%, transparent)`;
+
+export const codeIndentGuides = [
+  indentationMarkers({
+    thickness: 1,
+    colors: {
+      light: 'var(--line)',
+      dark: 'var(--line)',
+      activeLight: 'var(--line-strong)',
+      activeDark: 'var(--line-strong)',
+    },
+  }),
+  EditorView.theme({
+    '.cm-line': { paddingLeft: '0' },
+    '.cm-indent-markers::before': { left: '-0.5ch' },
+  }),
+];
 
 export const codeHighlightStyle = HighlightStyle.define([
   { tag: t.comment, color: 'var(--syntax-comment)' },

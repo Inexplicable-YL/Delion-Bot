@@ -26,6 +26,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
@@ -81,6 +82,97 @@ function dragOnto(from: string, to: string) {
       row(target).dispatchEvent(event);
     });
 }
+
+it('keeps the scroll position when folders change while a file is open', () => {
+  const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+  const render = (expanded: string[], selected = 'a', folderReveal?: { id: string; key: string }) =>
+    act(() =>
+      root.render(
+        <Explorer
+          expanded={expanded}
+          folderReveal={folderReveal}
+          items={items}
+          label="tree"
+          onExpand={() => {}}
+          onSelect={() => {}}
+          selected={selected}
+        />,
+      ),
+    );
+
+  render([]);
+  expect(scroll.mock.contexts).toEqual([row('a.md')]);
+  scroll.mockClear();
+
+  render(['docs']);
+  render([]);
+  expect(scroll).not.toHaveBeenCalled();
+
+  render([], 'b');
+  expect(scroll.mock.contexts).toEqual([row('b.md')]);
+  scroll.mockClear();
+
+  render(['docs'], 'docs', { id: 'docs', key: 'first' });
+  render(['docs'], 'docs', { id: 'docs', key: 'second' });
+  render(['docs'], 'docs');
+  expect(scroll.mock.contexts).toEqual([row('docs'), row('docs')]);
+});
+
+it('keeps the scroll position when a folder changes the tree rendering mode', async () => {
+  const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+  const scrollTo = vi.fn(({ top }: ScrollToOptions) => {
+    if (top !== undefined) container.scrollTop = top;
+  });
+  container.style.overflowY = 'auto';
+  Object.defineProperties(container, {
+    clientHeight: { value: 120 },
+    scrollHeight: { value: 4000 },
+    scrollTo: { value: scrollTo },
+  });
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+  const treeItems = [
+    ...items,
+    ...Array.from({ length: 15 }, (_, index) => ({
+      id: `root-${index}`,
+      parentId: null,
+      name: `root-${index}.md`,
+    })),
+    ...Array.from({ length: 100 }, (_, index) => ({
+      id: `child-${index}`,
+      parentId: 'docs',
+      name: `child-${index}.md`,
+    })),
+  ];
+  const render = (expanded: string[]) =>
+    act(() =>
+      root.render(
+        <Explorer
+          expanded={expanded}
+          items={treeItems}
+          label="tree"
+          onExpand={() => {}}
+          onSelect={() => {}}
+          selected="a"
+        />,
+      ),
+    );
+
+  render([]);
+  scroll.mockClear();
+  container.scrollTop = 200;
+  render(['docs']);
+  await act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  expect(container.scrollTop).toBe(200);
+  render([]);
+  expect(scroll).not.toHaveBeenCalled();
+});
 
 describe('Explorer multi-selection', () => {
   it('extends from the current file with ctrl and shift without opening anything', () => {

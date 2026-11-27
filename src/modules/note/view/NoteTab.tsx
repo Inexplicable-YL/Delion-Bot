@@ -159,12 +159,10 @@ export function NoteTab({ tabId, groupId }: { tabId: TabId; groupId: string }) {
         toolbar={(controls) => (
           <>
             <DocumentToolbar
-              controls={markdown ? controls : undefined}
+              controls={markdown || !readOnly ? controls : undefined}
               path={path.length ? path : [draft.content.title]}
               mode={mode}
               onModeChange={markdown ? (next) => rememberNoteMode(entryId, next) : undefined}
-              saving={draft.saving}
-              failed={draft.error !== null || error !== null}
               onOpenInFolder={
                 parseRemoteNodeId(entryId) || isChatStoragePath(directory, entryId)
                   ? undefined

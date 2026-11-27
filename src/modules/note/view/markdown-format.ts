@@ -107,7 +107,8 @@ export function setBlockType(view: EditorView, type: BlockType) {
   let index = 0;
   for (let line = state.doc.lineAt(from); ; line = state.doc.line(line.number + 1)) {
     if (line.text.trim() && blockTypeOf(line.text) !== type) {
-      const [prefix, indent] = blockPrefix.exec(line.text)!;
+      const match = blockPrefix.exec(line.text)!;
+      const indent = match[1]!;
       const marker =
         type === 'paragraph'
           ? indent
@@ -118,7 +119,7 @@ export function setBlockType(view: EditorView, type: BlockType) {
               : type === 'ordered'
                 ? `${indent}${index + 1}. `
                 : `${indent.trimStart()}${'#'.repeat(Number(type.slice('heading'.length)))} `;
-      changes.push({ from: line.from, to: line.from + prefix.length, insert: marker });
+      changes.push({ from: line.from, to: line.from + match[0].length, insert: marker });
     }
     if (line.text.trim()) index += 1;
     if (line.to >= to) break;

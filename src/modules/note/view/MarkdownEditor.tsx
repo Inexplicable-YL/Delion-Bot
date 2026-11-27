@@ -21,7 +21,12 @@ import { Annotation, Compartment, EditorState, Facet, Transaction } from '@codem
 import type { Extension } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, placeholder } from '@codemirror/view';
 import { search, searchKeymap } from '@codemirror/search';
-import { codeHighlightStyle, markdownHighlightStyle, useEditorSettings } from '../../preview/view';
+import {
+  codeHighlightStyle,
+  codeIndentGuides,
+  markdownHighlightStyle,
+  useEditorSettings,
+} from '../../preview/view';
 import { markdownLivePreview, type ImageResolver } from './live-preview';
 import { formatByName } from '../../../core/protocol/files';
 import { errorMessage } from '../../../core/protocol/contract';
@@ -59,7 +64,6 @@ const editorTheme = EditorView.theme({
     color: 'var(--ink-3)',
     paddingLeft: '1.5rem',
   },
-  '&.cm-source-file .cm-gutters': { borderRight: '1px solid var(--line)' },
   '&.cm-document': { fontSize: 'calc(1rem - 1px)' },
   '&.cm-document .cm-scroller': {
     fontFamily: 'var(--font-sans)',
@@ -107,7 +111,6 @@ type EditorHandlers = {
   onChange: (text: string) => void;
   onSave: () => void;
   finishComposition: () => void;
-  onCursor: (cursor: { line: number; column: number }) => void;
   onState: (view: EditorView) => void;
 };
 
@@ -164,9 +167,10 @@ export function lineSeparatorOf(text: string): '\r\n' | '\n' {
   return first > 0 && text[first - 1] === '\r' ? '\r\n' : '\n';
 }
 
-function layoutClass(language: ResolvedLanguage, documentLayout: boolean) {
-  if (language.kind !== 'markdown') return 'cm-source-file';
-  return documentLayout ? 'cm-document' : '';
+function layoutOf(language: ResolvedLanguage, documentLayout: boolean): Extension {
+  if (language.kind !== 'markdown')
+    return [EditorView.editorAttributes.of({ class: 'cm-source-file' }), codeIndentGuides];
+  return EditorView.editorAttributes.of({ class: documentLayout ? 'cm-document' : '' });
 }
 
 function languageForFilename(filename: string | undefined): ResolvedLanguage {
@@ -218,7 +222,6 @@ export function MarkdownEditor({
   } | null>(null);
   const generatedKey = useId();
   const [instanceKey] = useState(editorStateKey ?? generatedKey);
-  const [cursor, setCursor] = useState({ line: 1, column: 1 });
   const [snapshot, setSnapshot] = useState<EditorSnapshot | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [anchor] = useState(() => ({
@@ -257,9 +260,7 @@ export function MarkdownEditor({
       ...extraExtensions,
       ...(showLineNumbers && !documentLayout ? [lineNumbers()] : []),
       wrappingConf.of(wordWrap ? EditorView.lineWrapping : []),
-      layoutConf.of(
-        EditorView.editorAttributes.of({ class: layoutClass(initial, documentLayout) }),
-      ),
+      layoutConf.of(layoutOf(initial, documentLayout)),
       placeholderConf.of(placeholder(placeholderText)),
       search({ top: true }),
       keymap.of([
@@ -294,13 +295,6 @@ export function MarkdownEditor({
       EditorView.updateListener.of((update) => {
         const session = sessions.get(instanceKey) ?? transient.current;
         if (session) session.state = update.state;
-        if (update.selectionSet) {
-          const position = update.state.doc.lineAt(update.state.selection.main.head);
-          handlers.get(instanceKey)?.onCursor({
-            line: position.number,
-            column: update.state.selection.main.head - position.from + 1,
-          });
-        }
         if (update.docChanged || update.selectionSet || update.focusChanged)
           handlers.get(instanceKey)?.onState(update.view);
         if (
@@ -350,13 +344,6 @@ export function MarkdownEditor({
       });
     };
     current.scrollDOM.scrollTop = session.scrollTop;
-    const updateCursor = () => {
-      const position = current.state.doc.lineAt(current.state.selection.main.head);
-      setCursor({
-        line: position.number,
-        column: current.state.selection.main.head - position.from + 1,
-      });
-    };
     const handleScroll = () => {
       session.scrollTop = current.scrollDOM.scrollTop;
       current.state.facet(editorCallbacks).onScroll(session.scrollTop);
@@ -373,7 +360,6 @@ export function MarkdownEditor({
           if (pendingText !== null) replaceText(pendingText);
         });
       },
-      onCursor: setCursor,
       onState: (view) => setSnapshot(snapshotOf(view)),
     };
     const startSelecting = () => setSelecting(true);
@@ -383,7 +369,6 @@ export function MarkdownEditor({
     current.contentDOM.addEventListener('mousedown', startSelecting);
     window.addEventListener('mouseup', stopSelecting);
     editor.current = { view: current, replaceText, options: null };
-    updateCursor();
     setSnapshot(snapshotOf(current));
     return () => {
       current.contentDOM.removeEventListener('mousedown', startSelecting);
@@ -422,11 +407,7 @@ export function MarkdownEditor({
     if (!previous || previous.filename !== filename) {
       const resolved = languageForFilename(filename);
       effects.push(
-        layoutConf.reconfigure(
-          EditorView.editorAttributes.of({
-            class: layoutClass(resolved, livePreview !== undefined),
-          }),
-        ),
+        layoutConf.reconfigure(layoutOf(resolved, livePreview !== undefined)),
         languageConf.reconfigure(
           resolved.kind === 'markdown'
             ? markdown({ base: markdownLanguage, codeLanguages: languages })
@@ -488,11 +469,6 @@ export function MarkdownEditor({
           visible={snapshot.focused && !selecting}
           run={run}
         />
-      )}
-      {editorStateKey !== undefined && languageForFilename(filename).kind !== 'markdown' && (
-        <div className="flex h-6 shrink-0 items-center justify-end border-t px-3 text-ui-subhead text-ink-2">
-          行 {cursor.line}，列 {cursor.column}
-        </div>
       )}
     </div>
   );

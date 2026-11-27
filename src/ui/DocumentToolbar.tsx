@@ -5,12 +5,11 @@ import {
   MagnifyingGlassMinusIcon as ZoomOut,
   MagnifyingGlassPlusIcon as ZoomIn,
 } from '@heroicons/react/24/outline';
-import type { ComponentProps, ReactNode } from 'react';
+import { useState, type ComponentProps, type ReactNode } from 'react';
 import { cn } from './cn';
 import { FileIcon } from './FileIcon';
 import { FitWidthIcon } from './FitWidthIcon';
 import { IconButton } from './IconButton';
-import { Spinner } from './Spinner';
 
 export type DocumentMode = 'live' | 'source';
 
@@ -88,8 +87,6 @@ export function DocumentToolbar({
   mode = 'live',
   onModeChange,
   previewLabel = '返回即时渲染',
-  saving,
-  failed,
   onOpenInFolder,
   onReload,
   controls,
@@ -99,67 +96,72 @@ export function DocumentToolbar({
   mode?: DocumentMode;
   onModeChange?: (mode: DocumentMode) => void;
   previewLabel?: string;
-  saving?: boolean;
-  failed?: boolean;
   onOpenInFolder?: () => void;
   onReload: () => void;
   controls?: ReactNode;
   actions?: ReactNode;
 }) {
   const name = path.at(-1) ?? '';
+  const directories = path.slice(0, -1);
   const source = mode === 'source';
+  const [showDirectories, setShowDirectories] = useState(false);
+  const fitPath = (nav: HTMLElement | null) => {
+    if (!nav || directories.length === 0) return;
+    const slot = nav.parentElement!;
+    const list = nav.querySelector('ol')!;
+    const parents = list.firstElementChild!;
+    const filename = list.lastElementChild!;
+    const measure = () => {
+      const chromeWidth = nav.getBoundingClientRect().width - list.getBoundingClientRect().width;
+      const pathWidth = parents.getBoundingClientRect().width + filename.scrollWidth;
+      setShowDirectories(chromeWidth + pathWidth <= slot.getBoundingClientRect().width);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(slot);
+    observer.observe(parents);
+    observer.observe(filename);
+    return () => observer.disconnect();
+  };
   return (
     <div
       className="flex min-h-row-regular min-w-0 shrink-0 items-center gap-3 px-app text-ui-callout"
       role="toolbar"
       aria-label="文件操作"
     >
-      <nav
-        aria-label="文件路径"
-        className="flex min-w-0 flex-1 items-center gap-2"
-        title={path.join(' / ')}
-      >
-        <FileIcon path={name} className="size-4 shrink-0 text-ink-2" />
-        <ol className="flex min-w-0 items-center gap-1.5">
-          {path.map((segment, index) => {
-            const last = index === path.length - 1;
-            return (
+      <div className="flex min-w-0 flex-1">
+        <nav
+          aria-label="文件路径"
+          className="glass relative flex h-control-sm min-w-0 items-center gap-2 overflow-hidden rounded-pill px-3 dark:[--glass-rim:transparent]"
+          ref={fitPath}
+          title={path.join(' / ')}
+        >
+          <FileIcon path={name} className="size-4 shrink-0 text-ink-2" />
+          <ol className="flex min-w-0 items-center">
+            {directories.length > 0 && (
               <li
-                key={index}
                 className={cn(
-                  'flex min-w-0 items-center gap-1.5',
-                  last ? 'shrink-0 basis-auto' : 'shrink',
+                  'flex w-max shrink-0 items-center gap-1.5 pr-1.5 whitespace-nowrap text-ink-2',
+                  !showDirectories && 'invisible absolute',
                 )}
               >
-                {index > 0 && (
-                  <span aria-hidden className="shrink-0 text-ink-4">
-                    /
+                {directories.map((directory, index) => (
+                  <span key={index} className="flex items-center gap-1.5">
+                    <span>{directory}</span>
+                    <span aria-hidden className="text-ink-4">
+                      /
+                    </span>
                   </span>
-                )}
-                <span
-                  className={cn('truncate', last ? 'max-w-full text-ink' : 'text-ink-2')}
-                  aria-current={last ? 'page' : undefined}
-                >
-                  {segment}
-                </span>
+                ))}
               </li>
-            );
-          })}
-        </ol>
-      </nav>
-      <span
-        className={cn('flex shrink-0 items-center gap-1.5 text-ink-2', failed && 'text-danger')}
-        role="status"
-        aria-live="polite"
-      >
-        {saving ? (
-          <>
-            <Spinner size="xs" />
-            保存中…
-          </>
-        ) : null}
-      </span>
-      <div className="glass flex shrink-0 items-center gap-1 rounded-pill px-1 py-0.5">
+            )}
+            <li aria-current="page" className="min-w-0 truncate text-ink">
+              {name}
+            </li>
+          </ol>
+        </nav>
+      </div>
+      <div className="glass flex shrink-0 items-center gap-1 rounded-pill px-1 py-0.5 dark:[--glass-rim:transparent]">
         {controls && (
           <>
             {controls}

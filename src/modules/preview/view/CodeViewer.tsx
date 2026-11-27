@@ -6,7 +6,7 @@ import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { search, searchKeymap } from '@codemirror/search';
 import { useEditorSettings } from './editor-settings';
-import { codeHighlightStyle } from './syntax-highlight';
+import { codeHighlightStyle, codeIndentGuides } from './syntax-highlight';
 
 const viewerTheme = EditorView.theme({
   '&': {
@@ -27,7 +27,7 @@ const viewerTheme = EditorView.theme({
     textAlign: 'left',
   },
   '.cm-gutters': {
-    borderRight: '1px solid var(--line)',
+    border: 'none',
     backgroundColor: 'transparent',
     color: 'var(--ink-3)',
     paddingLeft: '1.5rem',
@@ -66,6 +66,7 @@ export function CodeViewer({
           EditorState.readOnly.of(true),
           languageConf.of([]),
           lineNumbers(),
+          codeIndentGuides,
           wrappingConf.of(wordWrap ? EditorView.lineWrapping : []),
           search({ top: true }),
           keymap.of([...searchKeymap, ...defaultKeymap]),
