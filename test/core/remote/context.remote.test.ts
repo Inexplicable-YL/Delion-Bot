@@ -13,6 +13,7 @@ import {
   syncRemoteContext,
   uploadSkillToRemote,
 } from '../../../src/core/remote/context';
+import { CONTEXT_FILE_NAMES } from '../../../src/core/capabilities/context-files';
 import {
   mirrorCommandText,
   remoteBackend,
@@ -76,6 +77,7 @@ describe('远端上下文镜像（真机）', () => {
       remoteId: 'r1',
       projectId: 'p1',
       remoteDir,
+      contextFileNames: CONTEXT_FILE_NAMES,
       home,
     });
     const mirror = contextMirrorRoot('r1', 'p1');
@@ -129,6 +131,7 @@ describe('远端上下文镜像（真机）', () => {
       remoteId: 'r2',
       projectId: 'p2',
       remoteDir,
+      contextFileNames: CONTEXT_FILE_NAMES,
     });
     const mirror = contextMirrorRoot('r2', 'p2');
     expect(context.skillPaths[0]).toBe(join(mirror, 'repo', '.agents', 'skills'));

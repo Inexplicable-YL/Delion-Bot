@@ -18,6 +18,7 @@ import { registerSearchProvider } from '../search';
 import {
   chooseDirectory,
   downloadFile,
+  downloadFiles,
   downloadRemote,
   exportOfficePdfOf,
   listRemote,
@@ -171,6 +172,7 @@ export const workspaceModule = defineModule({
     openLocal,
     openFile,
     downloadFile,
+    downloadFiles,
     chooseDirectory,
     layout: loadWorkspaceLayout,
     saveLayout: ({ projectId, layout }) => saveWorkspaceLayout(projectId, layout),

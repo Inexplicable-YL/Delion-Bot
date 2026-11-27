@@ -15,7 +15,7 @@ import { getLocalWorkspaceState, searchLocalWorkspace } from './local-tree';
 import { resourceRefSchema, workspaceContract, type WorkspaceState } from '../contract';
 import { dialog, shell } from 'electron';
 import { emit, hostPorts } from '../../../core/ports';
-import { mkdirSync, watch, type FSWatcher } from 'node:fs';
+import { constants, mkdirSync, watch, type FSWatcher } from 'node:fs';
 import { copyFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 
@@ -249,6 +249,37 @@ export async function downloadFile(id: string) {
   await copyFile(path, result.filePath);
   shell.showItemInFolder(result.filePath);
   return result.filePath;
+}
+
+export async function downloadFiles(ids: string[]) {
+  prepareStorage();
+  const paths = await Promise.all(ids.map((id) => workspaceFilePath(id)));
+  const result = await dialog.showOpenDialog({
+    title: '下载到文件夹',
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  const directory = result.filePaths[0];
+  if (result.canceled || !directory) return null;
+  for (const path of paths) {
+    const name = basename(path);
+    const dot = name.lastIndexOf('.');
+    const [stem, extension] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
+    for (let copy = 1; ; copy += 1) {
+      try {
+        await copyFile(
+          path,
+          join(directory, copy === 1 ? name : `${stem} (${copy})${extension}`),
+          constants.COPYFILE_EXCL,
+        );
+        break;
+      } catch (cause) {
+        if ((cause as NodeJS.ErrnoException).code !== 'EEXIST') throw cause;
+      }
+    }
+  }
+  const error = await shell.openPath(directory);
+  if (error) throw new Error(error);
+  return directory;
 }
 
 export async function chooseDirectory() {

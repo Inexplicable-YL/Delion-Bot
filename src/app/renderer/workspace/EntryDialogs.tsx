@@ -21,6 +21,7 @@ const ROOT_SELECT_VALUE = '__root__';
 export interface EntryDialogRequest {
   action: EntryAction | 'link';
   id: string | null;
+  ids?: string[];
   text?: string;
   initialTarget?: string;
 }
@@ -76,6 +77,7 @@ export function EntryDialogs({
   const [busy, setBusy] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
   const [wizard, setWizard] = useState(false);
+  const subjects = request?.ids ?? (request?.id ? [request.id] : []);
 
   if (request !== shownRequest) {
     setShownRequest(request);
@@ -134,9 +136,9 @@ export function EntryDialogs({
       let created: WorkspaceEntry | undefined;
       if (request.action === 'rename') await updateEntry(request.id!, { name });
       else if (request.action === 'move')
-        await updateEntry(request.id!, { parentId: target || null });
+        for (const id of subjects) await updateEntry(id, { parentId: target || null });
       else if (request.action === 'remove') {
-        await workspaceClient.remove(request.id!);
+        for (const id of subjects) await workspaceClient.remove(id);
         const remaining = (await workspaceClient.state()).entries;
         onRemoved?.(new Set(remaining.map((e) => e.id)));
       } else if (request.action === 'link') {
@@ -176,9 +178,27 @@ export function EntryDialogs({
       await save();
     } catch (error) {
       setModalError(errorMessage(error));
+      if (subjects.length > 1) await useWorkspaceStore.getState().refresh();
     }
     setBusy(false);
   };
+
+  const removalOf = (entry: WorkspaceEntry | undefined) =>
+    entry?.kind === 'project'
+      ? entry.remoteId
+        ? '从 Delion Bot 移除项目并删除其全部聊天记录；远端目录与文件保留。'
+        : '从 Delion Bot 移除项目并删除其全部聊天记录；目录与文件保留。'
+      : entry?.kind === 'source'
+        ? '解除此处的资料关联，原始资料保留。'
+        : '将文件或文件夹移至系统回收站。';
+  const removal =
+    subjects.length > 1
+      ? `移除选中的 ${subjects.length} 项。${[
+          ...new Set(
+            subjects.map((id) => removalOf(workspace.entries.find((entry) => entry.id === id))),
+          ),
+        ].join('')}`
+      : removalOf(workspace.entries.find((entry) => entry.id === request?.id));
 
   return (
     <Dialog
@@ -191,13 +211,7 @@ export function EntryDialogs({
         <DialogTitle>{request ? (titles[request.action] ?? '') : ''}</DialogTitle>
         <DialogDescription>
           {request?.action === 'remove'
-            ? workspace.entries.find((entry) => entry.id === request.id)?.kind === 'project'
-              ? workspace.entries.find((entry) => entry.id === request.id)?.remoteId
-                ? '从 Delion Bot 移除项目并删除其全部聊天记录；远端目录与文件保留。'
-                : '从 Delion Bot 移除项目并删除其全部聊天记录；目录与文件保留。'
-              : workspace.entries.find((entry) => entry.id === request.id)?.kind === 'source'
-                ? '解除此处的资料关联，原始资料保留。'
-                : '将文件或文件夹移至系统回收站。'
+            ? removal
             : request?.action === 'link'
               ? '在项目根目录引用资料，原位置保持不变。'
               : request?.action === 'note'
@@ -228,7 +242,7 @@ export function EntryDialogs({
                     ? projects
                     : workspace.entries.filter(
                         (e) =>
-                          (e.kind === 'folder' || e.kind === 'project') && e.id !== request?.id,
+                          (e.kind === 'folder' || e.kind === 'project') && !subjects.includes(e.id),
                       )
                   ).map((e) => (
                     <SelectItem key={e.id} value={e.id}>

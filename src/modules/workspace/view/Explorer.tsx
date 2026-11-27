@@ -7,6 +7,7 @@ import {
   type ReactNode,
   type KeyboardEvent,
   type DragEvent,
+  type MouseEvent,
 } from 'react';
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual';
 import {
@@ -35,6 +36,14 @@ export interface ExplorerItem {
 }
 
 export const explorerDragType = 'application/x-delion-entry';
+export const explorerSelectionDragType = 'application/x-delion-entries';
+
+export function draggedEntryIds(data: DataTransfer): string[] {
+  const selection = data.getData(explorerSelectionDragType);
+  if (selection) return JSON.parse(selection) as string[];
+  const entry = data.getData(explorerDragType);
+  return entry ? [entry] : [];
+}
 
 export interface ExplorerPending {
   parentId: string | null;
@@ -73,8 +82,8 @@ export function Explorer({
   onExpand: (id: string, open: boolean) => void;
   onSelect: (id: string) => void;
   label: string;
-  actions?: (item: ExplorerItem) => ReactNode;
-  onMove?: (dragId: string, targetId: string | null) => void;
+  actions?: (item: ExplorerItem, selection: string[]) => ReactNode;
+  onMove?: (dragIds: string[], targetId: string | null) => void;
   canDrop?: (dragId: string, targetId: string) => boolean;
   onImportFiles?: (files: File[], targetId: string | null) => void;
   onOpenToSide?: (id: string) => void;
@@ -85,7 +94,9 @@ export function Explorer({
 }) {
   'use no memo';
   const root = useRef<HTMLDivElement>(null);
-  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragIds, setDragIds] = useState<string[] | null>(null);
+  const [marked, setMarked] = useState<string[]>([]);
+  const [anchor, setAnchor] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [externalDropTarget, setExternalDropTarget] = useState<string | null>(null);
   const children = useMemo(() => {
@@ -237,6 +248,42 @@ export function Explorer({
     for (let current = id; current; current = parentOf.get(current) ?? null) chain.unshift(current);
     return chain;
   };
+  const visibleIds = new Set(visible.map((row) => row.item.id));
+  const selection = marked.filter((id) => visibleIds.has(id));
+  const isSelected = (id: string) => (selection.length ? selection.includes(id) : selected === id);
+  const selectionOf = (id: string) => (selection.includes(id) ? selection : [id]);
+  const clickRow = (event: MouseEvent, index: number, item: ExplorerItem) => {
+    const toggle = event.ctrlKey || event.metaKey;
+    if ((toggle || event.shiftKey) && !item.readOnly) {
+      const base = selection.length
+        ? selection
+        : selected && visibleIds.has(selected) && selected !== item.id
+          ? [selected]
+          : [];
+      if (event.shiftKey) {
+        const origin = anchor ?? base[0] ?? item.id;
+        const from = visible.findIndex((row) => row.item.id === origin);
+        const start = from < 0 ? index : Math.min(from, index);
+        const end = from < 0 ? index : Math.max(from, index);
+        const range = visible
+          .slice(start, end + 1)
+          .filter((row) => !row.item.readOnly)
+          .map((row) => row.item.id);
+        setMarked(toggle ? [...new Set([...base, ...range])] : range);
+        setAnchor(origin);
+      } else {
+        setMarked(
+          base.includes(item.id) ? base.filter((id) => id !== item.id) : [...base, item.id],
+        );
+        setAnchor(item.id);
+      }
+      return;
+    }
+    setMarked([]);
+    setAnchor(item.id);
+    if (event.altKey && onOpenToSide) onOpenToSide(item.id);
+    else onSelect(item.id);
+  };
   const selectedTrail = new Set<string>();
   for (
     let current: string | null | undefined = selected;
@@ -248,7 +295,7 @@ export function Explorer({
   }
   const typeahead = useRef({ query: '', at: 0 });
   const resetDrag = () => {
-    setDragId(null);
+    setDragIds(null);
     setDropTarget(null);
     setExternalDropTarget(null);
   };
@@ -276,7 +323,10 @@ export function Explorer({
         const parent = visible.findIndex((v) => v.item.id === item.parentId);
         if (parent >= 0) target = parent;
       }
+    } else if (event.key === 'Escape' && selection.length) {
+      setMarked([]);
     } else if (event.key === 'Enter' || event.key === ' ') {
+      setMarked([]);
       onSelect(item.id);
     } else if (
       event.key.length === 1 &&
@@ -299,11 +349,11 @@ export function Explorer({
     event.preventDefault();
     focusItem(target);
   };
-  const droppable = (drag: string, target: string) =>
-    drag !== target &&
+  const droppable = (drag: string[], target: string) =>
+    !drag.includes(target) &&
     !items.some((item) => item.id === target && item.readOnly) &&
-    (!canDrop || canDrop(drag, target));
-  const anchorBranch = (item: ExplorerItem, drag: string | null): string | null =>
+    (!canDrop || drag.every((id) => canDrop(id, target)));
+  const anchorBranch = (item: ExplorerItem, drag: string[] | null): string | null =>
     item.parentId !== null &&
     !items.some(
       (candidate) =>
@@ -325,10 +375,21 @@ export function Explorer({
             if (!onMove) return;
             setDropTarget(null);
             setExternalDropTarget(null);
+            const dragged = selectionOf(item.id);
+            const ids = dragged.filter(
+              (id) => !trailOf(parentOf.get(id) ?? null).some((parent) => dragged.includes(parent)),
+            );
             event.dataTransfer.effectAllowed = 'copyMove';
             event.dataTransfer.setData(explorerDragType, item.id);
-            event.dataTransfer.setData('text/plain', item.name);
-            setDragId(item.id);
+            event.dataTransfer.setData(explorerSelectionDragType, JSON.stringify(ids));
+            event.dataTransfer.setData(
+              'text/plain',
+              items
+                .filter((candidate) => ids.includes(candidate.id))
+                .map((candidate) => candidate.name)
+                .join('\n'),
+            );
+            setDragIds(ids);
           },
           onDragEnd: () => {
             resetDrag();
@@ -345,12 +406,12 @@ export function Explorer({
               if (externalDropTarget !== target) setExternalDropTarget(target);
               return;
             }
-            if (!dragId) return;
+            if (!dragIds) return;
             const target = branch
-              ? droppable(dragId, item.id)
+              ? droppable(dragIds, item.id)
                 ? item.id
                 : null
-              : anchorBranch(item, dragId);
+              : anchorBranch(item, dragIds);
             if (target === null) {
               if (dropTarget !== null) setDropTarget(null);
               return;
@@ -369,9 +430,9 @@ export function Explorer({
               return;
             }
             event.preventDefault();
-            const drag = dragId ?? event.dataTransfer.getData(explorerDragType);
+            const drag = dragIds ?? draggedEntryIds(event.dataTransfer);
             const target = branch ? item.id : anchorBranch(item, drag);
-            if (drag && onMove && target !== null && droppable(drag, target)) onMove(drag, target);
+            if (drag.length && onMove && target && droppable(drag, target)) onMove(drag, target);
             resetDrag();
           },
         })
@@ -383,6 +444,7 @@ export function Explorer({
         ref={attachTree}
         role="tree"
         aria-label={label}
+        aria-multiselectable
         className="grid min-w-0 w-full content-start gap-0 p-1"
         style={
           virtualized
@@ -458,7 +520,7 @@ export function Explorer({
                 aria-label={item.name}
                 aria-level={level}
                 aria-expanded={branch ? open.has(item.id) : undefined}
-                aria-selected={selected === item.id}
+                aria-selected={isSelected(item.id)}
                 tabIndex={
                   selected === item.id ||
                   (!visible.some((v) => v.item.id === selected) && index === 0)
@@ -469,15 +531,18 @@ export function Explorer({
                   if (event.target === event.currentTarget) keyDown(event, index, item, branch);
                 }}
                 {...dragProps?.(item, branch)}
+                onMouseDown={(event) => {
+                  if (event.shiftKey) event.preventDefault();
+                }}
                 onClick={(event) => {
                   event.currentTarget.focus();
-                  if (event.altKey && onOpenToSide) onOpenToSide(item.id);
-                  else onSelect(item.id);
+                  clickRow(event, index, item);
                 }}
                 onDoubleClick={() => {
                   if (!branch) onActivate?.(item.id);
                 }}
                 onContextMenu={(event) => {
+                  if (!selection.includes(item.id)) setMarked([]);
                   const trigger = event.currentTarget.querySelector<HTMLButtonElement>(
                     '[data-slot="dropdown-menu-trigger"]',
                   );
@@ -488,7 +553,7 @@ export function Explorer({
                 }}
                 className={cn(
                   'group isolate relative flex h-7 min-w-0 cursor-default items-center gap-1.5 rounded-chip pr-1 text-ui-body outline-none before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:bottom-px before:-z-10 before:rounded-chip before:transition-colors focus-visible:ring-2 focus-visible:ring-accent',
-                  selected === item.id
+                  isSelected(item.id)
                     ? 'before:bg-selected text-ink'
                     : 'text-ink-2 hover:text-ink hover:before:bg-hover',
                   dropRegion && 'rounded-none bg-accent-tint text-ink',
@@ -537,7 +602,13 @@ export function Explorer({
                   ))}
                 <span
                   className={cn('min-w-0 flex-1 truncate', item.gitIgnored && 'text-ink-2')}
-                  title={item.title ?? item.name}
+                  onPointerOver={(event) => {
+                    const name = event.currentTarget;
+                    const title =
+                      item.title ?? (name.scrollWidth > name.clientWidth ? item.name : null);
+                    if (title) name.title = title;
+                    else name.removeAttribute('title');
+                  }}
                 >
                   {item.name}
                 </span>
@@ -549,7 +620,7 @@ export function Explorer({
                     className="shrink-0 opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 has-[[data-state=open]]:opacity-100 max-md:opacity-100"
                     onClick={(event) => event.stopPropagation()}
                   >
-                    {actions(item)}
+                    {actions(item, selectionOf(item.id))}
                   </span>
                 )}
               </div>

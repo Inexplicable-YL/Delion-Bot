@@ -42,14 +42,15 @@ import { useRemoteConnections } from '../navigation/remote-connections';
 import { ancestorChainOf, useTreeState } from '../navigation/store';
 import { useNavigationStore as useAppNavigation } from '../navigation/view';
 import {
-  archiveEntry,
+  archiveEntries,
   importDroppedFiles,
   importFromDialog,
   isDescendant,
-  moveEntry,
+  moveEntries,
   promoteEntry,
   runEntryWork,
 } from '../workspace/entry-actions';
+import { useEntryDialog } from '../workspace/entry-dialog-store';
 import { usePreferenceWidth, usePreferences } from '../shell/preferences';
 import { useMobileDrawer } from '../shell/mobile-drawer';
 import { RemotePortsDialog } from '../workspace/RemotePortsDialog';
@@ -61,6 +62,7 @@ import { cn } from '../../../ui/cn';
 import { overlayFade } from '../../../ui/motion';
 import { IconButton } from '../../../ui/IconButton';
 import {
+  draggedEntryIds,
   explorerDragType,
   localPathsOf,
   workspaceClient,
@@ -207,8 +209,8 @@ export function WorkbenchExplorer({
 
   const openProject = (id: string) => void useAppNavigation.getState().openProject(id);
 
-  const move = (dragId: string, targetId: string | null) =>
-    moveEntry(dragId, targetId, rootId, (target) => {
+  const move = (dragIds: string[], targetId: string | null) =>
+    moveEntries(dragIds, targetId, rootId, (target) => {
       if (target) expand(target, true);
     });
   const importDropped = (files: File[], targetId: string | null) =>
@@ -271,10 +273,23 @@ export function WorkbenchExplorer({
     if (action === 'note') startCreate('file', id);
     else if (action === 'folder') startCreate('folder', id);
     else if (action === 'import') importFromDialog(id);
-    else if (action === 'archive' && id) archiveEntry(id, () => setArchiveOpen(true));
+    else if (action === 'archive' && id) archiveEntries([id], () => setArchiveOpen(true));
     else if (action === 'promote' && id)
       promoteEntry(id, (pid) => void useAppNavigation.getState().openProject(pid));
     else onAction(action, id);
+  };
+  const batchAction = (action: 'move' | 'archive' | 'remove', ids: string[]) => {
+    if (action === 'archive') archiveEntries(ids, () => setArchiveOpen(true));
+    else
+      useEntryDialog.getState().open({
+        action,
+        id: null,
+        ids,
+        initialTarget:
+          action === 'move'
+            ? (currentContainerOf(selected ?? activeDocKey, rootId) ?? '')
+            : undefined,
+      });
   };
 
   const effectiveWidth = explorerWidth(width, viewportWidth);
@@ -509,8 +524,8 @@ export function WorkbenchExplorer({
                   }
                   if (event.target !== event.currentTarget) return;
                   event.preventDefault();
-                  const drag = event.dataTransfer.getData('application/x-delion-entry');
-                  if (drag) move(drag, null);
+                  const drag = draggedEntryIds(event.dataTransfer);
+                  if (drag.length) move(drag, null);
                 }}
               >
                 <div className={eyebrowClass}>
@@ -526,6 +541,7 @@ export function WorkbenchExplorer({
                     folderReveal={share ? null : projectId === null ? folderReveal : null}
                     pending={pending}
                     onAction={treeAction}
+                    onBatchAction={batchAction}
                     onExpand={expand}
                     onImportFiles={share || rootId ? importDroppedAnywhere : undefined}
                     onMove={remoteRoot ? undefined : move}
@@ -571,6 +587,7 @@ export function WorkbenchExplorer({
                           entries={entries}
                           expanded={expanded}
                           onAction={treeAction}
+                          onBatchAction={batchAction}
                           onExpand={expand}
                           onMove={move}
                           onOpenProject={openProject}

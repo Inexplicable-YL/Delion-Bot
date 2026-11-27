@@ -213,6 +213,7 @@ export const workspaceContract = defineContract(
     openLocal: { input: entryId, output: z.void() },
     openFile: { input: entryId, output: z.void() },
     downloadFile: { input: entryId, output: z.custom<string | null>() },
+    downloadFiles: { input: z.array(entryId).min(1).max(1000), output: z.custom<string | null>() },
     chooseDirectory: { input: z.undefined(), output: z.string() },
     layout: { input: z.uuid().nullable(), output: z.custom<WorkbenchLayout | null>() },
     saveLayout: {

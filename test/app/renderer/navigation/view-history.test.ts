@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceEntry, WorkspaceState } from '../../../../src/modules/workspace/contract';
-import { useWorkspaceStore } from '../../../../src/modules/workspace/view';
+import { useWorkspaceStore, workspaceClient } from '../../../../src/modules/workspace/view';
 import { useNavigationStore } from '../../../../src/app/renderer/navigation/view';
 import { useMobileDrawer } from '../../../../src/app/renderer/shell/mobile-drawer';
 import { usePreferences } from '../../../../src/app/renderer/shell/preferences';
@@ -214,5 +214,36 @@ describe('从首页进入工作台时的目录折叠', () => {
 
   it('标签区足够宽时保留目录', () => {
     expect(enterProject(1400)).toBe(false);
+  });
+
+  async function enterLibraryWithChat(shared: WorkspaceEntry[]) {
+    const list = vi.spyOn(workspaceClient, 'listLocalDirectory').mockResolvedValue(shared);
+    seed('home', null);
+    useWorkbenchLayout.setState({
+      ...createDefaultLayout(),
+      projectId: null,
+      ready: false,
+      explorerAutoCollapsed: false,
+    });
+    await useWorkbenchLayout.getState().init(null);
+    useWorkbenchLayout.getState().openTab('chat:s1');
+    usePreferences.setState({ workspaceSidebarCollapsed: false, workspaceSidebarWidth: 300 });
+    Object.defineProperty(surface, 'clientWidth', { configurable: true, value: 1400 });
+    useNavigationStore.getState().openProject('');
+    await vi.waitFor(() =>
+      expect(list).toHaveBeenCalledWith(`${workspace.directory}/chat-share/s1`),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    list.mockRestore();
+    return useWorkbenchLayout.getState().explorerAutoCollapsed;
+  }
+
+  it('从首页进入资料时，可见会话没有共享文件则折叠目录', async () => {
+    expect(await enterLibraryWithChat([])).toBe(true);
+  });
+
+  it('从首页进入资料时，可见会话有共享文件则保留目录', async () => {
+    const file = { ...project, id: 'f', kind: 'file' as const, name: 'report.md' };
+    expect(await enterLibraryWithChat([file])).toBe(false);
   });
 });

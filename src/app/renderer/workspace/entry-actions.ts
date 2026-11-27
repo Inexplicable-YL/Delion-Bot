@@ -60,18 +60,24 @@ export function isDescendant(entries: WorkspaceEntry[], id: string, ancestor: st
   return false;
 }
 
-export function moveEntry(
-  dragId: string,
+export function moveEntries(
+  ids: string[],
   targetId: string | null,
   rootId: string | null,
   onMoved?: (targetId: string | null) => void,
 ) {
   const entries = useWorkspaceStore.getState().workspace.entries;
   const parentId = targetId ?? rootId;
-  if (parentId === dragId || (parentId && isDescendant(entries, parentId, dragId))) return;
+  const moving = ids.filter(
+    (id) => id !== parentId && !(parentId && isDescendant(entries, parentId, id)),
+  );
+  if (!moving.length) return;
   void runEntryWork(async () => {
-    await updateEntry(dragId, { parentId });
-    await useWorkspaceStore.getState().refresh();
+    try {
+      for (const id of moving) await updateEntry(id, { parentId });
+    } finally {
+      await useWorkspaceStore.getState().refresh();
+    }
     onMoved?.(targetId);
   });
 }
@@ -98,18 +104,23 @@ export function importFromDialog(parentId: string | null) {
   });
 }
 
-export function archiveEntry(id: string, onArchived?: () => void) {
+export function archiveEntries(ids: string[], onArchived?: () => void) {
   void runEntryWork(async () => {
-    const { id: archivedId, toPath } = await updateEntry(id, { parentId: workspaceArchiveId });
-    for (const group of walkGroups(useWorkbenchLayout.getState().root)) {
-      for (const tab of group.tabs) {
-        if (!tab.startsWith('note:') && !tab.startsWith('preview:')) continue;
-        const key = tab.slice(tab.indexOf(':') + 1);
-        if (key === archivedId || (toPath && relocateWorkspacePath(key, toPath, '') !== key))
-          closeTabEverywhere(tab);
+    try {
+      for (const id of ids) {
+        const { id: archivedId, toPath } = await updateEntry(id, { parentId: workspaceArchiveId });
+        for (const group of walkGroups(useWorkbenchLayout.getState().root)) {
+          for (const tab of group.tabs) {
+            if (!tab.startsWith('note:') && !tab.startsWith('preview:')) continue;
+            const key = tab.slice(tab.indexOf(':') + 1);
+            if (key === archivedId || (toPath && relocateWorkspacePath(key, toPath, '') !== key))
+              closeTabEverywhere(tab);
+          }
+        }
       }
+    } finally {
+      await useWorkspaceStore.getState().refresh();
     }
-    await useWorkspaceStore.getState().refresh();
     onArchived?.();
   });
 }

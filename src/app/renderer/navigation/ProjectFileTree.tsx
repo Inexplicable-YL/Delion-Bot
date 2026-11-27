@@ -88,6 +88,7 @@ export function ProjectFileTree({
   onExpand,
   onSelect,
   onAction: onEntryAction,
+  onBatchAction,
   onMove,
   canDrop,
   onImportFiles,
@@ -109,7 +110,8 @@ export function ProjectFileTree({
   onExpand: (id: string, open: boolean) => void;
   onSelect: (id: string) => void;
   onAction: (action: EntryAction, id: string | null) => void;
-  onMove?: (dragId: string, targetId: string | null) => void;
+  onBatchAction?: (action: 'move' | 'archive' | 'remove', ids: string[]) => void;
+  onMove?: (dragIds: string[], targetId: string | null) => void;
   canDrop?: (dragId: string, targetId: string) => boolean;
   onImportFiles?: (files: File[], targetId: string | null) => void;
   onOpenToSide?: (id: string) => void;
@@ -315,6 +317,77 @@ export function ProjectFileTree({
       在侧边打开
     </DropdownMenuItem>
   );
+  const batchMenu = (item: ExplorerItem, ids: string[]) => {
+    const files = filtered.filter((node) => ids.includes(node.id) && !node.container);
+    const runBatch = (action: 'move' | 'archive' | 'remove') => {
+      ids.forEach(rememberResult);
+      afterMenuClose.defer(() => onBatchAction?.(action, ids));
+    };
+    return (
+      <DropdownMenu>
+        {menuTrigger(item.name)}
+        <DropdownMenuContent align="start" onCloseAutoFocus={afterMenuClose.onCloseAutoFocus}>
+          {files.length > 0 && (
+            <>
+              <DropdownMenuItem
+                onSelect={() =>
+                  runFileCommand('下载失败', () =>
+                    workspaceClient.downloadFiles(files.map((file) => file.id)),
+                  )
+                }
+              >
+                <Download />
+                下载 {files.length} 个文件
+              </DropdownMenuItem>
+              {!archived && (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    runFileCommand('打开失败', () =>
+                      Promise.all(files.map((file) => workspaceClient.openFile(file.id))),
+                    )
+                  }
+                >
+                  <ExternalLink />
+                  用系统默认程序打开
+                </DropdownMenuItem>
+              )}
+              {onOpenToSide && !archived && (
+                <DropdownMenuItem
+                  onSelect={() =>
+                    files.forEach((file) => {
+                      rememberResult(file.id);
+                      onOpenToSide(file.id);
+                    })
+                  }
+                >
+                  <PanelRightOpen />
+                  在侧边打开
+                </DropdownMenuItem>
+              )}
+            </>
+          )}
+          {onBatchAction && (
+            <>
+              <DropdownMenuItem onSelect={() => runBatch('move')}>
+                <FolderInput />
+                移动到…
+              </DropdownMenuItem>
+              {!archived && (
+                <DropdownMenuItem onSelect={() => runBatch('archive')}>
+                  <Archive />
+                  归档
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem variant="destructive" onSelect={() => runBatch('remove')}>
+                <Trash2 />
+                移除 {ids.length} 项
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  };
   const remoteMenu = (item: ExplorerItem) => (
     <DropdownMenu>
       {menuTrigger(item.name)}
@@ -374,7 +447,7 @@ export function ProjectFileTree({
         onMove={
           onMove
             ? (drag, target) => {
-                rememberResult(drag);
+                drag.forEach(rememberResult);
                 if (target) rememberResult(target);
                 onMove(drag, target);
               }
@@ -402,8 +475,10 @@ export function ProjectFileTree({
         pending={
           pending && { ...pending, parentId: pending.parentId === rootId ? null : pending.parentId }
         }
-        actions={(item) =>
-          remoteIds.has(item.id) ? (
+        actions={(item, selection) =>
+          selection.length > 1 ? (
+            batchMenu(item, selection)
+          ) : remoteIds.has(item.id) ? (
             onRemoteAction ? (
               remoteMenu(item)
             ) : null
@@ -446,16 +521,7 @@ export function ProjectFileTree({
                 )}
                 {!item.container && (
                   <>
-                    {isChatStoragePath(directory, item.id) ? (
-                      <DropdownMenuItem
-                        onSelect={() =>
-                          runFileCommand('下载失败', () => workspaceClient.downloadFile(item.id))
-                        }
-                      >
-                        <Download />
-                        下载
-                      </DropdownMenuItem>
-                    ) : (
+                    {!isChatStoragePath(directory, item.id) && (
                       <DropdownMenuItem
                         onSelect={() =>
                           runFileCommand('定位失败', () => workspaceClient.openLocal(item.id))
@@ -465,6 +531,14 @@ export function ProjectFileTree({
                         在文件夹中显示
                       </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        runFileCommand('下载失败', () => workspaceClient.downloadFile(item.id))
+                      }
+                    >
+                      <Download />
+                      下载
+                    </DropdownMenuItem>
                     {archived ? (
                       <DropdownMenuItem
                         onSelect={() => afterMenuClose.defer(() => selectNode(item.id))}

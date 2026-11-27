@@ -12,8 +12,9 @@ import { walkGroups } from '../workbench/layout-schema';
 import { useEntryDialog } from '../workspace/entry-dialog-store';
 import { useMobileDrawer } from '../shell/mobile-drawer';
 import type { SettingsSectionId } from '../../../modules/settings/contract';
-import type { TabId } from '../../../modules/workspace/contract';
-import { useWorkspaceStore } from '../../../modules/workspace/view';
+import { hiddenWorkspaceNames, type TabId } from '../../../modules/workspace/contract';
+import { useWorkspaceStore, workspaceClient } from '../../../modules/workspace/view';
+import { chatSharePath, visibleLeafSessions } from '../workbench/share-library';
 import { formatByName, isHtmlFile, opensInEditor } from '../../../core/protocol/files';
 import { parseRemoteNodeId } from '../../../modules/remotes/contract';
 import { showToast } from '../../../ui/Toast';
@@ -90,6 +91,22 @@ function rememberProject(id: string | null): void {
 
 function enteringWorkbenchFromHome(from: AppView, to: AppView): boolean {
   return from === 'home' && to === 'workbench' && explorerSqueezesTabs();
+}
+
+async function collapseEmptyLibrary(): Promise<void> {
+  await useWorkspaceStore.getState().load();
+  const { directory } = useWorkspaceStore.getState().workspace;
+  const layout = useWorkbenchLayout.getState();
+  const sessions = visibleLeafSessions(directory, walkGroups(layout.root), layout.maximized);
+  const listings = await Promise.all(
+    sessions.map((id) =>
+      workspaceClient.listLocalDirectory(chatSharePath(directory, id)).catch(() => []),
+    ),
+  );
+  const { view, projectId } = useNavigationStore.getState();
+  if (view !== 'workbench' || projectId !== null) return;
+  if (listings.every((items) => items.every((item) => hiddenWorkspaceNames.has(item.name))))
+    useWorkbenchLayout.setState({ explorerAutoCollapsed: true });
 }
 
 function currentProjectLive(): boolean {
@@ -249,6 +266,8 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
         settingsSection: 'general',
         generalChat: null,
       });
+      if (state.view === 'home' && prev.view === 'workbench' && prev.projectId === null)
+        void collapseEmptyLibrary();
       return true;
     },
 
@@ -270,12 +289,15 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
         settingsSection: 'general',
         generalChat: null,
       });
+      if (state.view === 'home' && next.view === 'workbench' && next.projectId === null)
+        void collapseEmptyLibrary();
       return true;
     },
 
     openProject: (id) => {
       if (get().requestDocumentRestore(id, (restored) => get().openProject(restored))) return false;
       const next = id || null;
+      const fromHome = get().view === 'home';
       const fromWorkbench = get().view === 'workbench';
       if (!get().navigate('workbench')) return false;
       useMobileDrawer.getState().setDrawer(null);
@@ -288,6 +310,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => {
       }
       rememberProject(id);
       set({ generalChat: null });
+      if (fromHome && next === null) void collapseEmptyLibrary();
       return true;
     },
 

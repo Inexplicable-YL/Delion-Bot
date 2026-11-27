@@ -10,7 +10,7 @@ import {
 } from '../capabilities/command-server';
 import { ASK_USER_PROMPT } from '../capabilities/ask-user';
 import { commandPrompt } from '../capabilities/commands';
-import { globalContextFiles } from '../capabilities/context-files';
+import { CONTEXT_FILE_NAMES, globalContextFiles } from '../capabilities/context-files';
 import { contextDirectories } from './context-directories';
 import { getAgentInstruction, getProjectChatContext } from './instruction';
 import {
@@ -204,6 +204,7 @@ export function agentEnvironment() {
           remoteId: remote.remoteId,
           projectId,
           remoteDir: cwd,
+          contextFileNames: CONTEXT_FILE_NAMES,
         });
         return {
           appendSystemPrompt: [

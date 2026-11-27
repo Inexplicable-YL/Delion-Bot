@@ -4,7 +4,6 @@ import { hostPorts } from '../ports';
 import { helperSession } from './helper';
 import { remoteBackend, setContextMirrors, writeRemoteFile } from './operations';
 import { shellQuote, type RemoteTarget } from './transport';
-import { CONTEXT_FILE_NAMES } from '../capabilities/context-files';
 
 const REPO_SKILL_DIR = '.agents/skills';
 const HOME_SKILL_DIR = '.delion-bot/skills';
@@ -22,7 +21,12 @@ interface Record {
   content: Buffer;
 }
 
-function mirrorScript(home: string, remoteDir: string, ancestors: string[]): string {
+function mirrorScript(
+  home: string,
+  remoteDir: string,
+  ancestors: string[],
+  contextFileNames: readonly string[],
+): string {
   const sections: string[] = [`printf '${HOME_MARK}\\0%s\\0' "$HOME"`];
 
   const skillSections: { label: string; dir: string }[] = [
@@ -38,7 +42,7 @@ function mirrorScript(home: string, remoteDir: string, ancestors: string[]): str
   }
 
   sections.push(`printf '${AGENTS_MARK}\\0'`);
-  const names = CONTEXT_FILE_NAMES.map((name) => shellQuote(name)).join(' ');
+  const names = contextFileNames.map((name) => shellQuote(name)).join(' ');
   for (const dir of ancestors) {
     sections.push(
       `_p=""; for _f in ${names}; do if [ -f ${shellQuote(dir)}/"$_f" ]; then _p=${shellQuote(dir)}/"$_f"; break; fi; done`,
@@ -126,6 +130,7 @@ export async function syncRemoteContext(input: {
   remoteId: string;
   projectId: string;
   remoteDir: string;
+  contextFileNames: readonly string[];
   home?: string | null;
 }): Promise<RemoteContext> {
   const mirrorRoot = contextMirrorRoot(input.remoteId, input.projectId);
@@ -136,6 +141,7 @@ export async function syncRemoteContext(input: {
       input.home ?? '$HOME',
       input.remoteDir,
       ancestorsOf(input.remoteDir),
+      input.contextFileNames,
     );
     const chunks: Buffer[] = [];
     const result = await exec(script, '/', {

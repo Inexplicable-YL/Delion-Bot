@@ -1,4 +1,10 @@
-export { Explorer, explorerDragType, type ExplorerItem, type ExplorerPending } from './Explorer';
+export {
+  draggedEntryIds,
+  Explorer,
+  explorerDragType,
+  type ExplorerItem,
+  type ExplorerPending,
+} from './Explorer';
 export { onWorkspaceEvent, workspaceClient } from './client';
 export { DownloadFileButton } from './DownloadFileButton';
 export { fileIconUrl } from './file-icons';
