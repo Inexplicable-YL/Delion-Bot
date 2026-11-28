@@ -7,6 +7,8 @@ import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { search, searchKeymap } from '@codemirror/search';
 import { useEditorSettings } from './editor-settings';
 import { codeHighlightStyle, codeIndentGuides, codeLayout } from './syntax-highlight';
+import { CodeScrollbar } from './CodeScrollbar';
+import { connectCodeScrollbars } from './code-scrollbars';
 
 const viewerTheme = EditorView.theme({
   '&': {
@@ -29,7 +31,7 @@ const viewerTheme = EditorView.theme({
   },
   '.cm-gutters': {
     border: 'none',
-    backgroundColor: 'transparent',
+    backgroundColor: 'var(--workbench-surface, var(--page))',
     color: 'var(--ink-3)',
     paddingLeft: `${codeLayout.inset}rem`,
   },
@@ -57,6 +59,7 @@ export function CodeViewer({
   onScroll: (top: number) => void;
 }) {
   const viewRef = useRef<EditorView | null>(null);
+  const scrollbarRef = useRef<HTMLDivElement | null>(null);
   const wordWrap = useEditorSettings((state) => state.wordWrap);
 
   const [attachViewer] = useState(() => (element: HTMLDivElement | null) => {
@@ -79,6 +82,12 @@ export function CodeViewer({
         ],
       }),
     });
+    const scrollbars = connectCodeScrollbars(
+      [view.scrollDOM],
+      [scrollbarRef.current!],
+      '.cm-gutters-before',
+      '.cm-content',
+    );
     view.scrollDOM.scrollTop = initialScroll();
     const handleScroll = () => onScroll(view.scrollDOM.scrollTop);
     view.scrollDOM.addEventListener('scroll', handleScroll);
@@ -90,6 +99,7 @@ export function CodeViewer({
       });
     }
     return () => {
+      scrollbars.disconnect();
       view.scrollDOM.removeEventListener('scroll', handleScroll);
       viewRef.current = null;
       view.destroy();
@@ -109,7 +119,8 @@ export function CodeViewer({
   };
 
   return (
-    <div ref={syncViewer} className="min-h-0 w-full flex-1 overflow-hidden">
+    <div ref={syncViewer} className="relative min-h-0 w-full flex-1 overflow-hidden">
+      <CodeScrollbar ref={scrollbarRef} className="absolute inset-x-0 bottom-0 z-raised" />
       <div ref={attachViewer} className="size-full" />
     </div>
   );

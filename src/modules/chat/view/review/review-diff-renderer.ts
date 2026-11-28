@@ -1,9 +1,51 @@
 import { VirtualizedFileDiff, type HunkExpansionRegion, type SelectionSide } from '@pierre/diffs';
+import { connectCodeScrollbars } from '../../../preview/view';
 
 type ChangeDirection = 'previous' | 'next';
 
 export class ReviewDiffRenderer extends VirtualizedFileDiff {
   private lastJump: { index: number; scrollTop: number } | null = null;
+  private horizontalScrollbars?: ReturnType<typeof connectCodeScrollbars> & {
+    tracks: HTMLDivElement[];
+    panes: HTMLElement[];
+  };
+
+  override flushManagers() {
+    super.flushManagers();
+    this.scrollSyncManager.cleanUp();
+  }
+
+  override cleanUp(recycle?: boolean) {
+    this.horizontalScrollbars?.disconnect();
+    this.horizontalScrollbars = undefined;
+    super.cleanUp(recycle);
+  }
+
+  syncHorizontalScrollbars(container: HTMLDivElement) {
+    const tracks = Array.from(container.querySelectorAll<HTMLDivElement>('[data-code-scrollbar]'));
+    const panes =
+      this.options.overflow === 'scroll'
+        ? Array.from(this.pre?.querySelectorAll<HTMLElement>('code[data-code]') ?? [])
+        : [];
+    const current = this.horizontalScrollbars;
+    if (
+      current &&
+      current.tracks.length === tracks.length &&
+      current.panes.length === panes.length &&
+      tracks.every((track, index) => track === current.tracks[index]) &&
+      panes.every((pane, index) => pane === current.panes[index])
+    ) {
+      current.refresh();
+      return;
+    }
+    const left = current?.offset() ?? 0;
+    current?.disconnect();
+    this.horizontalScrollbars = {
+      tracks,
+      panes,
+      ...connectCodeScrollbars(panes, tracks, '[data-gutter]', '[data-content]', left),
+    };
+  }
 
   get contextRegions() {
     const diff = this.getInputDiff();

@@ -18,6 +18,7 @@ import {
 import { DocumentToolbar, DocumentToolbarButton } from '../../../../ui/DocumentToolbar';
 import { Resizer } from '../../../../ui/Resizer';
 import { Spinner } from '../../../../ui/Spinner';
+import { CodeScrollbar } from '../../../preview/view';
 import type { FileChangeDetail } from '../../../../core/protocol/agent';
 import { agentClient, chatClient } from '../client';
 import { parseReviewTabId } from './tab-id';
@@ -129,6 +130,7 @@ function FileReview({
   const [width, setWidth] = useState(0);
   const [splitRatio, setSplitRatio] = useState(0.5);
   const renderer = useRef<ReviewDiffRenderer | null>(null);
+  const scrollbarsRef = useRef<HTMLDivElement | null>(null);
 
   const observeWidth = (element: HTMLDivElement | null) => {
     const viewport = element?.firstElementChild;
@@ -230,6 +232,25 @@ function FileReview({
       {detail.note && (
         <p className="shrink-0 border-b px-4 py-2 text-ui-subhead text-ink-2">{detail.note}</p>
       )}
+      {detail.patch && (
+        <div
+          ref={scrollbarsRef}
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-sticky grid min-w-0"
+          style={{
+            width: width || undefined,
+            gridTemplateColumns: split ? `${width * splitRatio}px minmax(0, 1fr)` : undefined,
+          }}
+        >
+          {(split ? ['原始代码', '修改后的代码'] : ['代码']).map((label, index) => (
+            <CodeScrollbar
+              key={index}
+              label={`横向滚动${label}`}
+              className="row-start-1"
+              style={{ gridColumn: index + 1 }}
+            />
+          ))}
+        </div>
+      )}
       {detail.patch ? (
         <div
           className="relative flex min-h-0 min-w-0 flex-1 flex-col"
@@ -245,6 +266,7 @@ function FileReview({
               onContextExpansionChange={onContextExpansionChange}
               patch={detail.patch}
               rendererRef={renderer}
+              scrollbarsRef={scrollbarsRef}
             />
           </DiffScroller>
           {split && width > 0 && (
@@ -270,7 +292,11 @@ function FileReview({
 
 function Shell({ children, label = '改动审阅' }: { children: ReactNode; label?: string }) {
   return (
-    <section aria-label={label} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <section
+      aria-label={label}
+      data-code-scroll-surface=""
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+    >
       {children}
     </section>
   );

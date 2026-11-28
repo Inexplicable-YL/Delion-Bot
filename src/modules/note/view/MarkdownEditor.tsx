@@ -25,6 +25,8 @@ import {
   codeHighlightStyle,
   codeIndentGuides,
   codeLayout,
+  CodeScrollbar,
+  connectCodeScrollbars,
   markdownHighlightStyle,
   useEditorSettings,
 } from '../../preview/view';
@@ -62,7 +64,7 @@ const editorTheme = EditorView.theme({
   '.cm-scroller:has(.cm-gutters)': { paddingLeft: '0' },
   '.cm-gutters': {
     border: 'none',
-    backgroundColor: 'transparent',
+    backgroundColor: 'var(--workbench-surface, var(--page))',
     color: 'var(--ink-3)',
     paddingLeft: `${codeLayout.inset}rem`,
   },
@@ -173,9 +175,9 @@ export function lineSeparatorOf(text: string): '\r\n' | '\n' {
 }
 
 function layoutOf(language: ResolvedLanguage, documentLayout: boolean): Extension {
-  if (language.kind !== 'markdown')
-    return [EditorView.editorAttributes.of({ class: 'cm-source-file' }), codeIndentGuides];
-  return EditorView.editorAttributes.of({ class: documentLayout ? 'cm-document' : '' });
+  if (language.kind === 'markdown' && documentLayout)
+    return EditorView.editorAttributes.of({ class: 'cm-document' });
+  return [EditorView.editorAttributes.of({ class: 'cm-source-file' }), codeIndentGuides];
 }
 
 function languageForFilename(filename: string | undefined): ResolvedLanguage {
@@ -220,6 +222,7 @@ export function MarkdownEditor({
   alwaysWrap?: boolean;
   toolbar?: (controls: ReactNode) => ReactNode;
 }) {
+  const scrollbarRef = useRef<HTMLDivElement | null>(null);
   const editor = useRef<{
     view: EditorView;
     replaceText: (text: string) => void;
@@ -330,6 +333,12 @@ export function MarkdownEditor({
     transient.current = session;
     if (persistent) sessions.set(instanceKey, session);
     const current = new EditorView({ parent: element, state });
+    const scrollbars = connectCodeScrollbars(
+      [current.scrollDOM],
+      [scrollbarRef.current!],
+      '.cm-gutters-before',
+      '.cm-content',
+    );
     let pendingText: string | null = null;
     let compositionFrame = 0;
     const replaceText = (next: string) => {
@@ -376,6 +385,7 @@ export function MarkdownEditor({
     editor.current = { view: current, replaceText, options: null };
     setSnapshot(snapshotOf(current));
     return () => {
+      scrollbars.disconnect();
       current.contentDOM.removeEventListener('mousedown', startSelecting);
       window.removeEventListener('mouseup', stopSelecting);
       if (!persistent || sessions.get(instanceKey) === session) {
@@ -443,7 +453,12 @@ export function MarkdownEditor({
       );
   };
   return (
-    <div ref={syncEditor} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <div
+      ref={syncEditor}
+      data-code-scroll-surface=""
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+    >
+      <CodeScrollbar ref={scrollbarRef} className="absolute inset-x-0 bottom-0 z-raised" />
       {toolbar?.(
         <>
           <DocumentToolbarButton label="复制全文" onClick={copy}>

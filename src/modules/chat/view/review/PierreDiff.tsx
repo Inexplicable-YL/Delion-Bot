@@ -46,7 +46,7 @@ const reviewTokenStyle = {
   '--diffs-bg-addition-emphasis-override': 'var(--diff-added-word)',
   '--diffs-bg-deletion-emphasis-override': 'var(--diff-removed-word)',
   '--diffs-gap-inline': `${codeLayout.inset}rem`,
-  '--diffs-scrollbar-gutter-override': 'var(--scrollbar-size)',
+  '--diffs-scrollbar-gutter-override': '0px',
 } as CSSProperties;
 
 const reviewTheme = 'delion-source';
@@ -90,6 +90,9 @@ registerCustomTheme(reviewTheme, async () => ({
 }));
 
 const reviewStyles = `
+  [data-code], [data-diff-type=split][data-overflow=wrap] {
+    padding-block-start: 0;
+  }
   [data-diff-type=split][data-overflow=scroll] {
     grid-template-columns: minmax(0, var(--review-split)) minmax(0, 1fr);
   }
@@ -97,6 +100,9 @@ const reviewStyles = `
     grid-template-columns: minmax(min-content, max-content)
       minmax(0, calc(var(--review-split) - var(--review-old-gutter, 0px)))
       minmax(min-content, max-content) minmax(0, 1fr);
+  }
+  [data-gutter] {
+    background-color: var(--workbench-surface, var(--page));
   }
   [data-column-number] {
     box-sizing: border-box;
@@ -207,14 +213,8 @@ const reviewStyles = `
     scrollbar-width: auto;
     scrollbar-color: auto;
   }
-  [data-code]::-webkit-scrollbar-thumb {
-    border: var(--scrollbar-thumb-inset) solid transparent;
-    border-radius: var(--radius-pill);
-    background: var(--scrollbar-thumb);
-    background-clip: padding-box;
-  }
-  [data-code]::-webkit-scrollbar-thumb:hover {
-    background-color: var(--scrollbar-thumb-hover);
+  [data-code]::-webkit-scrollbar:horizontal {
+    display: none;
   }
 `;
 
@@ -302,6 +302,7 @@ export function PatchDiffView({
   oldFile,
   newFile,
   rendererRef,
+  scrollbarsRef,
   onContextExpansionChange,
 }: {
   patch: string;
@@ -309,13 +310,14 @@ export function PatchDiffView({
   oldFile: FileContents | null;
   newFile: FileContents | null;
   rendererRef: RefObject<ReviewDiffRenderer | null>;
+  scrollbarsRef: RefObject<HTMLDivElement | null>;
   onContextExpansionChange: (expanded: boolean) => void;
 }) {
   const virtualizer = useVirtualizer()!;
   const themeType = useAppThemeType();
   const wordWrap = useEditorSettings((state) => state.wordWrap);
   const rootSize = useRootFontSize();
-  const inset = codeLayout.inset * rootSize + codeLayout.contentBlockPadding;
+  const bottomInset = codeLayout.inset * rootSize + codeLayout.contentBlockPadding;
   const beforeIndents = indentsOf(oldFile?.contents ?? null);
   const afterIndents = indentsOf(newFile?.contents ?? null);
   const parsed = getSingularPatch(patch);
@@ -331,8 +333,8 @@ export function PatchDiffView({
     ...DEFAULT_VIRTUAL_FILE_METRICS,
     lineHeight,
     hunkSeparatorHeight: lineHeight,
-    paddingTop: inset,
-    paddingBottom: inset,
+    paddingTop: 0,
+    paddingBottom: bottomInset,
   };
   const options: FileDiffOptions<undefined, undefined> = {
     ...baseOptions,
@@ -347,6 +349,7 @@ export function PatchDiffView({
     onPostRender: (container, renderer, phase) => {
       const root = container.shadowRoot;
       if (phase === 'unmount' || !root || !(renderer instanceof ReviewDiffRenderer)) return;
+      if (scrollbarsRef.current) renderer.syncHorizontalScrollbars(scrollbarsRef.current);
 
       if (wordWrap && diffStyle === 'split') {
         const gutter = root.querySelector('[data-deletions] [data-gutter]');
@@ -432,7 +435,7 @@ export function PatchDiffView({
   return (
     <div
       ref={syncDiff}
-      style={{ ...reviewTokenStyle, '--diffs-gap-block': `${inset}px` } as CSSProperties}
+      style={{ ...reviewTokenStyle, '--diffs-gap-block': `${bottomInset}px` } as CSSProperties}
     >
       <div ref={mountDiff} />
     </div>

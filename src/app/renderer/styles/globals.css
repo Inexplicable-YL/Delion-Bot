@@ -113,6 +113,22 @@
   *::-webkit-scrollbar-corner {
     background: transparent;
   }
+
+  [data-code-scroll-surface] .cm-scroller::-webkit-scrollbar:horizontal {
+    display: none;
+  }
+
+  [data-code-scrollbar] {
+    pointer-events: auto;
+  }
+
+  [data-code-scroll-surface]:not(:hover) [data-code-scrollbar] {
+    pointer-events: none;
+  }
+
+  [data-code-scroll-surface]:not(:hover) [data-code-scrollbar]::-webkit-scrollbar-thumb:horizontal {
+    background-color: transparent;
+  }
 }
 
 svg[viewBox='0 0 24 24'][data-slot='icon'] {

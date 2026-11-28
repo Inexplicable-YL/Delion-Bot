@@ -172,6 +172,7 @@ export function PreviewTab({ tabId, groupId }: { tabId: TabId; groupId: string }
   return (
     <section
       ref={watchDisk}
+      data-code-scroll-surface=""
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
       aria-label={`文档：${content.title}`}
     >
