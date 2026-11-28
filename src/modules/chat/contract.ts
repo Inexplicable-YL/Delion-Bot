@@ -70,13 +70,15 @@ const localCommandReply = z.object({
 });
 export type LocalCommandReply = z.infer<typeof localCommandReply>;
 
+const fileVersionId = z.string().regex(/^[0-9a-f]{40}$/);
+
 const fileTimeline = z.object({
   sessionId,
   path: filePath,
   entries: z.array(
     z.object({
-      fromEventId: z.uuid(),
-      toEventId: z.uuid(),
+      fromEventId: fileVersionId,
+      toEventId: fileVersionId,
       at: z.string(),
       status: z.enum(['added', 'modified', 'deleted']),
       source: z.discriminatedUnion('kind', [
@@ -179,7 +181,12 @@ const procedures = {
   },
   fileTimeline: { input: z.object({ path: filePath }), output: fileTimeline.nullable() },
   readFileVersion: {
-    input: z.object({ sessionId, fromEventId: z.uuid(), toEventId: z.uuid(), path: filePath }),
+    input: z.object({
+      sessionId,
+      fromEventId: fileVersionId,
+      toEventId: fileVersionId,
+      path: filePath,
+    }),
     output: z.custom<FileChangeDetail>(),
   },
 };
@@ -189,6 +196,7 @@ export const chatContract = defineContract('chat', procedures, {
   permissionRequestOpened: z.object({ sessionId, projectId: projectId.nullable() }),
   compactionChanged: compactionTranscript.extend({ sessionId }),
   compactionStream: z.object({ sessionId, entryId: z.string(), message: chatMessageSchema }),
+  fileTimeline: z.undefined(),
 });
 
 declare module '../../app/module' {

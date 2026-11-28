@@ -6,7 +6,7 @@ export type ReviewTabTarget =
   | { kind: 'uncommitted'; projectId: string; path: string };
 
 const TURN_PAYLOAD = /^([0-9a-f-]{36}):([0-9a-f-]{36}):([\s\S]+)$/;
-const VERSION_PAYLOAD = /^([0-9a-f-]{36}):version:([0-9a-f-]{36}):([0-9a-f-]{36}):([\s\S]+)$/;
+const VERSION_PAYLOAD = /^([0-9a-f-]{36}):version:([0-9a-f]{40}):([0-9a-f]{40}):([\s\S]+)$/;
 const UNCOMMITTED_PAYLOAD = /^([0-9a-f-]{36}):uncommitted:([\s\S]+)$/;
 
 export function reviewTabId(target: ReviewTabTarget): TabId {

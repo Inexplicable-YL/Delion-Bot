@@ -1,3 +1,4 @@
+import { parseReviewTabId } from '../../../modules/chat/view/review/tab-id';
 import type { WorkspaceEntry } from '../../../modules/workspace/contract';
 
 export interface VisibleLeaf {
@@ -22,6 +23,18 @@ export function shareTarget(
   if (tab.startsWith('chat:')) {
     const sessionId = tab.slice('chat:'.length);
     return sessionId ? { sessionId, file: null } : null;
+  }
+  if (tab.startsWith('review:')) {
+    const target = parseReviewTabId(tab);
+    if (target?.kind === 'version' && target.path.startsWith('share/')) {
+      return {
+        sessionId: target.sessionId,
+        file: storageJoin(
+          chatSharePath(directory, target.sessionId),
+          ...target.path.slice(6).split('/'),
+        ),
+      };
+    }
   }
   const payload = /^(?:note|preview|review):/.test(tab) ? tab.slice(tab.indexOf(':') + 1) : tab;
   if (!/^(?:[a-z]:[\\/]|\\\\|\/)/i.test(payload)) return null;

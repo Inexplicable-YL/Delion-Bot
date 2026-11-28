@@ -300,7 +300,7 @@ svg[viewBox='0 0 24 24'][data-slot='icon']:is(.size-5, .size-6),
 }
 
 /* 滚动容器常驻竖向滚动条槽位：轨道透明，内容增长只淡入滑块，不挤占内容宽度。
-   例外：Radix 浮层内容容器（data-slot 以 -content 结尾）尺寸紧贴内容，排除之。 */
+   data-slot 以 -content 结尾的容器只在内容溢出时显示滚动条。 */
 .overflow-y-auto:not([data-slot$='-content']),
 .overflow-auto:not([data-slot$='-content']) {
   overflow-y: scroll;

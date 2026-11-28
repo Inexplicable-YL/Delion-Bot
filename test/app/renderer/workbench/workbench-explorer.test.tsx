@@ -1,26 +1,32 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { connectQueryEvents } from '../../../../src/app/renderer/shell/query-events';
+import { chatContract } from '../../../../src/modules/chat/contract';
 import {
   workspaceArchiveId,
+  type GroupNode,
   type WorkspaceEntry,
   type WorkspaceState,
 } from '../../../../src/modules/workspace/contract';
 
-const { api, desktop } = vi.hoisted(() => {
+const { api, desktop, events } = vi.hoisted(() => {
   const handlers: Record<string, (input: never) => unknown> = {};
-  const subscribe = () => () => {};
+  const events = new Map<string, (payload: unknown) => void>();
   const desktop = {
     bridge: {
       invoke: async (channel: string, input: never) =>
         channel.startsWith('remotes:') ? [] : handlers[channel.split(':')[1]!]?.(input),
-      subscribe,
+      subscribe(channel: string, listener: (payload: unknown) => void) {
+        events.set(channel, listener);
+        return () => events.delete(channel);
+      },
     },
   } as unknown as NonNullable<typeof window.delionBot>;
   window.delionBot = desktop;
-  return { api: handlers, desktop };
+  return { api: handlers, desktop, events };
 });
 import { useTreeState } from '../../../../src/app/renderer/navigation/store';
 import { useNavigationStore } from '../../../../src/app/renderer/navigation/view';
@@ -37,6 +43,7 @@ const mediaStub = () => ({
 
 let container: HTMLDivElement;
 let root: Root;
+let queryClient: QueryClient;
 let WorkbenchExplorer: typeof import('../../../../src/app/renderer/workbench/WorkbenchExplorer').WorkbenchExplorer;
 let currentContainerOf: typeof import('../../../../src/app/renderer/workbench/WorkbenchExplorer').currentContainerOf;
 
@@ -99,6 +106,8 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+  queryClient = new QueryClient();
+  connectQueryEvents(queryClient, [chatContract], desktop.bridge);
   delete window.delionBot;
   for (const name of Object.keys(api)) delete api[name];
   useWorkspaceStore.setState({
@@ -122,6 +131,9 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  events.clear();
+  focusManager.setFocused(undefined);
+  vi.useRealTimers();
 });
 
 const newButton = () => document.querySelector<HTMLElement>('[aria-label="新建"]');
@@ -135,7 +147,7 @@ async function render(projectId: string | null, activeDocKey: string | null = nu
   const onCreated = vi.fn();
   await act(async () =>
     root.render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider client={queryClient}>
         <WorkbenchExplorer
           activeDocKey={activeDocKey}
           activeTab={null}
@@ -346,4 +358,105 @@ it('switches the project sidebar and reuses the diff tab for the same file', asy
   await act(async () => toggle('文件').click());
   expect(fileFilter().closest('[hidden]')).toBeNull();
   expect(container.querySelector('[aria-label="筛选改动"]')).toBeNull();
+});
+
+it('keeps loading the pinned timeline when another file is selected and opens its Git version', async () => {
+  vi.useFakeTimers({
+    toFake: ['Date', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
+  });
+  focusManager.setFocused(true);
+  const sessionId = crypto.randomUUID();
+  const folder = `D:/delion/chat-share/${sessionId}`;
+  const files = ['first.txt', 'second.txt'].map((name) => ({
+    ...localFolder,
+    id: `${folder}/${name}`,
+    path: `${folder}/${name}`,
+    parentId: folder,
+    name,
+    kind: 'file' as const,
+  }));
+  const [first, second] = files;
+  const eventId = 'a'.repeat(40);
+  const initialEntry = {
+    fromEventId: eventId,
+    toEventId: eventId,
+    at: new Date().toISOString(),
+    status: 'modified',
+    source: { kind: 'user' },
+  };
+  const savedEntries = [initialEntry];
+  const loadTimeline = vi.fn(({ path }: { path: string }) => ({
+    sessionId,
+    path: `share/${path.slice(folder.length + 1)}`,
+    entries: [...savedEntries],
+  }));
+  api.fileTimeline = loadTimeline;
+  window.delionBot = desktop;
+  useWorkspaceStore.setState({ workspace: { ...workspace, entries: files } });
+  const group: GroupNode = {
+    type: 'group',
+    id: 'primary',
+    tabs: [`chat:${sessionId}`],
+    active: `chat:${sessionId}`,
+  };
+  useWorkbenchLayout.setState({ root: group, ready: true });
+
+  const waitForRead = (path: string | null) =>
+    act(async () => {
+      await vi.waitFor(() => expect(loadTimeline).toHaveBeenLastCalledWith({ path }));
+      await vi.advanceTimersByTimeAsync(1);
+    });
+  const button = (label: string) =>
+    container.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+  await render(null, first!.id);
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>(
+        'button[aria-controls][aria-expanded="false"]:has(span[title])',
+      )!
+      .click(),
+  );
+  await waitForRead(first!.path);
+  await act(async () => button('固定时间线').click());
+  await render(null, second!.id);
+  loadTimeline.mockClear();
+  await act(async () => button('刷新时间线').click());
+  await waitForRead(first!.path);
+
+  const version = `review:${sessionId}:version:${eventId}:${eventId}:share/${first!.name}`;
+  const { parseReviewTabId } = await import('../../../../src/modules/chat/view/review/tab-id');
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('ul[aria-label="文件时间线"] button')!.click(),
+  );
+  expect(useWorkbenchLayout.getState().root).toMatchObject({ active: version });
+  expect(parseReviewTabId(version)).toMatchObject({ kind: 'version', toEventId: eventId });
+
+  await act(async () => button('取消固定时间线').click());
+  await waitForRead(second!.path);
+
+  const timestamps = () => [...container.querySelectorAll('time')].map((time) => time.textContent);
+  const initialTimestamps = timestamps();
+  expect(initialTimestamps).toHaveLength(1);
+  loadTimeline.mockClear();
+  await act(async () => vi.advanceTimersByTimeAsync(20_000));
+  expect(loadTimeline).not.toHaveBeenCalled();
+  expect(timestamps()).toEqual(initialTimestamps);
+  await act(async () => vi.advanceTimersByTimeAsync(10_001));
+  expect(loadTimeline).toHaveBeenLastCalledWith({ path: second!.path });
+  expect(timestamps()).not.toEqual(initialTimestamps);
+
+  loadTimeline.mockClear();
+  const newEventId = 'b'.repeat(40);
+  savedEntries.unshift({
+    ...initialEntry,
+    fromEventId: newEventId,
+    toEventId: newEventId,
+    at: new Date().toISOString(),
+  });
+  await act(async () => {
+    events.get('chat:fileTimeline')!(undefined);
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  expect(loadTimeline).toHaveBeenLastCalledWith({ path: second!.path });
+  expect(timestamps()).toHaveLength(2);
 });

@@ -24,14 +24,15 @@ function TurnFileRow({
   file: FileChangeSummary;
 }) {
   const { workbench } = useChatTabSource();
+  const displayPath = file.path.replace(/^\/share\//, '');
   const fail = (cause: unknown) =>
     showToast({ variant: 'error', title: '打开失败', description: errorMessage(cause) });
   return (
     <ChangedFile
       counts={file.stat ?? undefined}
       deleted={file.status === 'deleted'}
-      directory={dirnameOf(file.path)}
-      name={basenameOf(file.path)}
+      directory={dirnameOf(displayPath)}
+      name={basenameOf(displayPath)}
       onOpen={() => {
         void chatClient
           .locateFile({ sessionId, path: file.path })
@@ -57,7 +58,7 @@ function TurnFileRow({
           onSelect: () => void chatClient.revealFile({ sessionId, path: file.path }).catch(fail),
         },
       ]}
-      path={file.path}
+      path={displayPath}
     />
   );
 }

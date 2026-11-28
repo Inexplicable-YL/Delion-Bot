@@ -34,7 +34,7 @@ import {
   projectCompactionHistory,
 } from '../../core/agent/session/projection';
 import { exportSession } from '../../core/agent/session-export';
-import { hostPorts } from '../../core/ports';
+import { emit, hostPorts } from '../../core/ports';
 import { implement } from '../../core/protocol/contract';
 import { hasVsCode, registerPreviewHost, workspaceFilePath } from '../workspace';
 import { chatContract } from './contract';
@@ -179,12 +179,16 @@ export const chatModule = defineModule({
       readChatFileVersionChange(sessionId, fromEventId, toEventId, path),
   }),
   start: () =>
-    watchChatFiles((id) =>
-      Boolean(
-        hostPorts()
-          .database()
-          .prepare('SELECT 1 FROM sessions WHERE id=? AND project_id IS NULL AND parent_id IS NULL')
-          .get(id),
-      ),
+    watchChatFiles(
+      (id) =>
+        Boolean(
+          hostPorts()
+            .database()
+            .prepare(
+              'SELECT 1 FROM sessions WHERE id=? AND project_id IS NULL AND parent_id IS NULL',
+            )
+            .get(id),
+        ),
+      () => emit(chatContract, 'fileTimeline', undefined),
     ),
 });

@@ -163,10 +163,7 @@ it('整轮失败显示错误卡与重试，重试以原文重发', async () => {
   expect(onEditLast).toHaveBeenCalledWith('检查滚动', undefined);
 });
 
-it.each([
-  { projectId: 'project-1', count: 1 },
-  { projectId: null, count: 0 },
-])('插队切成多段时，项目 $projectId 的回复显示 $count 张改动卡片', async ({ projectId, count }) => {
+it.each(['project-1', null])('插队后只显示一张改动卡片 (%s)', async (projectId) => {
   const turnId = 'turn-1';
   await act(async () =>
     root.render(
@@ -200,8 +197,8 @@ it.each([
     ),
   );
   const cards = [...host.querySelectorAll('[data-turn-card]')];
-  expect(cards).toHaveLength(count);
-  if (count) expect(cards[0]!.parentElement!.textContent).toContain('A 和 B 都做完了');
+  expect(cards).toHaveLength(1);
+  expect(cards[0]!.parentElement!.textContent).toContain('A 和 B 都做完了');
 });
 
 it.each([

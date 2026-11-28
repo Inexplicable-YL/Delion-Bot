@@ -7,12 +7,17 @@ import {
   branchChatFiles,
   chatFileHistory,
   endChatTool,
+  flushChatFiles,
+  freezeChatTurn,
   openChatWindow,
+  readChatFileVersion,
   revertChatTurns,
   startChatTurn,
   userChatWrite,
+  watchChatFiles,
   type AgentActor,
 } from '../../../src/core/agent/chat-files';
+import { readTurnFileChange } from '../../../src/core/agent/changes';
 import { chatShareDirectory } from '../../../src/core/agent/session/store';
 import { hostPorts } from '../../../src/core/ports';
 import { provideTestHostPorts } from '../host-mock';
@@ -39,10 +44,53 @@ const runCommand = async (owner: string, actor: AgentActor, work: () => void) =>
   work();
   await close();
 };
-const sources = async (sessionId: string, name: string) =>
-  (await chatFileHistory(sessionId, `share/${name}`)).map(({ to }) =>
-    to.source.kind === 'agent' ? `agent:${to.source.sessionId}` : to.source.kind,
+const sources = async (sessionId: string, name: string) => {
+  await flushChatFiles();
+  return (await chatFileHistory(sessionId, `share/${name}`)).map(({ event: { source } }) =>
+    source.kind === 'agent' ? `agent:${source.sessionId}` : source.kind,
   );
+};
+
+it('同归属的连续改动在 15 秒滑动窗口内合并，最多等 30 秒', async () => {
+  const onCommit = vi.fn();
+  const unwatch = watchChatFiles(() => false, onCommit);
+  vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+  const id = randomUUID();
+  const history = () => chatFileHistory(id, 'share/a.md');
+  const save = (text: string) => userChatWrite([pathOf(id, 'a.md')], () => write(id, 'a.md', text));
+  try {
+    await history();
+    save('first');
+    expect(await history()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(14_000);
+    save('second');
+    expect(await history()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(14_000);
+    save('third');
+    expect(await history()).toHaveLength(0);
+    expect(onCommit).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(2000);
+    const snapshots = await history();
+    expect(snapshots).toHaveLength(1);
+    expect(onCommit).toHaveBeenCalledTimes(1);
+    const [merged] = snapshots;
+    expect(
+      await readChatFileVersion(id, merged!.event.id, merged!.event.id, 'share/a.md'),
+    ).toMatchObject({ status: 'added', after: 'third' });
+
+    save('fourth');
+    expect(await history()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(await history()).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await history()).toHaveLength(2);
+    expect(onCommit).toHaveBeenCalledTimes(2);
+  } finally {
+    unwatch();
+    await flushChatFiles();
+    vi.useRealTimers();
+  }
+});
 
 it('Agent 运行期间交错的用户改动与 Agent 改动各自归属', async () => {
   const id = randomUUID();
@@ -75,6 +123,12 @@ it('子 Agent 的改动记在子会话名下，并随主轮次一起撤销', asy
   await runCommand(id, agent(child, randomUUID(), turnId), () => write(id, 'kept.md', 'child'));
   write(id, 'other.md', 'user');
 
+  await freezeChatTurn(id, id, turnId, new Date().toISOString(), 'completed');
+  expect(await readTurnFileChange(id, turnId, '/share/kept.md')).toMatchObject({
+    before: 'v1',
+    after: 'child',
+  });
+  expect(await chatFileHistory(id, 'share/kept.md')).toHaveLength(1);
   expect(await sources(id, 'kept.md')).toEqual(['user', `agent:${child}`]);
   await revertChatTurns(id, [turnId]);
   expect(read(id, 'kept.md')).toBe('v1');
@@ -137,14 +191,14 @@ it('重启后从版本库读回归属与历史，大文件只记录元数据', a
     write(id, 'large.bin', 'x'.repeat(5 * 1024 * 1024 + 1));
   });
 
-  await chatFileHistory(id, 'share/kept.md');
+  await flushChatFiles();
   const ports = hostPorts();
   vi.resetModules();
   (await import('../../../src/core/ports')).provideHostPorts(ports);
   const restarted = await import('../../../src/core/agent/chat-files');
   const history = await restarted.chatFileHistory(id, 'share/large.bin');
-  expect(history.map(({ to }) => to.source.kind)).toEqual(['agent']);
-  expect(history[0]!.last.after?.stored).toBe(false);
+  expect(history.map(({ event }) => event.source.kind)).toEqual(['agent']);
+  expect(history[0]!.change.after?.stored).toBe(false);
   const target = randomUUID();
   await restarted.branchChatFiles(id, target, 'entry', [turnId]);
   expect(read(target, 'kept.md')).toBe('v1');
@@ -158,6 +212,7 @@ it('一批写入失败后丢弃这批记录，后续读取与记录照常进行'
   const turnId = randomUUID();
   write(id, 'a.md', 'v1');
   await chatFileHistory(id, 'share/a.md');
+  await flushChatFiles();
   const objects = join(hostPorts().paths.userData(), 'chat-files', id, '.git', 'objects');
   renameSync(objects, `${objects}.bak`);
   writeFileSync(objects, '');
@@ -168,7 +223,7 @@ it('一批写入失败后丢弃这批记录，后续读取与记录照常进行'
   renameSync(`${objects}.bak`, objects);
 
   await runCommand(id, agent(id, turnId), () => write(id, 'a.md', 'model'));
-  expect(await sources(id, 'a.md')).toEqual(['user', `agent:${id}`]);
+  expect(await sources(id, 'a.md')).toEqual(['user', 'user', `agent:${id}`]);
   await revertChatTurns(id, [turnId]);
   expect(read(id, 'a.md')).toBe('lost');
 });

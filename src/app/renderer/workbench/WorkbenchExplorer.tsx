@@ -5,7 +5,6 @@ import {
   ArrowUpTrayIcon as Upload,
   ChevronDoubleLeftIcon as PanelLeftClose,
   ChevronDoubleUpIcon as ChevronsDownUp,
-  ClockIcon as Clock,
   DocumentArrowUpIcon as FileInput,
   DocumentPlusIcon as FilePlus2,
   FolderIcon,
@@ -159,7 +158,6 @@ export function WorkbenchExplorer({
   const changesProjectId = root?.kind === 'project' && root.path && !remoteRoot ? root.id : null;
   const showChanges = changesProjectId !== null && mode === 'changes';
   const [archiveOpen, setArchiveOpen] = useState(false);
-  const [timelineOpen, setTimelineOpen] = useState(false);
   const [marked, setMarked] = useState<string[]>([]);
   const shareSelected =
     share && activeDocKey && share.entries.some((entry) => entry.id === activeDocKey)
@@ -574,32 +572,14 @@ export function WorkbenchExplorer({
                 )}
               </div>
               {share && (
-                <div className="shrink-0 border-t border-line">
-                  <button
-                    aria-expanded={timelineOpen}
-                    className={cn(
-                      sectionClass,
-                      'w-full transition-colors duration-base hover:text-ink-2',
-                    )}
-                    onClick={() => setTimelineOpen((value) => !value)}
-                    type="button"
-                  >
-                    <CollapseChevron open={timelineOpen} />
-                    <Clock className="size-4" />
-                    时间线
-                  </button>
-                  {timelineOpen && (
-                    <FileTimeline
-                      activeTab={activeTab}
-                      onOpen={(tabId) => {
-                        openTarget(tabId);
-                        if (narrow) useMobileDrawer.getState().setDrawer(null);
-                      }}
-                      path={timelineFile ? (timelineFile.path ?? timelineFile.id) : null}
-                      updatedAt={timelineFile?.updatedAt ?? null}
-                    />
-                  )}
-                </div>
+                <FileTimeline
+                  activeTab={activeTab}
+                  onOpen={(tabId) => {
+                    openTarget(tabId);
+                    if (narrow) useMobileDrawer.getState().setDrawer(null);
+                  }}
+                  selectedPath={timelineFile ? (timelineFile.path ?? timelineFile.id) : null}
+                />
               )}
               {!share && (
                 <div className="shrink-0 border-t border-line">

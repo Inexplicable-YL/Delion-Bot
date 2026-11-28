@@ -124,3 +124,35 @@ it('审阅与打开按解析出的标签键落位，已删除文件的打开被�
   const deletedOpen = host.querySelector<HTMLButtonElement>('[title="文件已删除"]')!;
   expect(deletedOpen.disabled).toBe(true);
 });
+
+it('普通聊天显示共享目录内的相对路径，审阅和打开使用原路径', async () => {
+  const turn = turnFixture({
+    files: ['/share/report.md', '/share/notes/draft.md'].map((path) => ({
+      path,
+      status: 'modified',
+      beforeBytes: 1,
+      afterBytes: 2,
+      textDiff: true,
+    })),
+  });
+  api['agent:read-turn-changes'].mockResolvedValue(turn);
+  await renderCard(sessionId, turn.turnId);
+  await act(async () => host.querySelector<HTMLButtonElement>('button[aria-expanded]')!.click());
+
+  const [rootFile, nestedFile] = host.querySelectorAll('li');
+  expect(rootFile!.querySelector('[title="report.md"]')).toBeTruthy();
+  expect(nestedFile!.querySelector('[title="notes/draft.md"]')).toBeTruthy();
+  expect(rootFile!.textContent).not.toContain('/share');
+  expect(nestedFile!.textContent).not.toContain('/share');
+  expect(nestedFile!.textContent).toContain('notes');
+
+  await act(async () => rootFile!.querySelector('button')!.click());
+  expect(workbench.open).toHaveBeenCalledWith(
+    `review:${sessionId}:${turn.turnId}:/share/report.md`,
+    { aside: true },
+  );
+  await act(async () =>
+    nestedFile!.querySelector<HTMLButtonElement>('[title="在 Delion Bot 中打开"]')!.click(),
+  );
+  expect(api['chat:locateFile']).toHaveBeenCalledWith({ sessionId, path: '/share/notes/draft.md' });
+});

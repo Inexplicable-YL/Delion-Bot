@@ -87,16 +87,16 @@ export async function chatFileTimeline(file: string) {
   return {
     sessionId: key.sessionId,
     path: key.path,
-    entries: history.toReversed().map(({ from, to, first, last }) => ({
-      fromEventId: from.id,
-      toEventId: to.id,
-      at: to.at,
-      status: !first.before
+    entries: history.toReversed().map(({ event, change }) => ({
+      fromEventId: event.id,
+      toEventId: event.id,
+      at: event.at,
+      status: !change.before
         ? ('added' as const)
-        : !last.after
+        : !change.after
           ? ('deleted' as const)
           : ('modified' as const),
-      source: timelineSource(to.source),
+      source: timelineSource(event.source),
     })),
   };
 }

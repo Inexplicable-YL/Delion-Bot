@@ -17,11 +17,13 @@ import type { Stats } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import type { FileChangeDetail, TurnChanges } from '../protocol/agent';
 import { hostPorts } from '../ports';
-import { saveTurnChanges, storedFileChange, type StoredFile } from './changes';
+import { saveTurnChanges, storedFileChange, type StoredChange, type StoredFile } from './changes';
 
 const STORED_BYTE_LIMIT = 5 * 1024 * 1024;
 const FILE_LIMIT = 10_000;
 const WATCH_DELAY_MS = 100;
+const MERGE_IDLE_MS = 15_000;
+const MERGE_MAX_MS = 30_000;
 const BRANCH = 'refs/heads/main';
 const NO_OBJECT = '0'.repeat(40);
 const LARGE = '.large/';
@@ -85,6 +87,7 @@ interface ChangeEvent {
 }
 
 type PendingEvent = Omit<ChangeEvent, 'id'>;
+type OpenEvent = PendingEvent & { startedAt: number; deadline: number; timer: NodeJS.Timeout };
 type FileTree = Map<string, FileVersion>;
 
 interface Owner {
@@ -92,6 +95,7 @@ interface Owner {
   head: string | null;
   events: ChangeEvent[];
   pending: PendingEvent[];
+  openEvent?: OpenEvent;
   inflight: PendingEvent[];
   flushing?: Promise<void>;
   tree: FileTree;
@@ -231,6 +235,7 @@ async function readBlobs(
 
 const owners = new Map<string, Owner>();
 let watching = false;
+let onShareCommit: (() => void) | undefined;
 function ownerOf(sessionId: string): Owner {
   let owner = owners.get(sessionId);
   if (!owner) {
@@ -307,8 +312,8 @@ async function load(sessionId: string, owner: Owner) {
 
 function liveBlobs(owner: Owner) {
   const live = new Set(
-    [...owner.inflight, ...owner.pending].flatMap((event) =>
-      event.changes.flatMap(({ after }) => (after ? [after.oid] : [])),
+    [...owner.inflight, ...owner.pending, owner.openEvent].flatMap(
+      (event) => event?.changes.flatMap(({ after }) => (after ? [after.oid] : [])) ?? [],
     ),
   );
   for (const oid of owner.blobs.keys()) if (!live.has(oid)) owner.blobs.delete(oid);
@@ -355,19 +360,20 @@ async function writeBatch(sessionId: string, owner: Owner) {
     .split('\n');
   owner.events.push(...owner.inflight.map((event, index) => ({ ...event, id: ids[index]! })));
   owner.head = ids.at(-1)!;
+  if (owner.inflight.some((event) => event.changes.some(({ path }) => path.startsWith('share/'))))
+    onShareCommit?.();
 }
 
 function flush(sessionId: string, owner: Owner): Promise<void> {
+  if (!owner.pending.length) return owner.flushing ?? Promise.resolve();
   owner.flushing ??= (async () => {
     try {
       while (owner.pending.length) {
-        owner.inflight = owner.pending
-          .splice(0)
-          .filter((event) => event.changes.length || event.startsTurns.length);
-        if (!owner.inflight.length) continue;
+        owner.inflight = owner.pending.splice(0);
         try {
           await writeBatch(sessionId, owner);
         } catch (error) {
+          closeMergeWindow(owner);
           owner.turnStarts.unshift(
             ...[...owner.inflight, ...owner.pending].flatMap(({ startsTurns }) => startsTurns),
           );
@@ -389,7 +395,8 @@ function flush(sessionId: string, owner: Owner): Promise<void> {
 
 async function flushed(sessionId: string, owner: Owner) {
   await owner.flushing?.catch(() => {});
-  if (owner.pending.length) await flush(sessionId, owner);
+  closeMergeWindow(owner);
+  await flush(sessionId, owner);
 }
 
 const locked = (owner: Owner, path: string) =>
@@ -460,16 +467,35 @@ function changesBetween(before: FileTree, after: FileTree): FileChange[] {
 const sameVersion = (left: FileVersion | null, right: FileVersion | null) =>
   left?.oid === right?.oid && left?.mode === right?.mode;
 
+function closeMergeWindow(owner: Owner) {
+  const event = owner.openEvent;
+  if (!event) return;
+  clearTimeout(event.timer);
+  owner.openEvent = undefined;
+  if (event.changes.length || event.startsTurns.length) owner.pending.push(event);
+}
+
+function flushInBackground(sessionId: string, owner: Owner) {
+  void flush(sessionId, owner).catch((error: unknown) =>
+    console.error('保存聊天文件版本失败', error),
+  );
+}
+
 function append(sessionId: string, owner: Owner, source: ChangeSource, changes: FileChange[]) {
   if (!changes.length) return;
   for (const change of changes)
     if (change.after) owner.tree.set(change.path, change.after);
     else owner.tree.delete(change.path);
   const startsTurns = owner.turnStarts.splice(0);
-  const last = owner.pending.at(-1);
-  const at = new Date().toISOString();
-  if (last && !startsTurns.length && JSON.stringify(last.source) === JSON.stringify(source)) {
-    last.at = at;
+  const now = Date.now();
+  const at = new Date(now).toISOString();
+  const last = owner.openEvent;
+  const merge =
+    last &&
+    now < last.deadline &&
+    !startsTurns.length &&
+    JSON.stringify(last.source) === JSON.stringify(source);
+  if (merge) {
     for (const change of changes) {
       const index = last.changes.findIndex(({ path }) => path === change.path);
       if (index < 0) last.changes.push(change);
@@ -477,11 +503,29 @@ function append(sessionId: string, owner: Owner, source: ChangeSource, changes: 
         last.changes.splice(index, 1);
       else last.changes[index] = { ...last.changes[index]!, after: change.after };
     }
+    clearTimeout(last.timer);
+  } else closeMergeWindow(owner);
+
+  if (source.kind === 'user' || source.kind === 'agent') {
+    const startedAt = merge ? last.startedAt : now;
+    const deadline = Math.min(now + MERGE_IDLE_MS, startedAt + MERGE_MAX_MS);
+    const timer = setTimeout(() => {
+      closeMergeWindow(owner);
+      flushInBackground(sessionId, owner);
+    }, deadline - now);
+    timer.unref();
+    owner.openEvent = {
+      at,
+      source,
+      startsTurns: merge ? last.startsTurns : startsTurns,
+      changes: merge ? last.changes : changes,
+      startedAt,
+      deadline,
+      timer,
+    };
   } else owner.pending.push({ at, source, startsTurns, changes });
   liveBlobs(owner);
-  void flush(sessionId, owner).catch((error: unknown) =>
-    console.error('保存聊天文件版本失败', error),
-  );
+  if (owner.pending.length) flushInBackground(sessionId, owner);
 }
 
 async function sync(sessionId: string, owner: Owner, source: ChangeSource, scope?: string) {
@@ -613,7 +657,10 @@ export function userChatWrite<T>(paths: string[], work: () => T): T {
   return result;
 }
 
-export function watchChatFiles(sessionExists: (id: string) => boolean): () => void {
+export function watchChatFiles(
+  sessionExists: (id: string) => boolean,
+  onCommit: () => void,
+): () => void {
   const storage = hostPorts().paths.storage();
   const watchers = (Object.entries(roots) as [Root, string][]).map(([root, directory]) => {
     const base = join(storage, directory);
@@ -639,15 +686,19 @@ export function watchChatFiles(sessionExists: (id: string) => boolean): () => vo
     });
     return watcher;
   });
+  onShareCommit = onCommit;
   watching = true;
   return () => {
     for (const watcher of watchers) watcher.close();
+    onShareCommit = undefined;
     watching = false;
   };
 }
 
 export function hasPendingChatFiles(): boolean {
-  return [...owners.values()].some((owner) => owner.pending.length || owner.flushing);
+  return [...owners.values()].some(
+    (owner) => owner.openEvent || owner.pending.length || owner.flushing,
+  );
 }
 
 export async function flushChatFiles(): Promise<void> {
@@ -692,31 +743,33 @@ export async function freezeChatTurn(
   unavailableReason?: string,
 ): Promise<void> {
   const warnings = unavailableReason ? [unavailableReason] : [];
-  const files = [];
+  const files: StoredChange[] = [];
   if (!unavailableReason)
     try {
-      const owner = ownerOf(ownerId);
-      const net = new Map<string, FileChange>();
-      for (const event of await serialized(ownerId, async () => {
-        await flushed(ownerId, owner);
-        return owner.events;
-      }))
-        if (ofTurns(event.source, new Set([turnId])))
-          for (const change of event.changes)
-            if (change.path.startsWith('share/'))
-              net.set(change.path, {
-                path: change.path,
-                before: net.get(change.path)?.before ?? change.before,
-                after: change.after,
-              });
-      const changed = [...net.values()].filter(({ before, after }) => before?.oid !== after?.oid);
-      const blobs = await readBlobs(ownerId, owner, versionOids(changed));
-      for (const change of changed)
-        files.push({
-          path: `/${change.path}`,
-          before: storedFile(change.before, blobs),
-          after: storedFile(change.after, blobs),
-        });
+      await serialized(ownerId, async (owner) => {
+        await owner.flushing;
+        const net = new Map<string, FileChange>();
+        const turnIds = new Set([turnId]);
+        const events = owner.openEvent ? [...owner.events, owner.openEvent] : owner.events;
+        for (const event of events)
+          if (ofTurns(event.source, turnIds))
+            for (const change of event.changes)
+              if (change.path.startsWith('share/')) {
+                const previous = net.get(change.path);
+                net.set(change.path, {
+                  ...change,
+                  before: previous ? previous.before : change.before,
+                });
+              }
+        const changed = [...net.values()].filter(({ before, after }) => before?.oid !== after?.oid);
+        const blobs = await readBlobs(ownerId, owner, versionOids(changed));
+        for (const change of changed)
+          files.push({
+            path: `/${change.path}`,
+            before: storedFile(change.before, blobs),
+            after: storedFile(change.after, blobs),
+          });
+      });
     } catch (error) {
       warnings.push(errorText(error));
     }
@@ -826,6 +879,7 @@ export async function deleteChatFiles(sessionId: string): Promise<void> {
   const owner = ownerOf(sessionId);
   owner.loaded = true;
   await serialized(sessionId, async () => {
+    closeMergeWindow(owner);
     owner.pending = [];
     await owner.flushing?.catch(() => {});
     await rm(storeDirectory(sessionId), { recursive: true, force: true });
@@ -847,27 +901,13 @@ export function chatFileKey(file: string): { sessionId: string; path: string } |
   return null;
 }
 
-const runKey = (event: ChangeEvent) => {
-  const { source } = event;
-  if (source.kind === 'user') return 'user';
-  if (source.kind === 'agent') return `agent:${source.sessionId}:${source.turnId}`;
-  return event.id;
-};
-
 export function chatFileHistory(sessionId: string, path: string) {
   return serialized(sessionId, async (owner) => {
-    await flushed(sessionId, owner);
-    const runs: { from: ChangeEvent; to: ChangeEvent; first: FileChange; last: FileChange }[] = [];
-    for (const event of owner.events) {
+    await owner.flushing?.catch(() => {});
+    return owner.events.flatMap((event) => {
       const change = event.changes.find((change) => change.path === path);
-      if (!change) continue;
-      const previous = runs.at(-1);
-      if (previous && runKey(previous.to) === runKey(event)) {
-        previous.to = event;
-        previous.last = change;
-      } else runs.push({ from: event, to: event, first: change, last: change });
-    }
-    return runs;
+      return change ? [{ event, change }] : [];
+    });
   });
 }
 
@@ -879,7 +919,7 @@ export async function readChatFileVersion(
 ): Promise<FileChangeDetail> {
   const owner = ownerOf(sessionId);
   const events = await serialized(sessionId, async () => {
-    await flushed(sessionId, owner);
+    await owner.flushing?.catch(() => {});
     return owner.events;
   });
   const changeIn = (id: string) =>
