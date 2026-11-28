@@ -9,6 +9,7 @@ import {
 } from '../protocol/agent';
 import { agentEnvironment } from './environment';
 import { releaseChatAttachments } from './media';
+import { foreignChatPath, virtualChatText } from './chat-paths';
 import { loadPi, openPiSession, writeSessionFile } from './pi';
 import { usableLlmProviders } from './providers';
 import { live } from './session/live';
@@ -155,6 +156,13 @@ async function createSide(parentId: string): Promise<Side> {
     ...(await agentEnvironment().sessionOptions(meta.project_id, piCwd, {
       sessionId: parentId,
     })),
+    ...(meta.project_id === null && {
+      beforeTool: async ({ input }) =>
+        foreignChatPath(JSON.stringify(input), parentId)
+          ? 'This path belongs to another chat session. Use /privacy or /share, or the host directories listed for this chat.'
+          : undefined,
+      transformReply: virtualChatText,
+    }),
   });
   const side: Side = {
     session,

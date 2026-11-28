@@ -37,7 +37,7 @@ import {
   type ScopedDirectory,
 } from './sandbox/mode';
 import { redactModelPaths, virtualizeModelPaths } from './sandbox/model-paths';
-import { permissionPrompt } from './sandbox/permission-prompt';
+import { CHAT_REFERENCE_RULE, permissionPrompt } from './sandbox/permission-prompt';
 import { approveNonPublicRead, approveTool, deniedMessage } from './sandbox/approve-tool';
 import { downloadTool, scopedFileTools, scopedProjectInstructions } from './sandbox/scoped-files';
 import { sandboxCommandTool } from './sandbox/local-command';
@@ -252,7 +252,12 @@ export function agentEnvironment() {
           AGENT_PROMPT,
           ...permissionPrompt(mode, false),
           projectId === null
-            ? `## File placement directories for ordinary chat\nPrivate directory: ${chatSessionDirectory(ownerRow(meta).id)}\nShared directory: ${chatShareDirectory(ownerRow(meta).id)}\nKeep intermediate files in the private directory. Put finished files directly in the shared directory. When the user mentions a file without a location, look in the shared directory first. These directories take precedence over the general file placement rules.`
+            ? [
+                '## File placement directories for ordinary chat',
+                '- This chat has two directories: /privacy for intermediate files and /share for finished files the user sees. Keep intermediate files in /privacy and put finished files directly in /share. When the user mentions a file without a location, look in /share first. These directories take precedence over the general file placement rules.',
+                `- Tools in this session run on the host. Inside tool arguments and commands only, /privacy is ${chatSessionDirectory(ownerRow(meta).id)} and /share is ${chatShareDirectory(ownerRow(meta).id)}. Use these host directories for this session only. A host path under chat-sessions or chat-share that appears in earlier messages may belong to another session; do not reuse it.`,
+                CHAT_REFERENCE_RULE,
+              ].join('\n')
             : `## File placement directories\nAssigned session directory: ${chatSessionDirectory(sessionId)}\nWorkspace directory for deliverables: ${workspaceRoot()}`,
           commandPrompt(effectiveDisabledSkills()),
           directoryPrompt,

@@ -6,18 +6,26 @@ import {
   readChatFileVersion,
   type ChangeSource,
 } from '../chat-files';
+import { virtualChatText } from '../chat-paths';
 import { executionMode } from '../sandbox/mode';
 import { scopedReferencePath } from '../sandbox/scoped-files';
 import { resolveSessionFile } from '../session-path';
-import { isRemoteSession, row, sessionCwd } from './store';
+import { isRemoteSession, row, sessionCwd, type SessionRow } from './store';
 
 const chatVirtualPath = /^\/(privacy|share)(\/|$)/;
+
+export function chatReferencePath(meta: SessionRow, rawPath: string): string | null {
+  if (meta.project_id !== null) return null;
+  const path = virtualChatText(rawPath);
+  return chatVirtualPath.test(path) ? scopedReferencePath(meta, path) : null;
+}
 
 function sessionFilePath(sessionId: string, rawPath: string): string {
   const meta = row(sessionId);
   if (isRemoteSession(meta)) throw new Error('远程项目的文件不在本机，请用远端方式打开');
-  if (executionMode(meta) !== 'full' || (meta.project_id === null && chatVirtualPath.test(rawPath)))
-    return scopedReferencePath(meta, rawPath);
+  const chatPath = chatReferencePath(meta, rawPath);
+  if (chatPath) return chatPath;
+  if (executionMode(meta) !== 'full') return scopedReferencePath(meta, rawPath);
   return resolveSessionFile(sessionCwd(meta.project_id, meta.cwd), rawPath);
 }
 

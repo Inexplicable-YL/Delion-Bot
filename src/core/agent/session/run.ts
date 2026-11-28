@@ -15,6 +15,7 @@ import { emit, hostPorts } from '../../ports';
 import { remoteBackend } from '../../remote/operations';
 import * as changes from '../changes';
 import * as chatFiles from '../chat-files';
+import { foreignChatPath, virtualChatText } from '../chat-paths';
 import { agentEnvironment } from '../environment';
 import { chatAttachmentView, releaseChatAttachments } from '../media';
 import { openPiSession } from '../pi';
@@ -150,11 +151,17 @@ async function openLive(id: string): Promise<Live> {
     customTools: [...options.customTools, ...extraTools],
     ...(meta.parent_id ? { parentSession: row(meta.parent_id).file } : {}),
     beforeTool: async (call) => {
+      if (chatOwner && foreignChatPath(JSON.stringify(call.input), chatOwner))
+        return 'This path belongs to another chat session. Use /privacy or /share, or the host directories listed for this chat.';
       await live.get(id)?.run?.captured;
       const actor = chatOwner && chatActor(id);
       if (actor) await chatFiles.beginChatTool(chatOwner, actor, call);
+      return undefined;
     },
-    ...(chatOwner && { afterTool: (toolCallId) => chatFiles.endChatTool(id, toolCallId) }),
+    ...(chatOwner && {
+      afterTool: (toolCallId) => chatFiles.endChatTool(id, toolCallId),
+      transformReply: virtualChatText,
+    }),
   });
   if (row(id).archived) {
     session.dispose();

@@ -1,5 +1,8 @@
 import type { ExecutionMode, ScopedDirectory } from './mode';
 
+export const CHAT_REFERENCE_RULE =
+  '- In every reply, refer to a chat file only by its virtual path under /privacy or /share, such as [report](/share/report.md). Never write a host absolute path, a drive letter, a file:// URL, or a path under another session’s storage in a reply. Host paths belong to one session and point to the wrong files after the chat is branched.';
+
 const recovery = [
   '## When a tool fails',
   '- Read the tool result before choosing the next action. A rejected or cancelled approval is a decision. Respect the user’s note and continue with an allowed alternative or explain the blocker. Do not resubmit the same operation through another command, tool, or subagent.',
@@ -76,6 +79,7 @@ export function permissionPrompt(
         : root === '/project'
           ? '- /project is the current project root. Use paths such as /project/src/file.ts.'
           : '',
+      chat ? CHAT_REFERENCE_RULE : '',
       root
         ? '- Use the virtual roots as written, with forward slashes in file-tool arguments. Do not add a drive letter, infer a host path, or use .. to move outside a root.'
         : '',

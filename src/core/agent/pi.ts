@@ -205,8 +205,9 @@ export interface OpenSessionInput {
     toolName: string;
     toolCallId: string;
     input: Record<string, unknown>;
-  }) => Promise<void>;
+  }) => Promise<string | undefined>;
   afterTool?: (toolCallId: string) => Promise<void>;
+  transformReply?: (text: string) => string;
   transformModelContext?: (messages: AgentMessage[]) => AgentMessage[];
 }
 
@@ -235,15 +236,32 @@ export async function openPiSession(input: OpenSessionInput): Promise<AgentSessi
     noContextFiles: Boolean(scopedResources),
     extensionFactories: [
       (api) => {
-        const { beforeTool, afterTool } = input;
+        const { beforeTool, afterTool, transformReply } = input;
         if (beforeTool)
           api.on('tool_call', async ({ toolName, toolCallId, parentToolCallId, input: args }) => {
-            if (!parentToolCallId) await beforeTool({ toolName, toolCallId, input: args });
+            if (parentToolCallId) return;
+            const reason = await beforeTool({ toolName, toolCallId, input: args });
+            return reason ? { block: true, reason } : undefined;
           });
         if (afterTool)
           api.on('tool_result', async ({ toolCallId, parentToolCallId }) => {
             if (!parentToolCallId) await afterTool(toolCallId);
           });
+        if (transformReply)
+          api.on('message_end', ({ message }) =>
+            message.role === 'assistant'
+              ? {
+                  message: {
+                    ...message,
+                    content: message.content.map((block) =>
+                      block.type === 'text'
+                        ? { ...block, text: transformReply(block.text) }
+                        : block,
+                    ),
+                  },
+                }
+              : undefined,
+          );
       },
     ],
     additionalSkillPaths: input.skillPaths,
