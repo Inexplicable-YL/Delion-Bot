@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { beforeEach, expect, it } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import {
   beginChatTool,
   branchChatFiles,
@@ -14,6 +14,7 @@ import {
   type AgentActor,
 } from '../../../src/core/agent/chat-files';
 import { chatShareDirectory } from '../../../src/core/agent/session/store';
+import { hostPorts } from '../../../src/core/ports';
 import { provideTestHostPorts } from '../host-mock';
 
 beforeEach(() => {
@@ -115,13 +116,59 @@ it('分支拷贝下一轮开始前的文件状态，并能在新会话撤销继�
   await runCommand(source, agent(source, second), () => write(source, 'notes/a.md', 'second'));
 
   const target = randomUUID();
-  await branchChatFiles(source, target, 'entry', second, [first]);
+  await branchChatFiles(source, target, 'entry', [second]);
   expect(read(target, 'notes/a.md')).toBe('user');
 
   const latest = randomUUID();
-  await branchChatFiles(source, latest, 'entry', undefined, [first]);
+  await branchChatFiles(source, latest, 'entry', []);
   expect(read(latest, 'notes/a.md')).toBe('second');
   write(latest, 'notes/a.md', 'first');
   await revertChatTurns(latest, [first]);
   expect(read(latest, 'notes/a.md')).toBeNull();
+});
+
+it('重启后从版本库读回归属与历史，大文件只记录元数据', async () => {
+  const id = randomUUID();
+  const turnId = randomUUID();
+  write(id, 'kept.md', 'v1');
+  await startChatTurn(id, turnId);
+  await runCommand(id, agent(id, turnId), () => {
+    write(id, 'kept.md', 'model');
+    write(id, 'large.bin', 'x'.repeat(5 * 1024 * 1024 + 1));
+  });
+
+  await chatFileHistory(id, 'share/kept.md');
+  const ports = hostPorts();
+  vi.resetModules();
+  (await import('../../../src/core/ports')).provideHostPorts(ports);
+  const restarted = await import('../../../src/core/agent/chat-files');
+  const history = await restarted.chatFileHistory(id, 'share/large.bin');
+  expect(history.map(({ to }) => to.source.kind)).toEqual(['agent']);
+  expect(history[0]!.last.after?.stored).toBe(false);
+  const target = randomUUID();
+  await restarted.branchChatFiles(id, target, 'entry', [turnId]);
+  expect(read(target, 'kept.md')).toBe('v1');
+  await restarted.revertChatTurns(id, [turnId]);
+  expect(read(id, 'kept.md')).toBe('v1');
+  expect(read(id, 'large.bin')).toBeNull();
+});
+
+it('一批写入失败后丢弃这批记录，后续读取与记录照常进行', async () => {
+  const id = randomUUID();
+  const turnId = randomUUID();
+  write(id, 'a.md', 'v1');
+  await chatFileHistory(id, 'share/a.md');
+  const objects = join(hostPorts().paths.userData(), 'chat-files', id, '.git', 'objects');
+  renameSync(objects, `${objects}.bak`);
+  writeFileSync(objects, '');
+  await startChatTurn(id, turnId);
+  await runCommand(id, agent(id, turnId), () => write(id, 'a.md', 'lost'));
+  expect(await sources(id, 'a.md')).toEqual(['user']);
+  rmSync(objects);
+  renameSync(`${objects}.bak`, objects);
+
+  await runCommand(id, agent(id, turnId), () => write(id, 'a.md', 'model'));
+  expect(await sources(id, 'a.md')).toEqual(['user', `agent:${id}`]);
+  await revertChatTurns(id, [turnId]);
+  expect(read(id, 'a.md')).toBe('lost');
 });

@@ -23,6 +23,7 @@ import { preloadPi } from '../../core/agent/session/store';
 import { emit, hostPorts } from '../../core/ports';
 import { hasSidechats, shutdownSidechats } from '../../core/agent/sidechat';
 import { gcChatMedia } from '../../core/agent/media';
+import { flushChatFiles, hasPendingChatFiles } from '../../core/agent/chat-files';
 import {
   findSkill,
   listSkills,
@@ -71,12 +72,12 @@ export { closeDomainBridge, domainBridge } from '../../core/agent/environment';
 export { gcChatMedia, hasLiveSessions, invalidateSessions, loadPi, shutdownSessions };
 
 function hasLiveSessions() {
-  return hasLiveMainSessions() || hasSidechats();
+  return hasLiveMainSessions() || hasSidechats() || hasPendingChatFiles();
 }
 
 async function shutdownSessions(timeoutMs: number) {
   await Promise.race([
-    Promise.all([shutdownMainSessions(timeoutMs), shutdownSidechats()]),
+    Promise.all([shutdownMainSessions(timeoutMs).then(flushChatFiles), shutdownSidechats()]),
     new Promise((resolve) => setTimeout(resolve, timeoutMs)),
   ]);
 }

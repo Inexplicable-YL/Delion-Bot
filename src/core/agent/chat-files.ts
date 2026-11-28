@@ -1,8 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, watch } from 'node:fs';
 import {
   access,
-  appendFile,
   chmod,
   copyFile,
   lstat,
@@ -10,22 +10,24 @@ import {
   readFile,
   readdir,
   realpath,
-  rename,
   rm,
   writeFile,
 } from 'node:fs/promises';
+import type { Stats } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { promisify } from 'node:util';
-import { gunzip, gzip } from 'node:zlib';
 import type { FileChangeDetail, TurnChanges } from '../protocol/agent';
 import { hostPorts } from '../ports';
 import { saveTurnChanges, storedFileChange, type StoredFile } from './changes';
 
-const compress = promisify(gzip);
-const decompress = promisify(gunzip);
 const STORED_BYTE_LIMIT = 5 * 1024 * 1024;
 const FILE_LIMIT = 10_000;
 const WATCH_DELAY_MS = 100;
+const BRANCH = 'refs/heads/main';
+const NO_OBJECT = '0'.repeat(40);
+const LARGE = '.large/';
+const GIT_TIMEOUT_MS = 120_000;
+const hasControlCharacter = (text: string) =>
+  [...text].some((character) => character < ' ' || character === '\x7f');
 const skipped = new Set(['.git', 'node_modules', '.venv', 'venv', '__pycache__']);
 const privateRuntime = new Set(['.home', '.cache']);
 const roots = { privacy: 'chat-sessions', share: 'chat-share' } as const;
@@ -50,10 +52,8 @@ const readOnlyTools = new Set([
 const pathTools = new Set(['write', 'edit', 'delete', 'mkdir', 'download_file']);
 
 export interface FileVersion {
-  hash: string;
-  bytes: number;
+  oid: string;
   mode: number;
-  mtimeMs: number;
   stored: boolean;
 }
 
@@ -68,8 +68,7 @@ export type ChangeSource =
   | { kind: 'user' }
   | AgentActor
   | { kind: 'branch'; sessionId: string; entryId: string }
-  | { kind: 'revert'; turnIds: string[] }
-  | { kind: 'turn-start'; turnId: string };
+  | { kind: 'revert'; turnIds: string[] };
 
 interface FileChange {
   path: string;
@@ -81,15 +80,25 @@ interface ChangeEvent {
   id: string;
   at: string;
   source: ChangeSource;
+  startsTurns: string[];
   changes: FileChange[];
 }
 
+type PendingEvent = Omit<ChangeEvent, 'id'>;
 type FileTree = Map<string, FileVersion>;
 
 interface Owner {
   loaded: boolean;
+  head: string | null;
   events: ChangeEvent[];
+  pending: PendingEvent[];
+  inflight: PendingEvent[];
+  flushing?: Promise<void>;
   tree: FileTree;
+  blobs: Map<string, Buffer>;
+  seen: Map<string, { bytes: number; mtimeMs: number; version: FileVersion }>;
+  turnStarts: string[];
+  dirty: boolean;
   windows: AgentActor[];
   locks: Map<string, number>;
   exclusive: Promise<void>;
@@ -104,9 +113,7 @@ function storeDirectory(sessionId: string) {
   if (!uuid.test(sessionId)) throw new Error('无效会话标识');
   return join(hostPorts().paths.userData(), 'chat-files', sessionId);
 }
-const blobPath = (sessionId: string, hash: string) =>
-  join(storeDirectory(sessionId), 'blobs', `${hash}.gz`);
-const logPath = (sessionId: string) => join(storeDirectory(sessionId), 'events.jsonl');
+const gitDirectory = (sessionId: string) => join(storeDirectory(sessionId), '.git');
 const rootDirectory = (sessionId: string, root: Root) =>
   join(hostPorts().paths.storage(), roots[root], sessionId);
 
@@ -115,14 +122,129 @@ function hostPath(sessionId: string, path: string) {
   return join(rootDirectory(sessionId, root as Root), ...parts);
 }
 
+function git(sessionId: string, args: string[], input: string | Buffer = ''): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      'git',
+      [`--git-dir=${gitDirectory(sessionId)}`, '-c', 'core.protectNTFS=false', ...args],
+      {
+        windowsHide: true,
+        timeout: GIT_TIMEOUT_MS,
+        env: {
+          ...Object.fromEntries(
+            Object.entries(process.env).filter(([key]) => !key.toUpperCase().startsWith('GIT_')),
+          ),
+          LC_ALL: 'C',
+        },
+      },
+    );
+    const output: Buffer[] = [];
+    const errors: Buffer[] = [];
+    child.stdout.on('data', (chunk: Buffer) => output.push(chunk));
+    child.stderr.on('data', (chunk: Buffer) => errors.push(chunk));
+    child.on('error', reject);
+    child.stdin.on('error', reject);
+    child.on('close', (code, signal) =>
+      code === 0
+        ? resolve(Buffer.concat(output))
+        : reject(
+            new Error(
+              signal
+                ? '版本库操作超时'
+                : Buffer.concat(errors).toString('utf8').trim() || `git 退出码 ${code}`,
+            ),
+          ),
+    );
+    child.stdin.end(input);
+  });
+}
+
+const blobId = (content: Buffer) =>
+  createHash('sha1').update(`blob ${content.length}\0`).update(content).digest('hex');
+const treePath = (path: string, version: FileVersion) => (version.stored ? path : LARGE + path);
+const gitMode = (version: FileVersion) => (version.mode & 0o111 ? '100755' : '100644');
+const quoted = (path: string) => `"${path.replace(/["\\]/g, '\\$&')}"`;
+const versionAt = (path: string, oid: string, mode: string) => {
+  const stored = !path.startsWith(LARGE);
+  return {
+    path: stored ? path : path.slice(LARGE.length),
+    version: { oid, mode: parseInt(mode, 8) & 0o777, stored },
+  };
+};
+
+function parseLog(output: Buffer): ChangeEvent[] {
+  return output
+    .toString('utf8')
+    .split('\x1e')
+    .slice(1)
+    .map((record) => {
+      const [id, at, body, ...diff] = record.split('\0');
+      const changes = new Map<string, FileChange>();
+      for (let index = 0; index + 1 < diff.length; index += 2) {
+        const [oldMode, newMode, oldOid, newOid] = diff[index]!.trim().slice(1).split(' ');
+        const before = versionAt(diff[index + 1]!, oldOid!, oldMode!);
+        const after = versionAt(diff[index + 1]!, newOid!, newMode!);
+        const change = changes.get(before.path) ?? { path: before.path, before: null, after: null };
+        if (oldOid !== NO_OBJECT) change.before = before.version;
+        if (newOid !== NO_OBJECT) change.after = after.version;
+        changes.set(before.path, change);
+      }
+      const message = JSON.parse(body!) as { source: ChangeSource; startsTurns?: string[] };
+      return {
+        id: id!,
+        at: at!,
+        source: message.source,
+        startsTurns: message.startsTurns ?? [],
+        changes: [...changes.values()],
+      };
+    });
+}
+
+async function readBlobs(
+  sessionId: string,
+  owner: Owner,
+  oids: string[],
+): Promise<Map<string, Buffer>> {
+  const blobs = new Map<string, Buffer>();
+  const missing = [...new Set(oids)].filter((oid) => {
+    const content = owner.blobs.get(oid);
+    if (content) blobs.set(oid, content);
+    return !content;
+  });
+  if (!missing.length) return blobs;
+  const output = await git(
+    sessionId,
+    ['cat-file', '--batch'],
+    missing.map((oid) => `${oid}\n`).join(''),
+  );
+  let offset = 0;
+  for (const oid of missing) {
+    const end = output.indexOf(10, offset);
+    const [, type, size] = output.subarray(offset, end).toString('utf8').split(' ');
+    if (type !== 'blob') throw new Error('版本库缺少文件内容');
+    const start = end + 1;
+    blobs.set(oid, output.subarray(start, start + Number(size)));
+    offset = start + Number(size) + 1;
+  }
+  return blobs;
+}
+
 const owners = new Map<string, Owner>();
+let watching = false;
 function ownerOf(sessionId: string): Owner {
   let owner = owners.get(sessionId);
   if (!owner) {
     owner = {
       loaded: false,
+      head: null,
       events: [],
+      pending: [],
+      inflight: [],
       tree: new Map(),
+      blobs: new Map(),
+      seen: new Map(),
+      turnStarts: [],
+      dirty: false,
       windows: [],
       locks: new Map(),
       exclusive: Promise.resolve(),
@@ -144,105 +266,183 @@ function serialized<T>(sessionId: string, work: (owner: Owner) => Promise<T>): P
   return next;
 }
 
-async function load(sessionId: string, owner: Owner) {
-  let text = '';
-  try {
-    text = await readFile(logPath(sessionId), 'utf8');
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  owner.events = text
-    .split('\n')
-    .filter(Boolean)
-    .map((line) => JSON.parse(line) as ChangeEvent);
-  owner.tree = treeAt(owner.events);
-  owner.loaded = true;
-  await sync(sessionId, owner, () => user);
-}
-
-function treeAt(events: ChangeEvent[]): FileTree {
-  const tree: FileTree = new Map();
-  const start = Math.max(
-    0,
-    events.findLastIndex((event) => event.source.kind === 'branch'),
+async function readRepository(sessionId: string, owner: Owner) {
+  owner.events = parseLog(
+    await git(sessionId, [
+      'log',
+      '--reverse',
+      '--root',
+      '--raw',
+      '--no-renames',
+      '--no-abbrev',
+      '--no-color',
+      '-z',
+      '--format=%x1e%H%x00%cI%x00%B',
+      '--branches',
+    ]),
   );
-  for (const event of events.slice(start))
+  owner.head = owner.events.at(-1)?.id ?? null;
+  replayTree(owner);
+}
+
+function replayTree(owner: Owner) {
+  owner.tree.clear();
+  for (const event of owner.events)
     for (const change of event.changes)
-      if (change.after) tree.set(change.path, change.after);
-      else tree.delete(change.path);
-  return tree;
+      if (change.after) owner.tree.set(change.path, change.after);
+      else owner.tree.delete(change.path);
 }
 
-async function storeBlob(sessionId: string, hash: string, content: Buffer) {
-  const path = blobPath(sessionId, hash);
+async function load(sessionId: string, owner: Owner) {
   try {
-    await access(path);
-    return;
-  } catch {}
-  await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  await writeFile(temporary, await compress(content));
-  await rename(temporary, path);
+    await access(join(gitDirectory(sessionId), 'HEAD'));
+  } catch {
+    await mkdir(gitDirectory(sessionId), { recursive: true });
+    await git(sessionId, ['init', '--bare', '--quiet', '--object-format=sha1']);
+  }
+  await readRepository(sessionId, owner);
+  owner.loaded = true;
+  await sync(sessionId, owner, user);
 }
 
-async function readBlob(sessionId: string, hash: string): Promise<Buffer> {
-  return decompress(await readFile(blobPath(sessionId, hash)));
+function liveBlobs(owner: Owner) {
+  const live = new Set(
+    [...owner.inflight, ...owner.pending].flatMap((event) =>
+      event.changes.flatMap(({ after }) => (after ? [after.oid] : [])),
+    ),
+  );
+  for (const oid of owner.blobs.keys()) if (!live.has(oid)) owner.blobs.delete(oid);
 }
 
-async function versionOf(
-  sessionId: string,
-  file: string,
-  known: FileVersion | undefined,
-): Promise<FileVersion> {
-  const info = await lstat(file);
-  const mode = info.mode & 0o777;
-  if (known && known.bytes === info.size && known.mtimeMs === info.mtimeMs)
-    return { ...known, mode };
-  if (info.size > STORED_BYTE_LIMIT)
-    return {
-      hash: `size:${info.size}:${info.mtimeMs}`,
-      bytes: info.size,
-      mode,
-      mtimeMs: info.mtimeMs,
-      stored: false,
-    };
-  const content = await readFile(file);
-  const hash = createHash('sha256').update(content).digest('hex');
-  await storeBlob(sessionId, hash, content);
-  return { hash, bytes: content.length, mode, mtimeMs: info.mtimeMs, stored: true };
+async function writeBatch(sessionId: string, owner: Owner) {
+  const chunks: Buffer[] = [];
+  const text = (value: string) => chunks.push(Buffer.from(value));
+  const data = (content: Buffer) => {
+    text(`data ${content.length}\n`);
+    chunks.push(content);
+    text('\n');
+  };
+  owner.inflight.forEach((event, index) => {
+    text(
+      `commit ${BRANCH}\nmark :${index + 1}\ncommitter Delion Bot <delion@localhost> ${Math.floor(Date.parse(event.at) / 1000)} +0000\n`,
+    );
+    data(
+      Buffer.from(
+        JSON.stringify({
+          source: event.source,
+          ...(event.startsTurns.length && { startsTurns: event.startsTurns }),
+        }),
+      ),
+    );
+    if (index === 0 && owner.head) text(`from ${owner.head}\n`);
+    for (const { path, before, after } of event.changes) {
+      if (before && (!after || treePath(path, before) !== treePath(path, after)))
+        text(`D ${quoted(treePath(path, before))}\n`);
+      if (!after) continue;
+      const content = owner.blobs.get(after.oid);
+      const target = quoted(treePath(path, after));
+      if (content) {
+        text(`M ${gitMode(after)} inline ${target}\n`);
+        data(content);
+      } else text(`M ${gitMode(after)} ${after.oid} ${target}\n`);
+    }
+    text(`get-mark :${index + 1}\n`);
+  });
+  text('done\n');
+  const ids = (await git(sessionId, ['fast-import', '--quiet', '--done'], Buffer.concat(chunks)))
+    .toString('utf8')
+    .trim()
+    .split('\n');
+  owner.events.push(...owner.inflight.map((event, index) => ({ ...event, id: ids[index]! })));
+  owner.head = ids.at(-1)!;
+}
+
+function flush(sessionId: string, owner: Owner): Promise<void> {
+  owner.flushing ??= (async () => {
+    try {
+      while (owner.pending.length) {
+        owner.inflight = owner.pending
+          .splice(0)
+          .filter((event) => event.changes.length || event.startsTurns.length);
+        if (!owner.inflight.length) continue;
+        try {
+          await writeBatch(sessionId, owner);
+        } catch (error) {
+          owner.turnStarts.unshift(
+            ...[...owner.inflight, ...owner.pending].flatMap(({ startsTurns }) => startsTurns),
+          );
+          owner.pending = [];
+          owner.seen.clear();
+          replayTree(owner);
+          throw error;
+        } finally {
+          owner.inflight = [];
+          liveBlobs(owner);
+        }
+      }
+    } finally {
+      owner.flushing = undefined;
+    }
+  })();
+  return owner.flushing;
+}
+
+async function flushed(sessionId: string, owner: Owner) {
+  await owner.flushing?.catch(() => {});
+  if (owner.pending.length) await flush(sessionId, owner);
 }
 
 const locked = (owner: Owner, path: string) =>
   [...owner.locks.keys()].some((key) => path === key || path.startsWith(`${key}/`));
 
-async function scan(sessionId: string, owner: Owner): Promise<FileTree> {
+const tracked = (path: string) => {
+  const parts = path.split('/');
+  return (
+    !parts.some((part) => skipped.has(part) || hasControlCharacter(part)) &&
+    !(parts[0] === 'privacy' && privateRuntime.has(parts[1] ?? ''))
+  );
+};
+
+const within = (path: string, scope: string | undefined) =>
+  !scope || path === scope || path.startsWith(`${scope}/`);
+
+async function scan(sessionId: string, owner: Owner, scope?: string): Promise<FileTree> {
   const tree: FileTree = new Map();
-  for (const [path, version] of owner.tree) if (locked(owner, path)) tree.set(path, version);
-  for (const root of Object.keys(roots) as Root[]) {
-    const base = rootDirectory(sessionId, root);
-    const directories = [''];
-    while (directories.length) {
-      const directory = directories.pop()!;
-      let entries;
-      try {
-        entries = await readdir(join(base, directory), { withFileTypes: true });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
-        throw error;
-      }
-      for (const entry of entries) {
-        if (skipped.has(entry.name)) continue;
-        if (root === 'privacy' && !directory && privateRuntime.has(entry.name)) continue;
-        const name = directory ? `${directory}/${entry.name}` : entry.name;
-        const path = `${root}/${name}`;
-        if (locked(owner, path)) continue;
-        if (entry.isDirectory()) directories.push(name);
-        else if (entry.isFile()) {
-          if (tree.size >= FILE_LIMIT) throw new Error('聊天文件超过 10,000 个，未记录版本');
-          tree.set(path, await versionOf(sessionId, join(base, name), owner.tree.get(path)));
-        }
-      }
+  for (const [path, version] of owner.tree)
+    if (within(path, scope) && locked(owner, path)) tree.set(path, version);
+  const visit = async (path: string, file: string, info: Stats) => {
+    if (tree.size >= FILE_LIMIT) throw new Error('聊天文件超过 10,000 个，未记录版本');
+    const mode = info.mode & 0o111 ? 0o755 : 0o644;
+    const seen = owner.seen.get(path);
+    if (seen && seen.bytes === info.size && seen.mtimeMs === info.mtimeMs) {
+      tree.set(path, { ...seen.version, mode });
+      return;
     }
+    const stored = info.size <= STORED_BYTE_LIMIT;
+    const content = stored
+      ? await readFile(file)
+      : Buffer.from(JSON.stringify({ bytes: info.size, mtimeMs: info.mtimeMs }));
+    const version = { oid: blobId(content), mode, stored };
+    owner.seen.set(path, { bytes: info.size, mtimeMs: info.mtimeMs, version });
+    if (owner.tree.get(path)?.oid !== version.oid) owner.blobs.set(version.oid, content);
+    tree.set(path, version);
+  };
+  const paths = scope ? [scope] : (Object.keys(roots) as string[]);
+  while (paths.length) {
+    const path = paths.pop()!;
+    if (!tracked(path) || locked(owner, path)) continue;
+    const file = hostPath(sessionId, path);
+    const info = await lstat(file).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === 'ENOENT') return null;
+      throw error;
+    });
+    if (info?.isDirectory())
+      for (const name of await readdir(file).catch((error: NodeJS.ErrnoException) => {
+        if (error.code === 'ENOENT') return [];
+        throw error;
+      }))
+        paths.push(`${path}/${name}`);
+    else if (info?.isFile() && path.includes('/')) await visit(path, file, info);
   }
   return tree;
 }
@@ -251,53 +451,54 @@ function changesBetween(before: FileTree, after: FileTree): FileChange[] {
   return [...new Set([...before.keys(), ...after.keys()])].sort().flatMap((path) => {
     const old = before.get(path) ?? null;
     const current = after.get(path) ?? null;
-    return old?.hash === current?.hash && old?.mode === current?.mode
+    return old?.oid === current?.oid && old?.mode === current?.mode
       ? []
       : [{ path, before: old, after: current }];
   });
 }
 
-async function append(
-  sessionId: string,
-  owner: Owner,
-  source: ChangeSource,
-  changes: FileChange[],
-) {
-  const event: ChangeEvent = { id: randomUUID(), at: new Date().toISOString(), source, changes };
-  await mkdir(storeDirectory(sessionId), { recursive: true });
-  await appendFile(logPath(sessionId), `${JSON.stringify(event)}\n`);
-  owner.events.push(event);
+const sameVersion = (left: FileVersion | null, right: FileVersion | null) =>
+  left?.oid === right?.oid && left?.mode === right?.mode;
+
+function append(sessionId: string, owner: Owner, source: ChangeSource, changes: FileChange[]) {
+  if (!changes.length) return;
   for (const change of changes)
     if (change.after) owner.tree.set(change.path, change.after);
     else owner.tree.delete(change.path);
+  const startsTurns = owner.turnStarts.splice(0);
+  const last = owner.pending.at(-1);
+  const at = new Date().toISOString();
+  if (last && !startsTurns.length && JSON.stringify(last.source) === JSON.stringify(source)) {
+    last.at = at;
+    for (const change of changes) {
+      const index = last.changes.findIndex(({ path }) => path === change.path);
+      if (index < 0) last.changes.push(change);
+      else if (sameVersion(last.changes[index]!.before, change.after))
+        last.changes.splice(index, 1);
+      else last.changes[index] = { ...last.changes[index]!, after: change.after };
+    }
+  } else owner.pending.push({ at, source, startsTurns, changes });
+  liveBlobs(owner);
+  void flush(sessionId, owner).catch((error: unknown) =>
+    console.error('保存聊天文件版本失败', error),
+  );
 }
 
-async function sync(
-  sessionId: string,
-  owner: Owner,
-  attribute: (change: FileChange) => ChangeSource | null,
-) {
-  const groups = new Map<string, { source: ChangeSource; changes: FileChange[] }>();
-  for (const change of changesBetween(owner.tree, await scan(sessionId, owner))) {
-    const source = attribute(change);
-    if (!source) continue;
-    const key = JSON.stringify(source);
-    const group = groups.get(key) ?? { source, changes: [] };
-    group.changes.push(change);
-    groups.set(key, group);
-  }
-  for (const { source, changes } of groups.values())
-    await append(sessionId, owner, source, changes);
+async function sync(sessionId: string, owner: Owner, source: ChangeSource, scope?: string) {
+  if (!scope) owner.dirty = false;
+  const before = scope
+    ? new Map([...owner.tree].filter(([path]) => within(path, scope)))
+    : owner.tree;
+  append(sessionId, owner, source, changesBetween(before, await scan(sessionId, owner, scope)));
 }
 
 const current = (owner: Owner) => owner.windows.at(-1) ?? user;
-const syncCurrent = (sessionId: string, owner: Owner) =>
-  sync(sessionId, owner, () => current(owner));
+const syncCurrent = (sessionId: string, owner: Owner) => sync(sessionId, owner, current(owner));
 
 export function startChatTurn(sessionId: string, turnId: string): Promise<void> {
   return serialized(sessionId, async (owner) => {
     await syncCurrent(sessionId, owner);
-    await append(sessionId, owner, { kind: 'turn-start', turnId }, []);
+    owner.turnStarts.push(turnId);
   });
 }
 
@@ -317,7 +518,7 @@ export async function openChatWindow(
   }
   try {
     await serialized(sessionId, async () => {
-      await syncCurrent(sessionId, owner);
+      if (!watching || owner.dirty) await syncCurrent(sessionId, owner);
       owner.windows.push(actor);
     });
   } catch (error) {
@@ -328,7 +529,7 @@ export async function openChatWindow(
   return () =>
     (closing ??= serialized(sessionId, async () => {
       try {
-        await sync(sessionId, owner, () => actor);
+        await sync(sessionId, owner, actor);
       } finally {
         owner.windows.splice(owner.windows.indexOf(actor), 1);
       }
@@ -344,9 +545,7 @@ function lockPath(sessionId: string, path: string, source: ChangeSource): () => 
       const count = owner.locks.get(path)! - 1;
       if (count) owner.locks.set(path, count);
       else owner.locks.delete(path);
-      await sync(sessionId, owner, (change) =>
-        change.path === path || change.path.startsWith(`${path}/`) ? source : null,
-      );
+      await sync(sessionId, owner, source, path);
     }));
 }
 
@@ -425,6 +624,7 @@ export function watchChatFiles(sessionExists: (id: string) => boolean): () => vo
       if (!sessionId || !uuid.test(sessionId)) return;
       if (root === 'privacy' && first && privateRuntime.has(first)) return;
       const owner = ownerOf(sessionId);
+      owner.dirty = true;
       clearTimeout(owner.timer);
       owner.timer = setTimeout(() => {
         if (!sessionExists(sessionId)) return;
@@ -433,26 +633,50 @@ export function watchChatFiles(sessionExists: (id: string) => boolean): () => vo
         );
       }, WATCH_DELAY_MS);
     });
-    watcher.on('error', (error) => console.error('聊天文件监听失败', error));
+    watcher.on('error', (error) => {
+      watching = false;
+      console.error('聊天文件监听失败', error);
+    });
     return watcher;
   });
+  watching = true;
   return () => {
     for (const watcher of watchers) watcher.close();
+    watching = false;
   };
 }
 
-async function storedFile(
-  sessionId: string,
-  version: FileVersion | null,
-): Promise<StoredFile | null> {
+export function hasPendingChatFiles(): boolean {
+  return [...owners.values()].some((owner) => owner.pending.length || owner.flushing);
+}
+
+export async function flushChatFiles(): Promise<void> {
+  await Promise.all(
+    [...owners].map(([sessionId, owner]) =>
+      flushed(sessionId, owner).catch((error: unknown) =>
+        console.error('保存聊天文件版本失败', error),
+      ),
+    ),
+  );
+}
+
+function storedFile(version: FileVersion | null, blobs: Map<string, Buffer>): StoredFile | null {
   if (!version) return null;
+  const content = blobs.get(version.oid)!;
   return {
-    bytes: version.bytes,
+    bytes: version.stored
+      ? content.length
+      : (JSON.parse(content.toString('utf8')) as { bytes: number }).bytes,
     mode: version.mode,
-    fingerprint: version.hash,
-    content: version.stored ? await readBlob(sessionId, version.hash) : null,
+    fingerprint: version.oid,
+    content: version.stored ? content : null,
   };
 }
+
+const versionOids = (changes: FileChange[]) =>
+  changes
+    .flatMap(({ before, after }) => [before?.oid, after?.oid])
+    .filter((oid) => oid !== undefined);
 
 const ofTurns = (source: ChangeSource, turnIds: ReadonlySet<string>) =>
   source.kind === 'agent' &&
@@ -471,8 +695,12 @@ export async function freezeChatTurn(
   const files = [];
   if (!unavailableReason)
     try {
+      const owner = ownerOf(ownerId);
       const net = new Map<string, FileChange>();
-      for (const event of await serialized(ownerId, async (owner) => owner.events))
+      for (const event of await serialized(ownerId, async () => {
+        await flushed(ownerId, owner);
+        return owner.events;
+      }))
         if (ofTurns(event.source, new Set([turnId])))
           for (const change of event.changes)
             if (change.path.startsWith('share/'))
@@ -481,13 +709,14 @@ export async function freezeChatTurn(
                 before: net.get(change.path)?.before ?? change.before,
                 after: change.after,
               });
-      for (const change of net.values())
-        if (change.before?.hash !== change.after?.hash)
-          files.push({
-            path: `/${change.path}`,
-            before: await storedFile(ownerId, change.before),
-            after: await storedFile(ownerId, change.after),
-          });
+      const changed = [...net.values()].filter(({ before, after }) => before?.oid !== after?.oid);
+      const blobs = await readBlobs(ownerId, owner, versionOids(changed));
+      for (const change of changed)
+        files.push({
+          path: `/${change.path}`,
+          before: storedFile(change.before, blobs),
+          after: storedFile(change.after, blobs),
+        });
     } catch (error) {
       warnings.push(errorText(error));
     }
@@ -506,11 +735,11 @@ export async function freezeChatTurn(
   );
 }
 
-async function restore(sessionId: string, path: string, version: FileVersion | null) {
+async function restore(sessionId: string, path: string, content: Buffer | null, mode: number) {
   const target = hostPath(sessionId, path);
   const existing = await lstat(target).catch(() => null);
   if (existing && !existing.isFile()) return;
-  if (!version) {
+  if (!content) {
     if (existing) await rm(target);
     return;
   }
@@ -518,26 +747,40 @@ async function restore(sessionId: string, path: string, version: FileVersion | n
   const root = await realpath(rootDirectory(sessionId, path.split('/')[0] as Root));
   const parent = relative(root, await realpath(dirname(target)));
   if (parent === '..' || parent.startsWith(`..${sep}`) || isAbsolute(parent)) return;
-  await writeFile(target, await readBlob(sessionId, version.hash));
-  await chmod(target, version.mode);
+  await writeFile(target, content);
+  await chmod(target, mode);
 }
 
 export function revertChatTurns(sessionId: string, turnIds: string[]) {
   return serialized(sessionId, async (owner) => {
     await syncCurrent(sessionId, owner);
+    await flushed(sessionId, owner);
     const reverted = new Set(turnIds);
     const state = new Map(owner.tree);
+    const restored = new Map<string, FileVersion | null>();
     for (const event of owner.events.toReversed()) {
       if (!ofTurns(event.source, reverted)) continue;
       for (const change of event.changes) {
-        if ((state.get(change.path)?.hash ?? null) !== (change.after?.hash ?? null)) continue;
+        if ((state.get(change.path)?.oid ?? null) !== (change.after?.oid ?? null)) continue;
         if (change.before && !change.before.stored) continue;
-        await restore(sessionId, change.path, change.before);
+        restored.set(change.path, change.before);
         if (change.before) state.set(change.path, change.before);
         else state.delete(change.path);
       }
     }
-    await sync(sessionId, owner, () => ({ kind: 'revert', turnIds }));
+    const blobs = await readBlobs(
+      sessionId,
+      owner,
+      [...restored.values()].flatMap((version) => (version ? [version.oid] : [])),
+    );
+    for (const [path, version] of restored)
+      await restore(
+        sessionId,
+        path,
+        version ? blobs.get(version.oid)! : null,
+        version?.mode ?? 0o644,
+      );
+    await sync(sessionId, owner, { kind: 'revert', turnIds });
   });
 }
 
@@ -545,47 +788,36 @@ export function branchChatFiles(
   sourceId: string,
   targetId: string,
   entryId: string,
-  nextTurnId: string | undefined,
-  inheritedTurnIds: string[],
+  laterTurnIds: string[],
 ) {
   return serialized(sourceId, async (source) => {
     await syncCurrent(sourceId, source);
-    const next = source.events.findIndex(
-      (event) => event.source.kind === 'turn-start' && event.source.turnId === nextTurnId,
+    await flushed(sourceId, source);
+    const later = new Set(laterTurnIds);
+    const next = source.events.findIndex((event) =>
+      event.startsTurns.some((turnId) => later.has(turnId)),
     );
-    const tree = next >= 0 ? treeAt(source.events.slice(0, next)) : new Map(source.tree);
-    const inheritedTurns = new Set(inheritedTurnIds);
-    const inherited = source.events.filter((event) => ofTurns(event.source, inheritedTurns));
+    const point = next < 0 ? source.head : (source.events[next - 1]?.id ?? null);
     await serialized(targetId, async (target) => {
-      for (const version of inherited.flatMap((event) =>
-        event.changes.flatMap(({ before, after }) => [before, after]),
-      ))
-        if (version?.stored) {
-          const blob = blobPath(targetId, version.hash);
-          await mkdir(dirname(blob), { recursive: true });
-          await copyFile(blobPath(sourceId, version.hash), blob);
-        }
-      for (const event of inherited) {
-        await mkdir(storeDirectory(targetId), { recursive: true });
-        await appendFile(logPath(targetId), `${JSON.stringify(event)}\n`);
-        target.events.push(event);
+      if (point) {
+        await git(sourceId, ['push', '--quiet', gitDirectory(targetId), `+${point}:${BRANCH}`]);
+        await readRepository(targetId, target);
       }
-      const changes: FileChange[] = [];
-      for (const [path, version] of tree) {
+      const blobs = await readBlobs(
+        targetId,
+        target,
+        [...target.tree.values()].flatMap((version) => (version.stored ? [version.oid] : [])),
+      );
+      for (const [path, version] of target.tree) {
         const file = hostPath(targetId, path);
         await mkdir(dirname(file), { recursive: true });
-        if (version.stored) await writeFile(file, await readBlob(sourceId, version.hash));
-        else {
-          const origin = hostPath(sourceId, path);
-          const info = await lstat(origin).catch(() => null);
-          if (!info?.isFile() || `size:${info.size}:${info.mtimeMs}` !== version.hash) continue;
-          await copyFile(origin, file);
-        }
+        if (version.stored) await writeFile(file, blobs.get(version.oid)!);
+        else if (source.tree.get(path)?.oid === version.oid)
+          await copyFile(hostPath(sourceId, path), file);
+        else continue;
         await chmod(file, version.mode);
-        changes.push({ path, before: null, after: await versionOf(targetId, file, undefined) });
       }
-      target.tree = new Map();
-      await append(targetId, target, { kind: 'branch', sessionId: sourceId, entryId }, changes);
+      await sync(targetId, target, { kind: 'branch', sessionId: sourceId, entryId });
     });
   });
 }
@@ -593,9 +825,11 @@ export function branchChatFiles(
 export async function deleteChatFiles(sessionId: string): Promise<void> {
   const owner = ownerOf(sessionId);
   owner.loaded = true;
-  await serialized(sessionId, () =>
-    rm(storeDirectory(sessionId), { recursive: true, force: true }),
-  );
+  await serialized(sessionId, async () => {
+    owner.pending = [];
+    await owner.flushing?.catch(() => {});
+    await rm(storeDirectory(sessionId), { recursive: true, force: true });
+  });
   clearTimeout(owner.timer);
   owners.delete(sessionId);
 }
@@ -622,7 +856,7 @@ const runKey = (event: ChangeEvent) => {
 
 export function chatFileHistory(sessionId: string, path: string) {
   return serialized(sessionId, async (owner) => {
-    await syncCurrent(sessionId, owner);
+    await flushed(sessionId, owner);
     const runs: { from: ChangeEvent; to: ChangeEvent; first: FileChange; last: FileChange }[] = [];
     for (const event of owner.events) {
       const change = event.changes.find((change) => change.path === path);
@@ -643,15 +877,20 @@ export async function readChatFileVersion(
   toEventId: string,
   path: string,
 ): Promise<FileChangeDetail> {
-  const events = await serialized(sessionId, async (owner) => owner.events);
+  const owner = ownerOf(sessionId);
+  const events = await serialized(sessionId, async () => {
+    await flushed(sessionId, owner);
+    return owner.events;
+  });
   const changeIn = (id: string) =>
     events.find((event) => event.id === id)?.changes.find((change) => change.path === path);
   const from = changeIn(fromEventId);
   const to = changeIn(toEventId);
   if (!from || !to) throw new Error('这个版本没有此文件的记录');
+  const blobs = await readBlobs(sessionId, owner, versionOids([from, to]));
   return storedFileChange({
     path,
-    before: await storedFile(sessionId, from.before),
-    after: await storedFile(sessionId, to.after),
+    before: storedFile(from.before, blobs),
+    after: storedFile(to.after, blobs),
   });
 }

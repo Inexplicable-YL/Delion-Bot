@@ -109,11 +109,13 @@ export async function forkSession(id: string, entryId: string): Promise<Workspac
     const end = branch.findIndex((item) => item.id === entryId) + 1;
     const turns = branch.map(entryTurnId);
     const inherited = turns.slice(0, end).filter((turn) => turn !== undefined);
-    const next = end
-      ? turns.slice(end).find((turn) => turn && turn !== inherited.at(-1))
-      : undefined;
+    const later = end
+      ? turns
+          .slice(end)
+          .filter((turn): turn is string => turn !== undefined && !inherited.includes(turn))
+      : [];
     try {
-      await branchChatFiles(id, forked, entryId, next, [...new Set(inherited)]);
+      await branchChatFiles(id, forked, entryId, [...new Set(later)]);
     } catch (error) {
       await deleteSession(forked);
       throw error;
