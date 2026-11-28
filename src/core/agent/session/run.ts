@@ -14,6 +14,7 @@ import { askUserTool } from '../../capabilities/ask-user';
 import { emit, hostPorts } from '../../ports';
 import { remoteBackend } from '../../remote/operations';
 import * as changes from '../changes';
+import * as chatFiles from '../chat-files';
 import { agentEnvironment } from '../environment';
 import { chatAttachmentView, releaseChatAttachments } from '../media';
 import { openPiSession } from '../pi';
@@ -37,6 +38,7 @@ import {
 } from './live';
 import {
   encodeMeta,
+  entryTurnId,
   projectLiveMessages,
   publish,
   queuedTexts,
@@ -455,6 +457,14 @@ export async function askSession(id: string, input: ChatAskInput): Promise<Works
       .reverse()
       .find((item) => item.type === 'message' && item.message.role === 'user');
     if (!lastUser) throw new Error('没有可编辑的消息');
+    if (meta.project_id === null) {
+      const replaced = branch.slice(branch.indexOf(lastUser)).flatMap((item) => {
+        const replacedTurn = entryTurnId(item);
+        return replacedTurn ? [replacedTurn] : [];
+      });
+      await chatFiles.revertChatTurns(id, [...new Set(replaced)]);
+      if (entry.run) throw new Error('请等待当前回答完成');
+    }
     if (lastUser.parentId) entry.session.sessionManager.branch(lastUser.parentId);
     else entry.session.sessionManager.resetLeaf();
     entry.session.agent.state.messages =
@@ -527,9 +537,17 @@ async function runTurn(
   let before: changes.DirectorySnapshot | null = null;
   let captureError: string | undefined;
   const scoped = executionMode(meta) !== 'full';
+  const chat = meta.project_id === null;
   try {
     if (entry.captureDisabled) captureError = '当前会话没有可访问的工作目录';
     else if (isRemoteSession(meta)) captureError = '远程会话暂不记录目录快照';
+    else if (!child && chat)
+      run.captured = chatFiles.recordChatFiles(id, { kind: 'user' }).then(
+        () => {},
+        (error: unknown) => {
+          captureError = error instanceof Error ? error.message : String(error);
+        },
+      );
     else if (!child)
       run.captured = changes.captureDirectory(entry.cwd, [], scoped).then(
         (snapshot) => {
@@ -560,7 +578,9 @@ async function runTurn(
     let changesError: string | undefined;
     try {
       await run.captured;
-      if (!child)
+      if (!child && chat)
+        await chatFiles.freezeChatTurn(id, turnId, startedAt, status, captureError);
+      else if (!child)
         await changes.freezeTurnChanges(
           id,
           turnId,

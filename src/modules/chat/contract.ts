@@ -70,6 +70,24 @@ const localCommandReply = z.object({
 });
 export type LocalCommandReply = z.infer<typeof localCommandReply>;
 
+const fileTimeline = z.object({
+  sessionId,
+  path: filePath,
+  entries: z.array(
+    z.object({
+      eventId: z.uuid(),
+      at: z.string(),
+      status: z.enum(['added', 'modified', 'deleted']),
+      source: z.discriminatedUnion('kind', [
+        z.object({ kind: z.literal('user') }),
+        z.object({ kind: z.literal('revert') }),
+        z.object({ kind: z.literal('turn'), sessionId, title: z.string().nullable() }),
+        z.object({ kind: z.literal('branch'), sessionId, title: z.string().nullable() }),
+      ]),
+    }),
+  ),
+});
+
 const procedures = {
   listSessions: agentContract.procedures['list-sessions'],
   permissionRequests: { input: sessionId, output: z.array(permissionRequest) },
@@ -156,6 +174,11 @@ const procedures = {
   readUncommittedChanges: { input: projectId, output: z.custom<UncommittedChanges>() },
   readUncommittedFileChange: {
     input: z.object({ projectId, path: filePath }),
+    output: z.custom<FileChangeDetail>(),
+  },
+  fileTimeline: { input: z.object({ path: filePath }), output: fileTimeline.nullable() },
+  readFileVersion: {
+    input: z.object({ sessionId, eventId: z.uuid(), path: filePath }),
     output: z.custom<FileChangeDetail>(),
   },
 };

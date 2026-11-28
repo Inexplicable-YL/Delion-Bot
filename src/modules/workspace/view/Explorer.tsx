@@ -74,6 +74,7 @@ export function Explorer({
   pending,
   onActivate,
   onTreeCommit,
+  onMarkedChange,
 }: {
   items: ExplorerItem[];
   expanded: string[];
@@ -91,11 +92,16 @@ export function Explorer({
   pending?: ExplorerPending | null;
   onActivate?: (id: string) => void;
   onTreeCommit?: () => void;
+  onMarkedChange?: (ids: string[]) => void;
 }) {
   'use no memo';
   const root = useRef<HTMLDivElement>(null);
   const [dragIds, setDragIds] = useState<string[] | null>(null);
   const [marked, setMarked] = useState<string[]>([]);
+  const mark = (ids: string[]) => {
+    setMarked(ids);
+    onMarkedChange?.(ids);
+  };
   const [anchor, setAnchor] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [externalDropTarget, setExternalDropTarget] = useState<string | null>(null);
@@ -274,17 +280,15 @@ export function Explorer({
           .slice(start, end + 1)
           .filter((row) => !row.item.readOnly)
           .map((row) => row.item.id);
-        setMarked(toggle ? [...new Set([...base, ...range])] : range);
+        mark(toggle ? [...new Set([...base, ...range])] : range);
         setAnchor(origin);
       } else {
-        setMarked(
-          base.includes(item.id) ? base.filter((id) => id !== item.id) : [...base, item.id],
-        );
+        mark(base.includes(item.id) ? base.filter((id) => id !== item.id) : [...base, item.id]);
         setAnchor(item.id);
       }
       return;
     }
-    setMarked([]);
+    mark([]);
     setAnchor(item.id);
     if (event.altKey && onOpenToSide) onOpenToSide(item.id);
     else onSelect(item.id);
@@ -329,9 +333,9 @@ export function Explorer({
         if (parent >= 0) target = parent;
       }
     } else if (event.key === 'Escape' && selection.length) {
-      setMarked([]);
+      mark([]);
     } else if (event.key === 'Enter' || event.key === ' ') {
-      setMarked([]);
+      mark([]);
       onSelect(item.id);
     } else if (
       event.key.length === 1 &&
@@ -547,7 +551,7 @@ export function Explorer({
                   if (!branch) onActivate?.(item.id);
                 }}
                 onContextMenu={(event) => {
-                  if (!selection.includes(item.id)) setMarked([]);
+                  if (!selection.includes(item.id)) mark([]);
                   const trigger = event.currentTarget.querySelector<HTMLButtonElement>(
                     '[data-slot="dropdown-menu-trigger"]',
                   );

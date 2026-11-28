@@ -346,7 +346,7 @@ export async function freezeTurnChanges(
       warnings = [...warnings, errorText(error)];
     }
   } else warnings = [unavailableReason ?? '未能记录轮前状态'];
-  const saved: SavedTurn = {
+  await writeTurn(sessionId, {
     turnId,
     cwd,
     startedAt,
@@ -355,8 +355,58 @@ export async function freezeTurnChanges(
     state,
     warnings,
     files,
-  };
-  const path = turnPath(sessionId, turnId);
+  });
+}
+
+export interface StoredFile {
+  bytes: number;
+  mode: number;
+  fingerprint: string;
+  content: Buffer | null;
+}
+
+export interface StoredChange {
+  path: string;
+  before: StoredFile | null;
+  after: StoredFile | null;
+}
+
+function storedState(file: StoredFile | null, budget: { remaining: number }): FileState | null {
+  if (!file) return null;
+  if (!file.content)
+    return {
+      bytes: file.bytes,
+      mode: file.mode,
+      fingerprint: file.fingerprint,
+      text: null,
+      note: '文件超过 5 MiB，未保存内容',
+    };
+  return { ...stateOf(file.content, budget), mode: file.mode };
+}
+
+function storedChanges(files: StoredChange[]): SavedChange[] {
+  const budget = { remaining: TEXT_BUDGET };
+  return files.map(({ path, before, after }) => ({
+    path,
+    before: storedState(before, budget),
+    after: storedState(after, budget),
+  }));
+}
+
+export async function saveTurnChanges(
+  sessionId: string,
+  turn: Omit<TurnChanges, 'files'>,
+  files: StoredChange[],
+): Promise<void> {
+  await writeTurn(sessionId, { ...turn, files: storedChanges(files) });
+}
+
+export function storedFileChange(change: StoredChange): FileChangeDetail {
+  return detail(storedChanges([change])[0]!);
+}
+
+async function writeTurn(sessionId: string, saved: SavedTurn): Promise<void> {
+  const path = turnPath(sessionId, saved.turnId);
   await mkdir(sessionDirectory(sessionId), { recursive: true });
   const temporary = `${path}.tmp`;
   await writeFile(temporary, await compress(JSON.stringify(saved)));

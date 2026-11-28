@@ -3,13 +3,14 @@ import { rm } from 'node:fs/promises';
 import type { WorkspaceChat, MainSessionCommand, PermissionMode } from '../../protocol/agent';
 import { hostPorts } from '../../ports';
 import * as changes from '../changes';
+import { branchChatFiles, deleteChatFiles } from '../chat-files';
 import { forkSessionFile, loadPi, resolveModel } from '../pi';
 import { usableLlmProviders } from '../providers';
 import { commandOutputDirectory } from '../sandbox/command-output';
 import { closeSidechat, sidechatBusy } from '../sidechat';
 import { stopSessionTasks } from '../tasks';
 import { live, sessionBranch, type Live } from './live';
-import { COMPACTION_DETAILS, publish, snapshot } from './projection';
+import { COMPACTION_DETAILS, entryTurnId, publish, snapshot } from './projection';
 import { disposeLive, ensureLive, sessionOpening, stopArchivedRun } from './run';
 import {
   adoptSessionFile,
@@ -102,7 +103,23 @@ export async function forkSession(id: string, entryId: string): Promise<Workspac
   const meta = row(id);
   if (!meta.file || !existsSync(meta.file)) throw new Error('会话还没有可分支的记录');
   const file = await forkSessionFile(meta.file, sessionCwd(meta.project_id, meta.cwd), entryId);
-  return snapshot(adoptSessionFile(meta, file, '分支：'));
+  const forked = adoptSessionFile(meta, file, '分支：');
+  if (meta.project_id === null) {
+    const { branch } = sessionBranch(id);
+    const end = branch.findIndex((item) => item.id === entryId) + 1;
+    const turns = branch.map(entryTurnId);
+    const inherited = turns.slice(0, end).filter((turn) => turn !== undefined);
+    const next = end
+      ? turns.slice(end).find((turn) => turn && turn !== inherited.at(-1))
+      : undefined;
+    try {
+      await branchChatFiles(id, forked, entryId, next, [...new Set(inherited)]);
+    } catch (error) {
+      await deleteSession(forked);
+      throw error;
+    }
+  }
+  return snapshot(forked);
 }
 
 export async function sessionExportBranch(id: string) {
@@ -169,6 +186,7 @@ export async function deleteSession(id: string) {
   const { file } = row(id);
   removeSession(id);
   await changes.deleteTurnChanges(id);
+  await deleteChatFiles(id);
   await rm(commandOutputDirectory(id), { recursive: true, force: true });
   if (file && existsSync(file)) await hostPorts().desktop.trash(file);
 }

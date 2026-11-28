@@ -21,6 +21,7 @@ export {
 export { registerChatAttachmentCheck, saveChatDrafts, useChatDrafts } from './drafts';
 export { referenceEntryCandidates } from './reference-tokens';
 export { PermissionNotices } from './PermissionNotices';
+export { FileTimeline } from './review/FileTimeline';
 export { ProjectChanges, ProjectChangeTabStatus } from './review/ProjectChanges';
 export { reviewTabTitle } from './review/tab-id';
 export { runBadge, useRuns, useSessionRunStatus } from './runs';

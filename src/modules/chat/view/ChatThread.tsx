@@ -347,7 +347,6 @@ function AssistantMessage({
   animate,
   activeTool,
   sessionId,
-  showTurnChanges,
   onSaveNote,
   onFork,
   onRetry,
@@ -361,7 +360,6 @@ function AssistantMessage({
   animate: boolean;
   activeTool: string | undefined;
   sessionId: string | null;
-  showTurnChanges: boolean;
   onSaveNote: ((text: string) => void) | undefined;
   onFork: ((entryId: string) => void) | undefined;
   onRetry: (() => void) | undefined;
@@ -390,7 +388,7 @@ function AssistantMessage({
     : foldedTrace
       ? parts.flatMap((part) => (part.type === 'tools' ? part.results : []))
       : message.toolResults;
-  const showChanges = showTurnChanges && !live && turnEnd && sessionId && message.turnId;
+  const showChanges = !live && turnEnd && sessionId && message.turnId;
   const forkEntryId = content && onFork ? message.entryId : undefined;
   const repliedAt = message.finishedAt ?? message.startedAt;
   if (moved && !reason && !message.stopped && !showChanges) return null;
@@ -727,7 +725,6 @@ export function ChatThread({
                 <AssistantMessage
                   key={`${chat.sessionId}:${index}`}
                   sessionId={chat.sessionId}
-                  showTurnChanges={chat.projectId !== null}
                   onRetry={
                     index === messages.length - 1 && !streaming && !message.localCommand
                       ? retry

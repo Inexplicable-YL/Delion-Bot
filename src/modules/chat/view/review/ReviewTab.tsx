@@ -32,6 +32,10 @@ export function ReviewTab({ tabId }: { tabId: TabId; groupId: string }) {
     return (
       <TurnFileReview path={target.path} sessionId={target.sessionId} turnId={target.turnId} />
     );
+  if (target?.kind === 'version')
+    return (
+      <VersionFileReview eventId={target.eventId} path={target.path} sessionId={target.sessionId} />
+    );
   return (
     <Shell>
       <Centered>无效的审阅标签</Centered>
@@ -51,6 +55,24 @@ function TurnFileReview({
   const { data: detail, error } = useQuery({
     queryKey: ['chat', 'turn-file-change', sessionId, turnId, path],
     queryFn: () => agentClient['read-turn-file-change']({ sessionId, turnId, path }),
+    staleTime: Infinity,
+  });
+
+  return <FileReview detail={detail} error={error} />;
+}
+
+function VersionFileReview({
+  sessionId,
+  eventId,
+  path,
+}: {
+  sessionId: string;
+  eventId: string;
+  path: string;
+}) {
+  const { data: detail, error } = useQuery({
+    queryKey: ['chat', 'version-file-change', sessionId, eventId, path],
+    queryFn: () => chatClient.readFileVersion({ sessionId, eventId, path }),
     staleTime: Infinity,
   });
 

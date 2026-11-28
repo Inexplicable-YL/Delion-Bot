@@ -9,7 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { StoredLlmProvider } from '../../../src/core/agent/llm-config';
@@ -132,10 +132,13 @@ import { askSession, invalidateSessions, cancelRun } from '../../../src/core/age
 import { listSessions, writePermissionMode } from '../../../src/core/agent/session/store';
 import { readChatAttachment, stageChatMedia } from '../../../src/core/agent/media';
 import { loadPi, summarizeSessionTitle } from '../../../src/core/agent/pi';
-import * as changes from '../../../src/core/agent/changes';
+import * as chatFiles from '../../../src/core/agent/chat-files';
 import { removeWorkspaceEntry, workspaceProjects } from '../../../src/modules/workspace';
 import { provideTestHostPorts } from '../host-mock';
 import { registerDocumentReader } from '../../../src/core/capabilities/documents';
+
+const shareOf = (privateDirectory: string) =>
+  join(dirname(dirname(privateDirectory)), 'chat-share', basename(privateDirectory));
 
 registerDocumentReader({
   skill: 'document-reading',
@@ -237,7 +240,7 @@ it.each([false, true])('移除项目会删除名下全部会话与条目行 (rem
 it('真实 ask 生命周期冻结文件变化并将 turnId 持久化到消息元数据', async () => {
   state.configured = true;
   const chat = await newSession(null);
-  const path = join(chat.cwd!, 'output.txt');
+  const path = join(shareOf(chat.cwd!), 'output.txt');
   writeFileSync(path, 'before');
   state.onPrompt = async () => {
     await state.beforeTool?.();
@@ -254,11 +257,11 @@ it('真实 ask 生命周期冻结文件变化并将 turnId 持久化到消息元
   expect(turns[0]).toMatchObject({
     state: 'complete',
     runStatus: 'completed',
-    files: [{ path: 'output.txt', status: 'modified' }],
+    files: [{ path: '/share/output.txt', status: 'modified' }],
   });
   expect(response.messages[0]?.turnId).toBe(turns[0]!.turnId);
   expect(
-    await readSessionTurnFileChange(chat.sessionId!, turns[0]!.turnId, 'output.txt'),
+    await readSessionTurnFileChange(chat.sessionId!, turns[0]!.turnId, '/share/output.txt'),
   ).toMatchObject({ before: 'before', after: 'after' });
 });
 
@@ -267,14 +270,14 @@ it('prompt 失败仍冻结此前的文件修改，不吞掉原始错误', async 
   const chat = await newSession(null);
   state.onPrompt = async () => {
     await state.beforeTool?.();
-    writeFileSync(join(chat.cwd!, 'partial.txt'), 'partial');
+    writeFileSync(join(shareOf(chat.cwd!), 'partial.txt'), 'partial');
     throw new Error('model failed');
   };
   await expect(
     askSession(chat.sessionId!, { text: '尝试', attachments: [], context: [], comments: [] }),
   ).rejects.toThrow('model failed');
   expect(await listSessionTurnChanges(chat.sessionId!)).toMatchObject([
-    { runStatus: 'failed', files: [{ path: 'partial.txt', status: 'added' }] },
+    { runStatus: 'failed', files: [{ path: '/share/partial.txt', status: 'added' }] },
   ]);
 });
 
@@ -283,17 +286,18 @@ it('用户停止仍冻结已产生的文件，并在删除会话时清理快照'
   const chat = await newSession(null);
   state.onPrompt = async () => {
     await state.beforeTool?.();
-    writeFileSync(join(chat.cwd!, 'stopped.txt'), 'partial');
+    writeFileSync(join(shareOf(chat.cwd!), 'stopped.txt'), 'partial');
     cancelRun(chat.sessionId!);
   };
   await askSession(chat.sessionId!, { text: '停止', attachments: [], context: [], comments: [] });
   const [turn] = await listSessionTurnChanges(chat.sessionId!);
   expect(turn).toMatchObject({
     runStatus: 'stopped',
-    files: [{ path: 'stopped.txt', status: 'added' }],
+    files: [{ path: '/share/stopped.txt', status: 'added' }],
   });
   await deleteSession(chat.sessionId!);
   expect(existsSync(join(state.root, 'chat-changes', chat.sessionId!))).toBe(false);
+  expect(existsSync(join(state.root, 'chat-files', chat.sessionId!))).toBe(false);
 });
 
 it('远程会话的轮次改动快照标记为不可用', async () => {
@@ -323,7 +327,7 @@ it('远程会话的轮次改动快照标记为不可用', async () => {
 it('快照失败不阻止模型运行，结果明确标记 unavailable', async () => {
   state.configured = true;
   const chat = await newSession(null);
-  vi.spyOn(changes, 'captureDirectory').mockRejectedValueOnce(new Error('scan failed'));
+  vi.spyOn(chatFiles, 'recordChatFiles').mockRejectedValueOnce(new Error('scan failed'));
   await askSession(chat.sessionId!, {
     text: '继续回答',
     attachments: [],
@@ -340,9 +344,9 @@ it('模型请求不等目录快照，工具执行前才等它拍完', async () =
   state.configured = true;
   const chat = await newSession(null);
   let finishCapture!: () => void;
-  vi.spyOn(changes, 'captureDirectory').mockReturnValueOnce(
+  vi.spyOn(chatFiles, 'recordChatFiles').mockReturnValueOnce(
     new Promise((resolve) => {
-      finishCapture = () => resolve({ files: {}, unreadable: [], warnings: [] });
+      finishCapture = () => resolve({ events: [], current: new Map(), event: null });
     }),
   );
   let toolReleased = false;

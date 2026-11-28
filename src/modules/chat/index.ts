@@ -13,8 +13,10 @@ import {
   updateSessionVisibility,
 } from '../../core/agent/session/commands';
 import {
+  chatFileTimeline,
   locateSessionFile,
   openSessionFile,
+  readChatFileVersionChange,
   revealSessionFile,
 } from '../../core/agent/session/files';
 import {
@@ -171,5 +173,8 @@ export const chatModule = defineModule({
     readUncommittedChanges: (projectId) => readUncommittedChanges(localProjectDirectory(projectId)),
     readUncommittedFileChange: ({ projectId, path }) =>
       readUncommittedFileChange(localProjectDirectory(projectId), path),
+    fileTimeline: ({ path }) => chatFileTimeline(path),
+    readFileVersion: ({ sessionId, eventId, path }) =>
+      readChatFileVersionChange(sessionId, eventId, path),
   }),
 });

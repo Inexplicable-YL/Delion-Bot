@@ -94,6 +94,13 @@ export function splitMeta(text: string): { meta: UserMessageMeta; text: string; 
   }
 }
 
+export function entryTurnId(entry: SessionEntry): string | undefined {
+  if (entry.type === 'message' && entry.message.role === 'user')
+    return splitMeta(textOf(entry.message.content)).meta.turnId;
+  if (entry.type === 'custom_message' && entry.customType === TASK_NOTICE)
+    return (entry.details as TaskNoticeDetails).turnId;
+}
+
 export const queuedTexts = (steering: readonly string[]) =>
   steering.map((text) => splitMeta(text).text);
 

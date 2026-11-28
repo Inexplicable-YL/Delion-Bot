@@ -101,6 +101,7 @@ export function ProjectFileTree({
   archived = false,
   pending,
   onActivate,
+  onMarkedChange,
 }: {
   entries: WorkspaceEntry[];
   rootId: string | null;
@@ -123,6 +124,7 @@ export function ProjectFileTree({
   archived?: boolean;
   pending?: ExplorerPending | null;
   onActivate?: (id: string) => void;
+  onMarkedChange?: (ids: string[]) => void;
 }) {
   const afterMenuClose = useAfterMenuClose();
   const directory = useWorkspaceStore((state) => state.workspace.directory);
@@ -438,6 +440,7 @@ export function ProjectFileTree({
       <Explorer
         folderReveal={folderReveal}
         onTreeCommit={updateTree}
+        onMarkedChange={onMarkedChange}
         label="我的内容"
         items={filtered}
         selected={selected}
