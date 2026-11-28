@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { mkdirSync, watch } from 'node:fs';
 import {
   access,
   appendFile,
@@ -19,17 +20,34 @@ import { gunzip, gzip } from 'node:zlib';
 import type { FileChangeDetail, TurnChanges } from '../protocol/agent';
 import { hostPorts } from '../ports';
 import { saveTurnChanges, storedFileChange, type StoredFile } from './changes';
-import { chatSessionDirectory, chatShareDirectory } from './session/store';
 
 const compress = promisify(gzip);
 const decompress = promisify(gunzip);
 const STORED_BYTE_LIMIT = 5 * 1024 * 1024;
 const FILE_LIMIT = 10_000;
+const WATCH_DELAY_MS = 100;
 const skipped = new Set(['.git', 'node_modules', '.venv', 'venv', '__pycache__']);
 const privateRuntime = new Set(['.home', '.cache']);
 const roots = { privacy: 'chat-sessions', share: 'chat-share' } as const;
 type Root = keyof typeof roots;
 const uuid = /^[0-9a-f-]{36}$/i;
+const virtualRoot = /^\/(privacy|share)(?:\/|$)/;
+const readOnlyTools = new Set([
+  'read',
+  'read_skill',
+  'ls',
+  'grep',
+  'find',
+  'web_search',
+  'web_fetch',
+  'session_search',
+  'session_read',
+  'task',
+  'task_output',
+  'task_stop',
+  'ask_user',
+]);
+const pathTools = new Set(['write', 'edit', 'delete', 'mkdir', 'download_file']);
 
 export interface FileVersion {
   hash: string;
@@ -39,11 +57,19 @@ export interface FileVersion {
   stored: boolean;
 }
 
+export interface AgentActor {
+  kind: 'agent';
+  sessionId: string;
+  turnId: string;
+  parentTurnId?: string;
+}
+
 export type ChangeSource =
   | { kind: 'user' }
-  | { kind: 'turn'; sessionId: string; turnId: string }
+  | AgentActor
   | { kind: 'branch'; sessionId: string; entryId: string }
-  | { kind: 'revert'; turnIds: string[] };
+  | { kind: 'revert'; turnIds: string[] }
+  | { kind: 'turn-start'; turnId: string };
 
 interface FileChange {
   path: string;
@@ -51,7 +77,7 @@ interface FileChange {
   after: FileVersion | null;
 }
 
-export interface ChangeEvent {
+interface ChangeEvent {
   id: string;
   at: string;
   source: ChangeSource;
@@ -60,7 +86,19 @@ export interface ChangeEvent {
 
 type FileTree = Map<string, FileVersion>;
 
+interface Owner {
+  loaded: boolean;
+  events: ChangeEvent[];
+  tree: FileTree;
+  windows: AgentActor[];
+  locks: Map<string, number>;
+  exclusive: Promise<void>;
+  queue: Promise<unknown>;
+  timer?: ReturnType<typeof setTimeout>;
+}
+
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const user: ChangeSource = { kind: 'user' };
 
 function storeDirectory(sessionId: string) {
   if (!uuid.test(sessionId)) throw new Error('无效会话标识');
@@ -70,35 +108,56 @@ const blobPath = (sessionId: string, hash: string) =>
   join(storeDirectory(sessionId), 'blobs', `${hash}.gz`);
 const logPath = (sessionId: string) => join(storeDirectory(sessionId), 'events.jsonl');
 const rootDirectory = (sessionId: string, root: Root) =>
-  root === 'privacy' ? chatSessionDirectory(sessionId) : chatShareDirectory(sessionId);
+  join(hostPorts().paths.storage(), roots[root], sessionId);
 
 function hostPath(sessionId: string, path: string) {
   const [root, ...parts] = path.split('/');
   return join(rootDirectory(sessionId, root as Root), ...parts);
 }
 
-const queues = new Map<string, Promise<unknown>>();
-function serialized<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
-  const next = (queues.get(sessionId) ?? Promise.resolve()).then(work, work);
-  queues.set(
-    sessionId,
-    next.catch(() => {}),
-  );
+const owners = new Map<string, Owner>();
+function ownerOf(sessionId: string): Owner {
+  let owner = owners.get(sessionId);
+  if (!owner) {
+    owner = {
+      loaded: false,
+      events: [],
+      tree: new Map(),
+      windows: [],
+      locks: new Map(),
+      exclusive: Promise.resolve(),
+      queue: Promise.resolve(),
+    };
+    owners.set(sessionId, owner);
+  }
+  return owner;
+}
+
+function serialized<T>(sessionId: string, work: (owner: Owner) => Promise<T>): Promise<T> {
+  const owner = ownerOf(sessionId);
+  const run = async () => {
+    if (!owner.loaded) await load(sessionId, owner);
+    return work(owner);
+  };
+  const next = owner.queue.then(run, run);
+  owner.queue = next.catch(() => {});
   return next;
 }
 
-async function readEvents(sessionId: string): Promise<ChangeEvent[]> {
-  let text: string;
+async function load(sessionId: string, owner: Owner) {
+  let text = '';
   try {
     text = await readFile(logPath(sessionId), 'utf8');
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
-  return text
+  owner.events = text
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line) as ChangeEvent);
+  owner.tree = treeAt(owner.events);
+  owner.loaded = true;
+  await sync(sessionId, owner, () => user);
 }
 
 function treeAt(events: ChangeEvent[]): FileTree {
@@ -153,22 +212,34 @@ async function versionOf(
   return { hash, bytes: content.length, mode, mtimeMs: info.mtimeMs, stored: true };
 }
 
-async function scan(sessionId: string, known: FileTree): Promise<FileTree> {
+const locked = (owner: Owner, path: string) =>
+  [...owner.locks.keys()].some((key) => path === key || path.startsWith(`${key}/`));
+
+async function scan(sessionId: string, owner: Owner): Promise<FileTree> {
   const tree: FileTree = new Map();
+  for (const [path, version] of owner.tree) if (locked(owner, path)) tree.set(path, version);
   for (const root of Object.keys(roots) as Root[]) {
     const base = rootDirectory(sessionId, root);
     const directories = [''];
     while (directories.length) {
       const directory = directories.pop()!;
-      for (const entry of await readdir(join(base, directory), { withFileTypes: true })) {
+      let entries;
+      try {
+        entries = await readdir(join(base, directory), { withFileTypes: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        throw error;
+      }
+      for (const entry of entries) {
         if (skipped.has(entry.name)) continue;
         if (root === 'privacy' && !directory && privateRuntime.has(entry.name)) continue;
         const name = directory ? `${directory}/${entry.name}` : entry.name;
+        const path = `${root}/${name}`;
+        if (locked(owner, path)) continue;
         if (entry.isDirectory()) directories.push(name);
         else if (entry.isFile()) {
           if (tree.size >= FILE_LIMIT) throw new Error('聊天文件超过 10,000 个，未记录版本');
-          const path = `${root}/${name}`;
-          tree.set(path, await versionOf(sessionId, join(base, name), known.get(path)));
+          tree.set(path, await versionOf(sessionId, join(base, name), owner.tree.get(path)));
         }
       }
     }
@@ -186,25 +257,188 @@ function changesBetween(before: FileTree, after: FileTree): FileChange[] {
   });
 }
 
-async function appendEvent(sessionId: string, event: ChangeEvent) {
+async function append(
+  sessionId: string,
+  owner: Owner,
+  source: ChangeSource,
+  changes: FileChange[],
+) {
+  const event: ChangeEvent = { id: randomUUID(), at: new Date().toISOString(), source, changes };
   await mkdir(storeDirectory(sessionId), { recursive: true });
   await appendFile(logPath(sessionId), `${JSON.stringify(event)}\n`);
+  owner.events.push(event);
+  for (const change of changes)
+    if (change.after) owner.tree.set(change.path, change.after);
+    else owner.tree.delete(change.path);
 }
 
-async function record(sessionId: string, source: ChangeSource) {
-  const events = await readEvents(sessionId);
-  const known = treeAt(events);
-  const current = await scan(sessionId, known);
-  const changes = changesBetween(known, current);
-  const event = changes.length
-    ? { id: randomUUID(), at: new Date().toISOString(), source, changes }
-    : null;
-  if (event) await appendEvent(sessionId, event);
-  return { events: event ? [...events, event] : events, current, event };
+async function sync(
+  sessionId: string,
+  owner: Owner,
+  attribute: (change: FileChange) => ChangeSource | null,
+) {
+  const groups = new Map<string, { source: ChangeSource; changes: FileChange[] }>();
+  for (const change of changesBetween(owner.tree, await scan(sessionId, owner))) {
+    const source = attribute(change);
+    if (!source) continue;
+    const key = JSON.stringify(source);
+    const group = groups.get(key) ?? { source, changes: [] };
+    group.changes.push(change);
+    groups.set(key, group);
+  }
+  for (const { source, changes } of groups.values())
+    await append(sessionId, owner, source, changes);
 }
 
-export function recordChatFiles(sessionId: string, source: ChangeSource) {
-  return serialized(sessionId, () => record(sessionId, source));
+const current = (owner: Owner) => owner.windows.at(-1) ?? user;
+const syncCurrent = (sessionId: string, owner: Owner) =>
+  sync(sessionId, owner, () => current(owner));
+
+export function startChatTurn(sessionId: string, turnId: string): Promise<void> {
+  return serialized(sessionId, async (owner) => {
+    await syncCurrent(sessionId, owner);
+    await append(sessionId, owner, { kind: 'turn-start', turnId }, []);
+  });
+}
+
+export async function openChatWindow(
+  sessionId: string,
+  actor: AgentActor,
+  exclusive: boolean,
+): Promise<() => Promise<void>> {
+  const owner = ownerOf(sessionId);
+  let release = () => {};
+  if (exclusive) {
+    const previous = owner.exclusive;
+    owner.exclusive = new Promise((resolve) => {
+      release = resolve;
+    });
+    await previous;
+  }
+  try {
+    await serialized(sessionId, async () => {
+      await syncCurrent(sessionId, owner);
+      owner.windows.push(actor);
+    });
+  } catch (error) {
+    release();
+    throw error;
+  }
+  let closing: Promise<void> | undefined;
+  return () =>
+    (closing ??= serialized(sessionId, async () => {
+      try {
+        await sync(sessionId, owner, () => actor);
+      } finally {
+        owner.windows.splice(owner.windows.indexOf(actor), 1);
+      }
+    }).finally(release));
+}
+
+function lockPath(sessionId: string, path: string, source: ChangeSource): () => Promise<void> {
+  const owner = ownerOf(sessionId);
+  owner.locks.set(path, (owner.locks.get(path) ?? 0) + 1);
+  let releasing: Promise<void> | undefined;
+  return () =>
+    (releasing ??= serialized(sessionId, async () => {
+      const count = owner.locks.get(path)! - 1;
+      if (count) owner.locks.set(path, count);
+      else owner.locks.delete(path);
+      await sync(sessionId, owner, (change) =>
+        change.path === path || change.path.startsWith(`${path}/`) ? source : null,
+      );
+    }));
+}
+
+function toolPath(sessionId: string, raw: string): string | null {
+  const path = raw.replaceAll('\\', '/');
+  const virtual = virtualRoot.exec(path);
+  const absolute = virtual
+    ? join(rootDirectory(sessionId, virtual[1] as Root), path.slice(virtual[0].length))
+    : isAbsolute(raw)
+      ? raw
+      : join(rootDirectory(sessionId, 'privacy'), raw);
+  const key = chatFileKey(absolute);
+  return key?.sessionId === sessionId ? key.path : null;
+}
+
+const toolEnds = new Map<string, Map<string, () => Promise<void>>>();
+
+export async function beginChatTool(
+  ownerId: string,
+  actor: AgentActor,
+  call: { toolName: string; toolCallId: string; input: Record<string, unknown> },
+): Promise<void> {
+  if (readOnlyTools.has(call.toolName)) return;
+  let end: () => Promise<void>;
+  if (pathTools.has(call.toolName)) {
+    const path = typeof call.input.path === 'string' ? toolPath(ownerId, call.input.path) : null;
+    if (!path) return;
+    end = lockPath(ownerId, path, actor);
+  } else end = await openChatWindow(ownerId, actor, true);
+  const ends = toolEnds.get(actor.sessionId) ?? new Map<string, () => Promise<void>>();
+  ends.set(call.toolCallId, end);
+  toolEnds.set(actor.sessionId, ends);
+}
+
+export async function endChatTool(sessionId: string, toolCallId: string): Promise<void> {
+  const end = toolEnds.get(sessionId)?.get(toolCallId);
+  toolEnds.get(sessionId)?.delete(toolCallId);
+  await end?.();
+}
+
+export async function endChatTools(sessionId: string): Promise<void> {
+  const ends = [...(toolEnds.get(sessionId)?.values() ?? [])];
+  toolEnds.delete(sessionId);
+  await Promise.all(ends.map((end) => end()));
+}
+
+export function userChatWrite<T>(paths: string[], work: () => T): T {
+  const releases = paths.flatMap((path) => {
+    const key = chatFileKey(path);
+    return key ? [lockPath(key.sessionId, key.path, user)] : [];
+  });
+  const release = () => {
+    for (const end of releases)
+      void end().catch((error: unknown) => console.error('记录聊天文件版本失败', error));
+  };
+  let result: T;
+  try {
+    result = work();
+  } catch (error) {
+    release();
+    throw error;
+  }
+  if (result instanceof Promise) return result.finally(release) as T;
+  release();
+  return result;
+}
+
+export function watchChatFiles(sessionExists: (id: string) => boolean): () => void {
+  const storage = hostPorts().paths.storage();
+  const watchers = (Object.entries(roots) as [Root, string][]).map(([root, directory]) => {
+    const base = join(storage, directory);
+    mkdirSync(base, { recursive: true });
+    const watcher = watch(base, { recursive: true, persistent: false }, (_event, name) => {
+      if (!name) return;
+      const [sessionId, first] = name.split(/[\\/]/);
+      if (!sessionId || !uuid.test(sessionId)) return;
+      if (root === 'privacy' && first && privateRuntime.has(first)) return;
+      const owner = ownerOf(sessionId);
+      clearTimeout(owner.timer);
+      owner.timer = setTimeout(() => {
+        if (!sessionExists(sessionId)) return;
+        void serialized(sessionId, (current) => syncCurrent(sessionId, current)).catch(
+          (error: unknown) => console.error('记录聊天文件版本失败', error),
+        );
+      }, WATCH_DELAY_MS);
+    });
+    watcher.on('error', (error) => console.error('聊天文件监听失败', error));
+    return watcher;
+  });
+  return () => {
+    for (const watcher of watchers) watcher.close();
+  };
 }
 
 async function storedFile(
@@ -220,7 +454,13 @@ async function storedFile(
   };
 }
 
+const ofTurns = (source: ChangeSource, turnIds: ReadonlySet<string>) =>
+  source.kind === 'agent' &&
+  (turnIds.has(source.turnId) ||
+    (source.parentTurnId !== undefined && turnIds.has(source.parentTurnId)));
+
 export async function freezeChatTurn(
+  ownerId: string,
   sessionId: string,
   turnId: string,
   startedAt: string,
@@ -228,26 +468,34 @@ export async function freezeChatTurn(
   unavailableReason?: string,
 ): Promise<void> {
   const warnings = unavailableReason ? [unavailableReason] : [];
-  let event: ChangeEvent | null = null;
+  const files = [];
   if (!unavailableReason)
     try {
-      ({ event } = await recordChatFiles(sessionId, { kind: 'turn', sessionId, turnId }));
+      const net = new Map<string, FileChange>();
+      for (const event of await serialized(ownerId, async (owner) => owner.events))
+        if (ofTurns(event.source, new Set([turnId])))
+          for (const change of event.changes)
+            if (change.path.startsWith('share/'))
+              net.set(change.path, {
+                path: change.path,
+                before: net.get(change.path)?.before ?? change.before,
+                after: change.after,
+              });
+      for (const change of net.values())
+        if (change.before?.hash !== change.after?.hash)
+          files.push({
+            path: `/${change.path}`,
+            before: await storedFile(ownerId, change.before),
+            after: await storedFile(ownerId, change.after),
+          });
     } catch (error) {
       warnings.push(errorText(error));
     }
-  const files = [];
-  for (const change of event?.changes ?? [])
-    if (change.path.startsWith('share/'))
-      files.push({
-        path: `/${change.path}`,
-        before: await storedFile(sessionId, change.before),
-        after: await storedFile(sessionId, change.after),
-      });
   await saveTurnChanges(
     sessionId,
     {
       turnId,
-      cwd: chatShareDirectory(sessionId),
+      cwd: rootDirectory(ownerId, 'share'),
       startedAt,
       finishedAt: new Date().toISOString(),
       runStatus,
@@ -275,20 +523,21 @@ async function restore(sessionId: string, path: string, version: FileVersion | n
 }
 
 export function revertChatTurns(sessionId: string, turnIds: string[]) {
-  return serialized(sessionId, async () => {
-    const { events, current } = await record(sessionId, { kind: 'user' });
+  return serialized(sessionId, async (owner) => {
+    await syncCurrent(sessionId, owner);
     const reverted = new Set(turnIds);
-    for (const event of events.toReversed()) {
-      if (event.source.kind !== 'turn' || !reverted.has(event.source.turnId)) continue;
+    const state = new Map(owner.tree);
+    for (const event of owner.events.toReversed()) {
+      if (!ofTurns(event.source, reverted)) continue;
       for (const change of event.changes) {
-        if ((current.get(change.path)?.hash ?? null) !== (change.after?.hash ?? null)) continue;
+        if ((state.get(change.path)?.hash ?? null) !== (change.after?.hash ?? null)) continue;
         if (change.before && !change.before.stored) continue;
         await restore(sessionId, change.path, change.before);
-        if (change.before) current.set(change.path, change.before);
-        else current.delete(change.path);
+        if (change.before) state.set(change.path, change.before);
+        else state.delete(change.path);
       }
     }
-    await record(sessionId, { kind: 'revert', turnIds });
+    await sync(sessionId, owner, () => ({ kind: 'revert', turnIds }));
   });
 }
 
@@ -299,62 +548,56 @@ export function branchChatFiles(
   nextTurnId: string | undefined,
   inheritedTurnIds: string[],
 ) {
-  return serialized(sourceId, async () => {
-    let events = await readEvents(sourceId);
-    const next = events.findIndex(
-      (event) => event.source.kind === 'turn' && event.source.turnId === nextTurnId,
+  return serialized(sourceId, async (source) => {
+    await syncCurrent(sourceId, source);
+    const next = source.events.findIndex(
+      (event) => event.source.kind === 'turn-start' && event.source.turnId === nextTurnId,
     );
-    let tree: FileTree;
-    if (next >= 0) tree = treeAt(events.slice(0, next));
-    else ({ events, current: tree } = await record(sourceId, { kind: 'user' }));
-    const inherited = events.filter(
-      (event) => event.source.kind === 'turn' && inheritedTurnIds.includes(event.source.turnId),
-    );
-    for (const version of inherited.flatMap((event) =>
-      event.changes.flatMap(({ before, after }) => [before, after]),
-    ))
-      if (version?.stored) {
-        const target = blobPath(targetId, version.hash);
-        await mkdir(dirname(target), { recursive: true });
-        await copyFile(blobPath(sourceId, version.hash), target);
+    const tree = next >= 0 ? treeAt(source.events.slice(0, next)) : new Map(source.tree);
+    const inheritedTurns = new Set(inheritedTurnIds);
+    const inherited = source.events.filter((event) => ofTurns(event.source, inheritedTurns));
+    await serialized(targetId, async (target) => {
+      for (const version of inherited.flatMap((event) =>
+        event.changes.flatMap(({ before, after }) => [before, after]),
+      ))
+        if (version?.stored) {
+          const blob = blobPath(targetId, version.hash);
+          await mkdir(dirname(blob), { recursive: true });
+          await copyFile(blobPath(sourceId, version.hash), blob);
+        }
+      for (const event of inherited) {
+        await mkdir(storeDirectory(targetId), { recursive: true });
+        await appendFile(logPath(targetId), `${JSON.stringify(event)}\n`);
+        target.events.push(event);
       }
-    const changes: FileChange[] = [];
-    for (const [path, version] of tree) {
-      const target = hostPath(targetId, path);
-      await mkdir(dirname(target), { recursive: true });
-      if (version.stored) await writeFile(target, await readBlob(sourceId, version.hash));
-      else {
-        const source = hostPath(sourceId, path);
-        const info = await lstat(source).catch(() => null);
-        if (!info?.isFile() || `size:${info.size}:${info.mtimeMs}` !== version.hash) continue;
-        await copyFile(source, target);
+      const changes: FileChange[] = [];
+      for (const [path, version] of tree) {
+        const file = hostPath(targetId, path);
+        await mkdir(dirname(file), { recursive: true });
+        if (version.stored) await writeFile(file, await readBlob(sourceId, version.hash));
+        else {
+          const origin = hostPath(sourceId, path);
+          const info = await lstat(origin).catch(() => null);
+          if (!info?.isFile() || `size:${info.size}:${info.mtimeMs}` !== version.hash) continue;
+          await copyFile(origin, file);
+        }
+        await chmod(file, version.mode);
+        changes.push({ path, before: null, after: await versionOf(targetId, file, undefined) });
       }
-      await chmod(target, version.mode);
-      changes.push({ path, before: null, after: await versionOf(targetId, target, undefined) });
-    }
-    await mkdir(storeDirectory(targetId), { recursive: true });
-    await writeFile(
-      logPath(targetId),
-      [
-        ...inherited,
-        {
-          id: randomUUID(),
-          at: new Date().toISOString(),
-          source: { kind: 'branch', sessionId: sourceId, entryId },
-          changes,
-        },
-      ]
-        .map((event) => `${JSON.stringify(event)}\n`)
-        .join(''),
-    );
+      target.tree = new Map();
+      await append(targetId, target, { kind: 'branch', sessionId: sourceId, entryId }, changes);
+    });
   });
 }
 
 export async function deleteChatFiles(sessionId: string): Promise<void> {
+  const owner = ownerOf(sessionId);
+  owner.loaded = true;
   await serialized(sessionId, () =>
     rm(storeDirectory(sessionId), { recursive: true, force: true }),
   );
-  queues.delete(sessionId);
+  clearTimeout(owner.timer);
+  owners.delete(sessionId);
 }
 
 export function chatFileKey(file: string): { sessionId: string; path: string } | null {
@@ -370,28 +613,45 @@ export function chatFileKey(file: string): { sessionId: string; path: string } |
   return null;
 }
 
-export async function chatFileHistory(sessionId: string, path: string, refresh: boolean) {
-  const events = refresh
-    ? (await recordChatFiles(sessionId, { kind: 'user' })).events
-    : await readEvents(sessionId);
-  return events.flatMap((event) => {
-    const change = event.changes.find((change) => change.path === path);
-    return change ? [{ event, change }] : [];
+const runKey = (event: ChangeEvent) => {
+  const { source } = event;
+  if (source.kind === 'user') return 'user';
+  if (source.kind === 'agent') return `agent:${source.sessionId}:${source.turnId}`;
+  return event.id;
+};
+
+export function chatFileHistory(sessionId: string, path: string) {
+  return serialized(sessionId, async (owner) => {
+    await syncCurrent(sessionId, owner);
+    const runs: { from: ChangeEvent; to: ChangeEvent; first: FileChange; last: FileChange }[] = [];
+    for (const event of owner.events) {
+      const change = event.changes.find((change) => change.path === path);
+      if (!change) continue;
+      const previous = runs.at(-1);
+      if (previous && runKey(previous.to) === runKey(event)) {
+        previous.to = event;
+        previous.last = change;
+      } else runs.push({ from: event, to: event, first: change, last: change });
+    }
+    return runs;
   });
 }
 
 export async function readChatFileVersion(
   sessionId: string,
-  eventId: string,
+  fromEventId: string,
+  toEventId: string,
   path: string,
 ): Promise<FileChangeDetail> {
-  const change = (await readEvents(sessionId))
-    .find((event) => event.id === eventId)
-    ?.changes.find((change) => change.path === path);
-  if (!change) throw new Error('这个版本没有此文件的记录');
+  const events = await serialized(sessionId, async (owner) => owner.events);
+  const changeIn = (id: string) =>
+    events.find((event) => event.id === id)?.changes.find((change) => change.path === path);
+  const from = changeIn(fromEventId);
+  const to = changeIn(toEventId);
+  if (!from || !to) throw new Error('这个版本没有此文件的记录');
   return storedFileChange({
     path,
-    before: await storedFile(sessionId, change.before),
-    after: await storedFile(sessionId, change.after),
+    before: await storedFile(sessionId, from.before),
+    after: await storedFile(sessionId, to.after),
   });
 }

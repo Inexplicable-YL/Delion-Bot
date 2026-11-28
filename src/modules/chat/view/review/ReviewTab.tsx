@@ -34,7 +34,12 @@ export function ReviewTab({ tabId }: { tabId: TabId; groupId: string }) {
     );
   if (target?.kind === 'version')
     return (
-      <VersionFileReview eventId={target.eventId} path={target.path} sessionId={target.sessionId} />
+      <VersionFileReview
+        fromEventId={target.fromEventId}
+        path={target.path}
+        sessionId={target.sessionId}
+        toEventId={target.toEventId}
+      />
     );
   return (
     <Shell>
@@ -63,16 +68,18 @@ function TurnFileReview({
 
 function VersionFileReview({
   sessionId,
-  eventId,
+  fromEventId,
+  toEventId,
   path,
 }: {
   sessionId: string;
-  eventId: string;
+  fromEventId: string;
+  toEventId: string;
   path: string;
 }) {
   const { data: detail, error } = useQuery({
-    queryKey: ['chat', 'version-file-change', sessionId, eventId, path],
-    queryFn: () => chatClient.readFileVersion({ sessionId, eventId, path }),
+    queryKey: ['chat', 'version-file-change', sessionId, fromEventId, toEventId, path],
+    queryFn: () => chatClient.readFileVersion({ sessionId, fromEventId, toEventId, path }),
     staleTime: Infinity,
   });
 

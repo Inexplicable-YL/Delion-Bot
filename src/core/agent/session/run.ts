@@ -73,6 +73,14 @@ export function sessionOpening(id: string): boolean {
   return openingSessions.has(id);
 }
 
+function chatActor(id: string): chatFiles.AgentActor | null {
+  const turnId = live.get(id)?.run?.id;
+  if (!turnId) return null;
+  const parentId = row(id).parent_id;
+  const parentTurnId = parentId ? live.get(parentId)?.run?.id : undefined;
+  return { kind: 'agent', sessionId: id, turnId, ...(parentTurnId && { parentTurnId }) };
+}
+
 export function ensureLive(id: string): Promise<Live> {
   if (row(id).archived) return Promise.reject(new Error('请先恢复已归档的会话'));
   const existing = live.get(id);
@@ -96,10 +104,17 @@ async function openLive(id: string): Promise<Live> {
   });
   const delegates = !meta.parent_id;
   const remote = meta.project_id ? hostPorts().projects.remoteOf(meta.project_id) : null;
+  const chatOwner = meta.project_id === null ? (meta.parent_id ?? id) : null;
   const parent: TaskParent = {
     id,
     publish: () => publish(id),
     deliver: (notice, wake) => deliverTaskNotice(id, notice, wake),
+    ...(chatOwner && {
+      trackCommand: () => {
+        const actor = chatActor(id);
+        return actor ? chatFiles.openChatWindow(chatOwner, actor, false) : undefined;
+      },
+    }),
   };
   const delegatesTools = delegates
     ? plan.mode === 'full'
@@ -134,7 +149,12 @@ async function openLive(id: string): Promise<Live> {
     ...options,
     customTools: [...options.customTools, ...extraTools],
     ...(meta.parent_id ? { parentSession: row(meta.parent_id).file } : {}),
-    beforeTool: () => live.get(id)?.run?.captured,
+    beforeTool: async (call) => {
+      await live.get(id)?.run?.captured;
+      const actor = chatOwner && chatActor(id);
+      if (actor) await chatFiles.beginChatTool(chatOwner, actor, call);
+    },
+    ...(chatOwner && { afterTool: (toolCallId) => chatFiles.endChatTool(id, toolCallId) }),
   });
   if (row(id).archived) {
     session.dispose();
@@ -542,7 +562,7 @@ async function runTurn(
     if (entry.captureDisabled) captureError = '当前会话没有可访问的工作目录';
     else if (isRemoteSession(meta)) captureError = '远程会话暂不记录目录快照';
     else if (!child && chat)
-      run.captured = chatFiles.recordChatFiles(id, { kind: 'user' }).then(
+      run.captured = chatFiles.startChatTurn(id, turnId).then(
         () => {},
         (error: unknown) => {
           captureError = error instanceof Error ? error.message : String(error);
@@ -578,9 +598,17 @@ async function runTurn(
     let changesError: string | undefined;
     try {
       await run.captured;
-      if (!child && chat)
-        await chatFiles.freezeChatTurn(id, turnId, startedAt, status, captureError);
-      else if (!child)
+      if (chat) {
+        await chatFiles.endChatTools(id);
+        await chatFiles.freezeChatTurn(
+          meta.parent_id ?? id,
+          id,
+          turnId,
+          startedAt,
+          status,
+          captureError,
+        );
+      } else if (!child)
         await changes.freezeTurnChanges(
           id,
           turnId,

@@ -19,7 +19,7 @@ function sourceLabel(source: Timeline['entries'][number]['source']): string {
   if (source.kind === 'user') return '用户';
   if (source.kind === 'revert') return '重试前撤销';
   const title = source.title ?? '已删除的会话';
-  return source.kind === 'turn' ? `模型 · ${title}` : `分支自 ${title}`;
+  return source.kind === 'agent' ? `Agent · ${title}` : `分支自 ${title}`;
 }
 
 export function FileTimeline({
@@ -37,6 +37,7 @@ export function FileTimeline({
     queryKey: ['chat', 'file-timeline', path, updatedAt],
     queryFn: () => chatClient.fileTimeline({ path: path! }),
     enabled: path !== null && Boolean(window.delionBot),
+    refetchInterval: 3000,
   });
   let message: string | null = null;
   if (path === null) message = '选中一个文件以查看时间线';
@@ -58,11 +59,12 @@ export function FileTimeline({
             const tabId = reviewTabId({
               kind: 'version',
               sessionId: timeline.data!.sessionId,
-              eventId: entry.eventId,
+              fromEventId: entry.fromEventId,
+              toEventId: entry.toEventId,
               path: timeline.data!.path,
             });
             return (
-              <li key={entry.eventId}>
+              <li key={entry.toEventId}>
                 <button
                   aria-current={activeTab === tabId || undefined}
                   className={cn(

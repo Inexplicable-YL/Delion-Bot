@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { StoredLlmProvider } from '../../../src/core/agent/llm-config';
 
+const bashCall = vi.hoisted(() => ({ toolName: 'bash', toolCallId: 'call-1', input: {} }));
 const state = vi.hoisted(() => ({
   db: null as Database.Database | null,
   root: '',
@@ -29,7 +30,7 @@ const state = vi.hoisted(() => ({
   contextTokens: null as number | null,
   providers: [] as StoredLlmProvider[],
   modelSwitches: [] as string[],
-  beforeTool: undefined as (() => Promise<void> | undefined) | undefined,
+  beforeTool: undefined as ((call: typeof bashCall) => Promise<void>) | undefined,
 }));
 vi.mock('electron', () => ({ app: { getPath: () => state.root }, shell: {} }));
 vi.mock('../../../src/core/agent/providers', () => ({
@@ -46,7 +47,7 @@ vi.mock('../../../src/core/agent/pi', () => ({
   summarizeSessionTitle: vi.fn(async () => ''),
   openPiSession: async (input: {
     selection: { model: string };
-    beforeTool?: () => Promise<void> | undefined;
+    beforeTool?: (call: typeof bashCall) => Promise<void>;
   }) => {
     state.beforeTool = input.beforeTool;
     let modelId = input.selection.model;
@@ -243,7 +244,7 @@ it('真实 ask 生命周期冻结文件变化并将 turnId 持久化到消息元
   const path = join(shareOf(chat.cwd!), 'output.txt');
   writeFileSync(path, 'before');
   state.onPrompt = async () => {
-    await state.beforeTool?.();
+    await state.beforeTool?.(bashCall);
     writeFileSync(path, 'after');
   };
   const response = await askSession(chat.sessionId!, {
@@ -269,7 +270,7 @@ it('prompt 失败仍冻结此前的文件修改，不吞掉原始错误', async 
   state.configured = true;
   const chat = await newSession(null);
   state.onPrompt = async () => {
-    await state.beforeTool?.();
+    await state.beforeTool?.(bashCall);
     writeFileSync(join(shareOf(chat.cwd!), 'partial.txt'), 'partial');
     throw new Error('model failed');
   };
@@ -285,7 +286,7 @@ it('用户停止仍冻结已产生的文件，并在删除会话时清理快照'
   state.configured = true;
   const chat = await newSession(null);
   state.onPrompt = async () => {
-    await state.beforeTool?.();
+    await state.beforeTool?.(bashCall);
     writeFileSync(join(shareOf(chat.cwd!), 'stopped.txt'), 'partial');
     cancelRun(chat.sessionId!);
   };
@@ -327,7 +328,7 @@ it('远程会话的轮次改动快照标记为不可用', async () => {
 it('快照失败不阻止模型运行，结果明确标记 unavailable', async () => {
   state.configured = true;
   const chat = await newSession(null);
-  vi.spyOn(chatFiles, 'recordChatFiles').mockRejectedValueOnce(new Error('scan failed'));
+  vi.spyOn(chatFiles, 'startChatTurn').mockRejectedValueOnce(new Error('scan failed'));
   await askSession(chat.sessionId!, {
     text: '继续回答',
     attachments: [],
@@ -344,14 +345,14 @@ it('模型请求不等目录快照，工具执行前才等它拍完', async () =
   state.configured = true;
   const chat = await newSession(null);
   let finishCapture!: () => void;
-  vi.spyOn(chatFiles, 'recordChatFiles').mockReturnValueOnce(
+  vi.spyOn(chatFiles, 'startChatTurn').mockReturnValueOnce(
     new Promise((resolve) => {
-      finishCapture = () => resolve({ events: [], current: new Map(), event: null });
+      finishCapture = () => resolve();
     }),
   );
   let toolReleased = false;
   state.onPrompt = async () => {
-    const tool = state.beforeTool?.()?.then(() => {
+    const tool = state.beforeTool?.(bashCall)?.then(() => {
       toolReleased = true;
     });
     await new Promise((resolve) => setTimeout(resolve, 10));

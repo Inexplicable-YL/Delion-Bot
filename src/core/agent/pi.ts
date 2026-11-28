@@ -201,7 +201,12 @@ export interface OpenSessionInput {
   disabledSkillPaths?: ReadonlySet<string>;
   globalSkillDirs: string[];
   disabledTools: string[];
-  beforeTool?: () => Promise<void> | undefined;
+  beforeTool?: (call: {
+    toolName: string;
+    toolCallId: string;
+    input: Record<string, unknown>;
+  }) => Promise<void>;
+  afterTool?: (toolCallId: string) => Promise<void>;
   transformModelContext?: (messages: AgentMessage[]) => AgentMessage[];
 }
 
@@ -228,9 +233,19 @@ export async function openPiSession(input: OpenSessionInput): Promise<AgentSessi
     noThemes: true,
     noSkills: Boolean(scopedResources),
     noContextFiles: Boolean(scopedResources),
-    extensionFactories: input.beforeTool
-      ? [(api) => void api.on('tool_call', async () => void (await input.beforeTool!()))]
-      : [],
+    extensionFactories: [
+      (api) => {
+        const { beforeTool, afterTool } = input;
+        if (beforeTool)
+          api.on('tool_call', async ({ toolName, toolCallId, parentToolCallId, input: args }) => {
+            if (!parentToolCallId) await beforeTool({ toolName, toolCallId, input: args });
+          });
+        if (afterTool)
+          api.on('tool_result', async ({ toolCallId, parentToolCallId }) => {
+            if (!parentToolCallId) await afterTool(toolCallId);
+          });
+      },
+    ],
     additionalSkillPaths: input.skillPaths,
     ...(input.restricted ? { systemPrompt: prompt.join('\n\n') } : { appendSystemPrompt: prompt }),
     agentsFilesOverride: scopedResources

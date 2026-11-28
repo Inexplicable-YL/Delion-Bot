@@ -26,6 +26,7 @@ export interface TaskParent {
   id: string;
   publish(): void;
   deliver(notice: TaskNotice, wake: boolean): Promise<void>;
+  trackCommand?(): Promise<() => Promise<void>> | undefined;
 }
 
 export interface TaskOutcome {
@@ -281,11 +282,16 @@ function startBash(
     if (task) task.tail = (task.tail + chunk.toString()).slice(-TAIL_CHARS);
   };
   const logClosed = finished(file, { cleanup: true });
+  const tracked = parent.trackCommand?.();
   const execution = (async () => {
     try {
+      await tracked;
       return await run(command, { signal: abort.signal, timeout, onData });
     } finally {
       file.end();
+      await (
+        await tracked
+      )?.();
     }
   })();
   trackTask(

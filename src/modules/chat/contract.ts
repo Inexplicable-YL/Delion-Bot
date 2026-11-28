@@ -75,13 +75,14 @@ const fileTimeline = z.object({
   path: filePath,
   entries: z.array(
     z.object({
-      eventId: z.uuid(),
+      fromEventId: z.uuid(),
+      toEventId: z.uuid(),
       at: z.string(),
       status: z.enum(['added', 'modified', 'deleted']),
       source: z.discriminatedUnion('kind', [
         z.object({ kind: z.literal('user') }),
         z.object({ kind: z.literal('revert') }),
-        z.object({ kind: z.literal('turn'), sessionId, title: z.string().nullable() }),
+        z.object({ kind: z.literal('agent'), sessionId, title: z.string().nullable() }),
         z.object({ kind: z.literal('branch'), sessionId, title: z.string().nullable() }),
       ]),
     }),
@@ -178,7 +179,7 @@ const procedures = {
   },
   fileTimeline: { input: z.object({ path: filePath }), output: fileTimeline.nullable() },
   readFileVersion: {
-    input: z.object({ sessionId, eventId: z.uuid(), path: filePath }),
+    input: z.object({ sessionId, fromEventId: z.uuid(), toEventId: z.uuid(), path: filePath }),
     output: z.custom<FileChangeDetail>(),
   },
 };

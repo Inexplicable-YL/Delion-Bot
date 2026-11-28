@@ -3,6 +3,7 @@ import { statSync } from 'node:fs';
 import { isAbsolute, normalize } from 'node:path';
 import { readUncommittedChanges, readUncommittedFileChange } from '../../core/agent/changes';
 import { deleteChatCommand, saveChatCommand } from '../../core/agent/chat-commands';
+import { watchChatFiles } from '../../core/agent/chat-files';
 import { getProjectChatContext, setProjectChatContext } from '../../core/agent/instruction';
 import { stageChatMediaFiles } from '../../core/agent/media';
 import {
@@ -174,7 +175,16 @@ export const chatModule = defineModule({
     readUncommittedFileChange: ({ projectId, path }) =>
       readUncommittedFileChange(localProjectDirectory(projectId), path),
     fileTimeline: ({ path }) => chatFileTimeline(path),
-    readFileVersion: ({ sessionId, eventId, path }) =>
-      readChatFileVersionChange(sessionId, eventId, path),
+    readFileVersion: ({ sessionId, fromEventId, toEventId, path }) =>
+      readChatFileVersionChange(sessionId, fromEventId, toEventId, path),
   }),
+  start: () =>
+    watchChatFiles((id) =>
+      Boolean(
+        hostPorts()
+          .database()
+          .prepare('SELECT 1 FROM sessions WHERE id=? AND project_id IS NULL AND parent_id IS NULL')
+          .get(id),
+      ),
+    ),
 });

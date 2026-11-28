@@ -1,10 +1,14 @@
 import { hostPorts } from '../../ports';
 import * as changes from '../changes';
-import { chatFileHistory, chatFileKey, readChatFileVersion } from '../chat-files';
+import {
+  chatFileHistory,
+  chatFileKey,
+  readChatFileVersion,
+  type ChangeSource,
+} from '../chat-files';
 import { executionMode } from '../sandbox/mode';
 import { scopedReferencePath } from '../sandbox/scoped-files';
 import { resolveSessionFile } from '../session-path';
-import { sessionRunning } from './live';
 import { isRemoteSession, row, sessionCwd } from './store';
 
 const chatVirtualPath = /^\/(privacy|share)(\/|$)/;
@@ -52,34 +56,49 @@ const sessionTitle = (id: string) => {
   }
 };
 
+function timelineSource(source: ChangeSource) {
+  switch (source.kind) {
+    case 'user':
+      return { kind: 'user' as const };
+    case 'agent':
+    case 'branch':
+      return {
+        kind: source.kind,
+        sessionId: source.sessionId,
+        title: sessionTitle(source.sessionId),
+      };
+    default:
+      return { kind: 'revert' as const };
+  }
+}
+
 export async function chatFileTimeline(file: string) {
   const key = chatFileKey(file);
   if (!key || sessionTitle(key.sessionId) === null) return null;
-  const history = await chatFileHistory(key.sessionId, key.path, !sessionRunning(key.sessionId));
+  const history = await chatFileHistory(key.sessionId, key.path);
   return {
     sessionId: key.sessionId,
     path: key.path,
-    entries: history.toReversed().map(({ event, change }) => ({
-      eventId: event.id,
-      at: event.at,
-      status: !change.before
+    entries: history.toReversed().map(({ from, to, first, last }) => ({
+      fromEventId: from.id,
+      toEventId: to.id,
+      at: to.at,
+      status: !first.before
         ? ('added' as const)
-        : !change.after
+        : !last.after
           ? ('deleted' as const)
           : ('modified' as const),
-      source:
-        event.source.kind === 'turn' || event.source.kind === 'branch'
-          ? {
-              kind: event.source.kind,
-              sessionId: event.source.sessionId,
-              title: sessionTitle(event.source.sessionId),
-            }
-          : { kind: event.source.kind },
+      source: timelineSource(to.source),
     })),
   };
 }
 
-export function readChatFileVersionChange(sessionId: string, eventId: string, path: string) {
+export function readChatFileVersionChange(
+  sessionId: string,
+  fromEventId: string,
+  toEventId: string,
+  path: string,
+) {
   row(sessionId);
-  return readChatFileVersion(sessionId, eventId, path);
+  return readChatFileVersion(sessionId, fromEventId, toEventId, path);
 }

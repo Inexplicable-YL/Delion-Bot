@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { hostPorts, type Projects } from '../../../core/ports';
 import { remoteById, targetOf } from '../../remotes';
 import { locateRemote } from '../../../core/remote/operations';
+import { userChatWrite } from '../../../core/agent/chat-files';
 import { chatShareDirectory } from '../../../core/agent/session/store';
 import { collectWorkspaceSources, workspaceSource, type WorkspaceSource } from './sources';
 import { availablePath, diskName } from './disk-name';
@@ -176,7 +177,7 @@ export function saveNoteImage(id: string, name: string, bytes: Uint8Array): stri
   const assets = join(noteDir, 'assets');
   mkdirSync(assets, { recursive: true });
   const path = availablePath(assets, name, false);
-  writeFileSync(path, bytes);
+  userChatWrite([path], () => writeFileSync(path, bytes));
   return relative(noteDir, path).split(sep).join('/');
 }
 
@@ -198,7 +199,7 @@ function carryNoteAssets(fromFile: string, toFile: string, text: string): void {
     const target = join(toDir, ...relativePath.split('/'));
     if (existsSync(target) || !inside(target)) continue;
     mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(source, target, constants.COPYFILE_EXCL);
+    userChatWrite([target], () => copyFileSync(source, target, constants.COPYFILE_EXCL));
   }
 }
 
@@ -471,8 +472,9 @@ function createAtPath(
   }
   const path = join(directory, diskName(segments.at(-1)!));
   if (existsSync(path)) throw new Error(`「${basename(path)}」已存在`);
-  if (folder) mkdirSync(path);
-  else writeFileSync(path, text ?? '', { flag: 'wx' });
+  userChatWrite([path], () =>
+    folder ? mkdirSync(path) : writeFileSync(path, text ?? '', { flag: 'wx' }),
+  );
   return fileEntry(path, parent);
 }
 
@@ -628,7 +630,7 @@ export function updateWorkspaceEntry(id: string, input: unknown): WorkspaceEntry
         current.kind === 'file' && localFileFormat(from) === 'markdown'
           ? readFileSync(from, 'utf8')
           : null;
-      if (from !== to) renameSync(from, to);
+      if (from !== to) userChatWrite([from, to], () => renameSync(from, to));
       if (noteText !== null) carryNoteAssets(from, to, noteText);
     } catch (error) {
       hostPorts()
@@ -678,12 +680,13 @@ export function importWorkspaceFiles(parentId: string | null, paths: string[]): 
   try {
     for (const source of paths) {
       const path = availablePath(containerPath(parentId), basename(source), false);
-      copyFileSync(source, path, constants.COPYFILE_EXCL);
+      userChatWrite([path], () => copyFileSync(source, path, constants.COPYFILE_EXCL));
       imported.push({ id: randomUUID(), name: basename(path), path });
     }
     return imported.map((item) => fileEntry(item.path, parentId));
   } catch (error) {
-    for (const item of imported) if (existsSync(item.path)) unlinkSync(item.path);
+    for (const item of imported)
+      if (existsSync(item.path)) userChatWrite([item.path], () => unlinkSync(item.path));
     throw error;
   }
 }
@@ -769,7 +772,7 @@ export function saveWorkspaceNote(id: string, text: string, revision: string): s
   const path = entryLocalPath(item);
   const format = localFileFormat(path);
   if (format !== 'markdown' && format !== 'text') throw new Error('只有文本文件可以编辑');
-  const next = writeLocalText(path, text, revision);
+  const next = userChatWrite([path], () => writeLocalText(path, text, revision));
   if (!isAbsolute(id))
     hostPorts()
       .database()
@@ -812,5 +815,6 @@ export async function removeWorkspaceEntry(value: unknown): Promise<void> {
     await collectWorkspaceSources();
     return;
   }
-  await hostPorts().desktop.trash(entryLocalPath(item));
+  const path = entryLocalPath(item);
+  await userChatWrite([path], () => hostPorts().desktop.trash(path));
 }
