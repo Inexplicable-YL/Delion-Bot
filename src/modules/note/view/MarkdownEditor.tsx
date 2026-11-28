@@ -24,6 +24,7 @@ import { search, searchKeymap } from '@codemirror/search';
 import {
   codeHighlightStyle,
   codeIndentGuides,
+  codeLayout,
   markdownHighlightStyle,
   useEditorSettings,
 } from '../../preview/view';
@@ -38,21 +39,22 @@ import { SelectionToolbar } from './SelectionToolbar';
 const editorTheme = EditorView.theme({
   '&': {
     height: '100%',
-    fontSize: '0.875rem',
+    fontSize: `${codeLayout.fontSize}rem`,
     backgroundColor: 'transparent',
   },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
     fontFamily: 'var(--font-mono)',
-    lineHeight: '1.625',
-    padding: '1.5rem',
+    lineHeight: String(codeLayout.lineHeight),
+    padding: `${codeLayout.inset}rem`,
   },
   '.cm-content': { caretColor: 'var(--syntax-caret)', maxWidth: '60rem', margin: '0 auto' },
-  '&.cm-source-file .cm-scroller': { padding: '1.5rem 0' },
+  '&.cm-source-file .cm-scroller': { padding: `${codeLayout.inset}rem 0` },
   '&.cm-source-file .cm-content': {
     maxWidth: 'none',
     margin: '0',
-    paddingRight: '1.5rem',
+    paddingBlock: `${codeLayout.contentBlockPadding}px`,
+    paddingRight: `${codeLayout.inset}rem`,
     textAlign: 'left',
   },
   '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--syntax-caret)' },
@@ -62,7 +64,7 @@ const editorTheme = EditorView.theme({
     border: 'none',
     backgroundColor: 'transparent',
     color: 'var(--ink-3)',
-    paddingLeft: '1.5rem',
+    paddingLeft: `${codeLayout.inset}rem`,
   },
   '&.cm-document': { fontSize: 'calc(1rem - 1px)' },
   '&.cm-document .cm-scroller': {
@@ -72,7 +74,10 @@ const editorTheme = EditorView.theme({
     overflowX: 'hidden',
   },
   '&.cm-document .cm-content': { maxWidth: '48rem', minWidth: '0' },
-  '.cm-lineNumbers .cm-gutterElement': { minWidth: '3ch', padding: '0 0.5rem 0 0.25rem' },
+  '.cm-lineNumbers .cm-gutterElement': {
+    minWidth: codeLayout.lineNumberWidth,
+    padding: `0 ${codeLayout.lineNumberPaddingEnd}rem 0 ${codeLayout.lineNumberPaddingStart}rem`,
+  },
 });
 
 type ResolvedLanguage =

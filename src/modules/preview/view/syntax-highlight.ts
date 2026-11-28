@@ -1,7 +1,23 @@
-import { HighlightStyle } from '@codemirror/language';
+import { getIndentUnit, HighlightStyle } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 import { EditorView } from '@codemirror/view';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
+import { EditorState } from '@codemirror/state';
+
+const defaultCodeState = EditorState.create();
+
+export const codeLayout = {
+  fontSize: 0.875,
+  lineHeight: 1.625,
+  inset: 1.5,
+  contentBlockPadding: 4,
+  lineNumberWidth: '3ch',
+  lineNumberPaddingStart: 0.25,
+  lineNumberPaddingEnd: 0.5,
+  indentGuideColor: 'var(--line)',
+  indentWidth: getIndentUnit(defaultCodeState),
+  tabSize: defaultCodeState.tabSize,
+};
 
 const fade = (role: string, percent: number) =>
   `color-mix(in srgb, var(--syntax-${role}) ${percent}%, transparent)`;
@@ -10,8 +26,8 @@ export const codeIndentGuides = [
   indentationMarkers({
     thickness: 1,
     colors: {
-      light: 'var(--line)',
-      dark: 'var(--line)',
+      light: codeLayout.indentGuideColor,
+      dark: codeLayout.indentGuideColor,
       activeLight: 'var(--line-strong)',
       activeDark: 'var(--line-strong)',
     },

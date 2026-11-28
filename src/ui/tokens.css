@@ -26,6 +26,14 @@
   --on-danger: #ffffff;
   --line: rgb(0 0 0 / 8%);
   --line-strong: rgb(0 0 0 / 14%);
+  --scrollbar-size: 10px;
+  --scrollbar-thumb-inset: 3px;
+  --scrollbar-thumb: color-mix(in oklch, var(--ink) 22%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklch, var(--ink) 38%, transparent);
+  --diff-added-line: color-mix(in srgb, var(--success-fill) 17%, transparent);
+  --diff-added-word: color-mix(in srgb, var(--success-fill) 26%, transparent);
+  --diff-removed-line: color-mix(in srgb, var(--danger-fill) 14%, transparent);
+  --diff-removed-word: color-mix(in srgb, var(--danger-fill) 23%, transparent);
   --scrim: rgb(0 0 0 / 32%);
   --glass: rgb(255 255 255 / 72%);
   --glass-thick: rgb(255 255 255 / 86%);

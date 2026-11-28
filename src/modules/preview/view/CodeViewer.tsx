@@ -6,33 +6,37 @@ import { Compartment, EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { search, searchKeymap } from '@codemirror/search';
 import { useEditorSettings } from './editor-settings';
-import { codeHighlightStyle, codeIndentGuides } from './syntax-highlight';
+import { codeHighlightStyle, codeIndentGuides, codeLayout } from './syntax-highlight';
 
 const viewerTheme = EditorView.theme({
   '&': {
     height: '100%',
-    fontSize: '0.875rem',
+    fontSize: `${codeLayout.fontSize}rem`,
     backgroundColor: 'transparent',
   },
   '&.cm-focused': { outline: 'none' },
   '.cm-scroller': {
     fontFamily: 'var(--font-mono)',
-    lineHeight: '1.625',
-    padding: '1.5rem 0',
+    lineHeight: String(codeLayout.lineHeight),
+    padding: `${codeLayout.inset}rem 0`,
   },
   '.cm-content': {
     caretColor: 'var(--syntax-caret)',
     margin: '0',
-    paddingRight: '1.5rem',
+    paddingBlock: `${codeLayout.contentBlockPadding}px`,
+    paddingRight: `${codeLayout.inset}rem`,
     textAlign: 'left',
   },
   '.cm-gutters': {
     border: 'none',
     backgroundColor: 'transparent',
     color: 'var(--ink-3)',
-    paddingLeft: '1.5rem',
+    paddingLeft: `${codeLayout.inset}rem`,
   },
-  '.cm-lineNumbers .cm-gutterElement': { minWidth: '3ch', padding: '0 0.5rem 0 0.25rem' },
+  '.cm-lineNumbers .cm-gutterElement': {
+    minWidth: codeLayout.lineNumberWidth,
+    padding: `0 ${codeLayout.lineNumberPaddingEnd}rem 0 ${codeLayout.lineNumberPaddingStart}rem`,
+  },
 });
 
 const wrappingConf = new Compartment();

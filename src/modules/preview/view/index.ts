@@ -8,4 +8,9 @@ export {
 } from './Loader';
 export { useEditorSettings } from './editor-settings';
 export { mermaidConfig, renderMermaid } from './mermaid';
-export { codeHighlightStyle, codeIndentGuides, markdownHighlightStyle } from './syntax-highlight';
+export {
+  codeHighlightStyle,
+  codeIndentGuides,
+  codeLayout,
+  markdownHighlightStyle,
+} from './syntax-highlight';

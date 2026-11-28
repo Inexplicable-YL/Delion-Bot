@@ -148,4 +148,13 @@ it('点击文件才打开对应的 diff 标签，刷新列表不会打开其他�
     projectId,
     path: 'new.py',
   });
+
+  await act(async () => {
+    host.querySelector<HTMLButtonElement>('[aria-label="重新载入"]')!.click();
+  });
+  await settle();
+  expect(api.readUncommittedFileChange.mock.calls).toEqual([
+    [{ projectId, path: 'new.py' }],
+    [{ projectId, path: 'new.py' }],
+  ]);
 });
